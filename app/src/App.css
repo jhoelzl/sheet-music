@@ -65,5 +65,5 @@ td input, td select { min-width: 70px; padding: 6px; border-radius: 7px; font-si
   .toolbar { align-items: stretch; flex-direction: column; }
   .filter-field { justify-content: space-between; }
   .filter-field select { width: auto; }
-  .section-heading { align-items: flex-start; }
+  .section-heading { align-items: flex-start; flex-direction: column; }
 }

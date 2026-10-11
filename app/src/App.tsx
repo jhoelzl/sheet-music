@@ -106,6 +106,8 @@ function Library() {
     }
     if (trimmedName !== c.name) {
       await run(supabase.from('sm_composers').update({ name: trimmedName }).eq('id', c.id))
+    } else {
+      setError('')
     }
   }
 
