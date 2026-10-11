@@ -154,7 +154,7 @@ function Library() {
       </div>
 
       <div className="toolbar">
-        <label className="search-field"><span>⌕</span><input placeholder="Search title or composer" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
+        <label className="search-field"><span aria-hidden="true">⌕</span><input aria-label="Search title or composer" placeholder="Search title or composer" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
         <label className="filter-field">Show<select value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">All</option>
           <option value="can_play">I can play</option>
