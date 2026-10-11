@@ -21,7 +21,10 @@ export type Piece = {
   can_play: boolean
   learned: boolean
   favorite: boolean
+  learn_later: boolean
   difficulty: number | null
   rating: number | null
   notes: string | null
+  youtube_url: string | null
+  spotify_url: string | null
 }
