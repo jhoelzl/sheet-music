@@ -180,8 +180,8 @@ function Library() {
           <option value="all">All pieces</option>
           <option value="can_play">I can fully play</option>
           <option value="cannot_play">I can't play yet</option>
-          <option value="learned">Learned</option>
-          <option value="to_learn">Not learned</option>
+          <option value="learned">Can partly play</option>
+          <option value="to_learn">Can't partly play</option>
           <option value="learn_later">Learn in future</option>
           <option value="hard">Hard (4+)</option>
         </select>
@@ -222,7 +222,7 @@ function Library() {
                 </div>
                 <div className="piece-controls">
                   <button className={`chip${p.can_play ? ' on' : ''}`} aria-pressed={p.can_play} onClick={() => update(p, { can_play: !p.can_play })}>Can fully play</button>
-                  <button className={`chip${p.learned ? ' on' : ''}`} aria-pressed={p.learned} onClick={() => update(p, { learned: !p.learned })}>Learned</button>
+                  <button className={`chip${p.learned ? ' on' : ''}`} aria-pressed={p.learned} onClick={() => update(p, { learned: !p.learned })}>Can partly play</button>
                   <button className={`chip${p.learn_later ? ' on' : ''}`} aria-pressed={p.learn_later} onClick={() => update(p, { learn_later: !p.learn_later })}>Learn in future</button>
                   <div className="meter"><span>Difficulty</span>{rating('Difficulty', p.difficulty, (n) => update(p, { difficulty: n }), '●')}</div>
                   <div className="meter"><span>Rating</span>{rating('Rating', p.rating, (n) => update(p, { rating: n }), '★')}</div>
