@@ -34,6 +34,16 @@ function Login() {
   )
 }
 
+const FILTERS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'can_play', label: 'Can fully play' },
+  { value: 'learned', label: 'Can partly play' },
+  { value: 'cannot_play', label: "Can't play yet" },
+  { value: 'to_learn', label: "Can't partly play" },
+  { value: 'learn_later', label: 'Learn in future' },
+  { value: 'hard', label: 'Hard (4+)' },
+]
+
 function Library() {
   const [composers, setComposers] = useState<Composer[]>([])
   const [pieces, setPieces] = useState<Piece[]>([])
@@ -175,16 +185,18 @@ function Library() {
       )}
 
       <div className="toolbar">
-        <label className="search-field"><span aria-hidden="true">⌕</span><input aria-label="Search title or composer" placeholder="Search title or composer" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
-        <select aria-label="Filter pieces" value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="all">All pieces</option>
-          <option value="can_play">I can fully play</option>
-          <option value="cannot_play">I can't play yet</option>
-          <option value="learned">Can partly play</option>
-          <option value="to_learn">Can't partly play</option>
-          <option value="learn_later">Learn in future</option>
-          <option value="hard">Hard (4+)</option>
-        </select>
+        <label className="search-field">
+          <span aria-hidden="true">⌕</span>
+          <input aria-label="Search title or composer" placeholder="Search title or composer" value={search} onChange={(e) => setSearch(e.target.value)} />
+          {search && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setSearch('')}>✕</button>}
+        </label>
+        {filtering && <button type="button" className="link" onClick={() => { setSearch(''); setFilter('all') }}>Clear filters</button>}
+      </div>
+
+      <div className="filter-bar" role="group" aria-label="Filter pieces">
+        {FILTERS.map((f) => (
+          <button key={f.value} type="button" className={`filter-pill${filter === f.value ? ' active' : ''}`} aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>{f.label}</button>
+        ))}
       </div>
 
       {!composers.length && (
