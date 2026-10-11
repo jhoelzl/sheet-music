@@ -66,6 +66,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .section-heading h3 { cursor: text; }
 .section-heading .count { margin-left: 4px; }
 .muted { padding: 18px 20px; color: var(--muted); font-size: 14px; }
+.empty-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 
 /* Pieces */
 .piece { display: grid; gap: 8px; padding: 16px 16px 14px 20px; border-bottom: 1px solid var(--line); }

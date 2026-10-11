@@ -137,7 +137,7 @@ function practicedText(date: string): string {
 const strokeIcon = (d: string) => (
   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
 )
-const EditIcon = strokeIcon('M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z')
+const EditIcon = strokeIcon('M17 3l4 4L8 20H4v-4L17 3zM14 6l4 4')
 const CloseIcon = strokeIcon('M18 6 6 18M6 6l12 12')
 
 const brandIcon = (d: string) => (
@@ -516,7 +516,12 @@ function Library() {
                 <button className="icon-btn" aria-label={`Delete ${c.name}`} title="Delete composer" onClick={() => removeComposer(c)}>{CloseIcon}</button>
               </div>
             </div>
-            {list.length === 0 && <p className="muted">No pieces yet.</p>}
+            {list.length === 0 && (
+              <div className="muted empty-row">
+                <span>No pieces yet.</span>
+                <button type="button" className="btn" onClick={() => { setComposerId(c.id); setPanel('piece'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>+ Add piece</button>
+              </div>
+            )}
             {list.map((p) => {
               const status = statusOf(p)
               const pending = !!p.pdf_path && 'pdf_pages' in p && p.pdf_pages == null && !countFailed.has(p.id)
