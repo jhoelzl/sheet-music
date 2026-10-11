@@ -40,7 +40,6 @@ const FILTERS: { value: string; label: string }[] = [
   { value: 'learned', label: 'Can partly play' },
   { value: 'cannot_play', label: "Can't play yet" },
   { value: 'to_learn', label: "Can't partly play" },
-  { value: 'learn_later', label: 'Learn in future' },
   { value: 'hard', label: 'Hard (4+)' },
 ]
 
@@ -64,25 +63,23 @@ async function countPdfPages(blob: Blob): Promise<number | null> {
   }
 }
 
-type Status = 'none' | 'later' | 'partly' | 'full'
+type Status = 'none' | 'partly' | 'full'
 
-const STATUSES: { value: Status; label: string }[] = [
-  { value: 'none', label: "Can't play yet" },
-  { value: 'later', label: 'Learn in future' },
-  { value: 'partly', label: 'Can partly play' },
-  { value: 'full', label: 'Can fully play' },
+const STATUSES: { value: Status; label: string; short: string }[] = [
+  { value: 'none', label: "Can't play yet", short: "Can't play" },
+  { value: 'partly', label: 'Can partly play', short: 'Partly' },
+  { value: 'full', label: 'Can fully play', short: 'Fully' },
 ]
 
-// The three boolean columns can hold legacy combinations; the most advanced state wins.
+// The boolean columns can hold legacy combinations; the most advanced state wins.
 function statusOf(p: Piece): Status {
   if (p.can_play) return 'full'
   if (p.learned) return 'partly'
-  if (p.learn_later) return 'later'
   return 'none'
 }
 
 function statusPatch(s: Status): Partial<Piece> {
-  return { can_play: s === 'full', learned: s === 'full' || s === 'partly', learn_later: s === 'later' }
+  return { can_play: s === 'full', learned: s === 'full' || s === 'partly', learn_later: false }
 }
 
 type SortKey = 'title' | 'rating' | 'difficulty' | 'recent'
@@ -180,6 +177,8 @@ function Library() {
   const [composers, setComposers] = useState<Composer[]>([])
   const [pieces, setPieces] = useState<Piece[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [preview, setPreview] = useState<{ title: string; url: string; pages: number | null } | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
   const [sort, setSort] = useState<SortKey>('title')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
@@ -363,23 +362,36 @@ function Library() {
     if (next !== c.name) void run(supabase.from('sm_composers').update({ name: next }).eq('id', c.id))
   }
 
-  const openPdf = async (path: string) => {
-    const { data, error } = await supabase.storage.from('sheet-music').createSignedUrl(path, 300)
+  const openPdf = async (p: Piece) => {
+    if (!p.pdf_path || previewLoading) return
+    setPreviewLoading(true)
+    const { data, error } = await supabase.storage.from('sheet-music').createSignedUrl(p.pdf_path, 3600)
+    setPreviewLoading(false)
     if (error) notify(error.message)
-    else window.open(data.signedUrl, '_blank', 'noopener')
+    else setPreview({ title: p.title, url: data.signedUrl, pages: p.pdf_pages ?? null })
   }
 
+  useEffect(() => {
+    if (!preview) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreview(null) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [preview])
+
+  const terms = search.toLowerCase().split(/\s+/).filter(Boolean)
   const visible = pieces.filter((p) => {
     if (hiddenIds.has(p.id)) return false
     const cn = composers.find((c) => c.id === p.composer_id)?.name ?? ''
-    if (search && !`${p.title} ${cn}`.toLowerCase().includes(search.toLowerCase())) return false
+    if (terms.length) {
+      const haystack = `${p.title} ${cn} ${p.notes ?? ''} ${p.instruments.join(' ')}`.toLowerCase()
+      if (!terms.every((t) => haystack.includes(t))) return false
+    }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
     switch (filter) {
       case 'can_play': return p.can_play
       case 'cannot_play': return !p.can_play
       case 'learned': return p.learned
       case 'to_learn': return !p.learned
-      case 'learn_later': return p.learn_later
       case 'hard': return (p.difficulty ?? 0) >= 4
       default: return true
     }
@@ -398,6 +410,21 @@ function Library() {
           </div>
         ))}
       </div>
+      {preview && (
+        <div className="modal-backdrop" onClick={() => setPreview(null)}>
+          <div className="modal" role="dialog" aria-modal="true" aria-label={`PDF preview: ${preview.title}`} onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="modal-title">
+                <strong>{preview.title}</strong>
+                {preview.pages ? <span className="page-count">{preview.pages} {preview.pages === 1 ? 'page' : 'pages'}</span> : null}
+              </div>
+              <a className="btn" href={preview.url} target="_blank" rel="noopener noreferrer">Open in new tab ↗</a>
+              <button type="button" className="icon-btn" autoFocus aria-label="Close preview" title="Close (Esc)" onClick={() => setPreview(null)}>{CloseIcon}</button>
+            </div>
+            <iframe className="modal-frame" src={preview.url} title={`PDF: ${preview.title}`} />
+          </div>
+        </div>
+      )}
       <div className="library-intro">
         <div>
           <h2>Library</h2>
@@ -439,7 +466,7 @@ function Library() {
       <div className="toolbar">
         <label className="search-field">
           <span aria-hidden="true">⌕</span>
-          <input aria-label="Search title or composer" placeholder="Search title or composer" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input aria-label="Search pieces" placeholder="Search title, composer, notes…" value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setSearch('')}>✕</button>}
         </label>
         <label className="sort-field">
@@ -503,7 +530,7 @@ function Library() {
                         onBlur={() => commitEdit(p)}
                         onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(p); if (e.key === 'Escape') setEditingId(null) }} />
                     ) : p.pdf_path ? (
-                      <a className="piece-title" href="#" title="Open PDF (double-click to rename)" onDoubleClick={() => startEdit(p)} onClick={(e) => { e.preventDefault(); void openPdf(p.pdf_path!) }}>{p.title} <span aria-hidden="true">↗</span></a>
+                      <a className="piece-title" href="#" title="Preview PDF (double-click to rename)" onDoubleClick={() => startEdit(p)} onClick={(e) => { e.preventDefault(); void openPdf(p) }}>{p.title} <span aria-hidden="true">↗</span></a>
                     ) : (
                       <span className="piece-title plain" title="Double-click to rename" onDoubleClick={() => startEdit(p)}>{p.title}</span>
                     )}
@@ -530,11 +557,17 @@ function Library() {
                         onClick={() => update(p, { instruments: toggleInstrument(p.instruments, i.value) })}>{i.icon} {i.label}</button>
                     ))}
                   </div>
-                  <div className="segmented" role="radiogroup" aria-label={`Progress for ${p.title}`}>
-                    {STATUSES.map((st) => (
-                      <button key={st.value} type="button" role="radio" aria-checked={status === st.value} className={status === st.value ? 'on' : ''}
-                        onClick={() => { if (status !== st.value) update(p, statusPatch(st.value)) }}>{st.label}</button>
-                    ))}
+                  <div className={`progress ${status}`}>
+                    <input type="range" min={0} max={2} step={1} value={STATUSES.findIndex((s) => s.value === status)}
+                      aria-label={`Progress for ${p.title}`}
+                      aria-valuetext={STATUSES.find((s) => s.value === status)?.label}
+                      onChange={(e) => { const next = STATUSES[Number(e.target.value)].value; if (next !== status) update(p, statusPatch(next)) }} />
+                    <div className="progress-labels" aria-hidden="true">
+                      {STATUSES.map((st) => (
+                        <button key={st.value} type="button" tabIndex={-1} className={status === st.value ? 'on' : ''} title={st.label}
+                          onClick={() => { if (status !== st.value) update(p, statusPatch(st.value)) }}>{st.short}</button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <div className="piece-row piece-foot">
