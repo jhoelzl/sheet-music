@@ -26,7 +26,7 @@ function Login() {
           </div>
         </div>
         <label>Email<input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-        <label>Password<input type="password" placeholder="Your password" value={password} onChange={(e) => setEmail ? setPassword(e.target.value) : undefined} required /></label>
+        <label>Password<input type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
         <button className="primary-button" type="submit">Sign in</button>
         <button className="text-button" type="button" onClick={() => void submit(true)}>Create an account</button>
         {error && <p className="error">{error}</p>}
