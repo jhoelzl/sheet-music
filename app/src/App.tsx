@@ -17,9 +17,8 @@ function Login() {
   }
   return (
     <div className="auth-wrap">
-      <form className="card auth-card" onSubmit={(e) => { e.preventDefault(); void submit(false) }}>
-        <div className="card-heading">
-          <span className="heading-icon">♩</span>
+      <form className="panel auth-card" onSubmit={(e) => { e.preventDefault(); void submit(false) }}>
+        <div className="auth-head">
           <div>
             <h2>Welcome back</h2>
             <p>Sign in to your personal music library.</p>
@@ -27,8 +26,8 @@ function Login() {
         </div>
         <label>Email<input type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
         <label>Password<input type="password" placeholder="Your password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-        <button className="primary-button" type="submit">Sign in</button>
-        <button className="text-button" type="button" onClick={() => void submit(true)}>Create an account</button>
+        <button className="btn primary" type="submit">Sign in</button>
+        <button className="link" type="button" onClick={() => void submit(true)}>Create an account</button>
         {error && <p className="error">{error}</p>}
       </form>
     </div>
@@ -45,6 +44,7 @@ function Library() {
   const [title, setTitle] = useState('')
   const [composerId, setComposerId] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [panel, setPanel] = useState<'composer' | 'piece' | null>(null)
 
   const load = useCallback(async () => {
     const c = await supabase.from('sm_composers').select('*').order('name')
@@ -64,7 +64,7 @@ function Library() {
 
   const addComposer = (e: React.FormEvent) => {
     e.preventDefault()
-    void run(supabase.from('sm_composers').insert({ name: composerName.trim() })).then(() => setComposerName(''))
+    void run(supabase.from('sm_composers').insert({ name: composerName.trim() })).then(() => { setComposerName(''); setPanel(null) })
   }
 
   const addPiece = async (e: React.FormEvent) => {
@@ -77,7 +77,7 @@ function Library() {
       if (up.error) { setError(up.error.message); return }
     }
     await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path }))
-    setTitle(''); setFile(null)
+    setTitle(''); setFile(null); setPanel(null)
   }
 
   const update = (p: Piece, patch: Partial<Piece>) =>
@@ -131,83 +131,97 @@ function Library() {
     }
   })
 
-  const stars = (value: number | null, onChange: (n: number | null) => void) => (
-    <select value={value ?? ''} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
-      <option value="">–</option>
-      {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-    </select>
+  const rating = (label: string, value: number | null, onChange: (n: number | null) => void, glyph: string) => (
+    <div className="rating" role="group" aria-label={label} title={label}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" className={`rate${value !== null && n <= value ? ' on' : ''}`} aria-label={`${label} ${n}`} aria-pressed={value === n}
+          onClick={() => onChange(value === n ? null : n)}>{glyph}</button>
+      ))}
+    </div>
   )
+
+  const filtering = Boolean(search) || filter !== 'all'
 
   return (
     <>
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       <div className="library-intro">
         <div>
-          <p className="eyebrow">Your collection</p>
-          <h2>Sheet music library</h2>
-          <p>Keep every piece organized, ready to practice, and easy to find.</p>
+          <h2>Library</h2>
+          <p>{composers.length} {composers.length === 1 ? 'composer' : 'composers'} · {pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'}</p>
         </div>
-        <span className="collection-count">{pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'}</span>
+        <div className="intro-actions">
+          <button className={`btn${panel === 'composer' ? ' active' : ''}`} onClick={() => setPanel(panel === 'composer' ? null : 'composer')}>+ Composer</button>
+          <button className="btn primary" onClick={() => setPanel(panel === 'piece' ? null : 'piece')} disabled={!composers.length} title={composers.length ? '' : 'Add a composer first'}>+ Piece</button>
+        </div>
       </div>
 
-      <div className="row add-cards">
-        <form className="card" onSubmit={addComposer}>
-          <h3>Add a composer</h3>
-          <label>Composer name<input placeholder="e.g. Clara Schumann" value={composerName} onChange={(e) => setComposerName(e.target.value)} required /></label>
-          <button className="secondary-button" type="submit">Add composer</button>
+      {panel === 'composer' && (
+        <form className="panel" onSubmit={addComposer}>
+          <label className="grow">Composer name<input autoFocus placeholder="e.g. Clara Schumann" value={composerName} onChange={(e) => setComposerName(e.target.value)} required /></label>
+          <button className="btn primary" type="submit">Add composer</button>
         </form>
-        <form className="card" onSubmit={(e) => void addPiece(e)}>
-          <h3>Add a piece</h3>
+      )}
+      {panel === 'piece' && (
+        <form className="panel" onSubmit={(e) => void addPiece(e)}>
           <label>Composer<select value={composerId} onChange={(e) => setComposerId(e.target.value)} required>
-            <option value="">Composer…</option>
+            <option value="">Choose…</option>
             {composers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select></label>
-          <label>Title<input placeholder="Piece title" value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
-          <label>PDF score<input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
-          <button className="primary-button" type="submit">Add to library</button>
+          <label className="grow">Title<input autoFocus placeholder="Piece title" value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
+          <label>PDF score (optional)<input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
+          <button className="btn primary" type="submit">Add piece</button>
         </form>
-      </div>
+      )}
 
       <div className="toolbar">
         <label className="search-field"><span aria-hidden="true">⌕</span><input aria-label="Search title or composer" placeholder="Search title or composer" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
-        <label className="filter-field">Show<select value={filter} onChange={(e) => setFilter(e.target.value)}>
-          <option value="all">All</option>
+        <select aria-label="Filter pieces" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <option value="all">All pieces</option>
           <option value="can_play">I can play</option>
           <option value="cannot_play">I can't play yet</option>
           <option value="learned">Learned</option>
           <option value="to_learn">Not learned</option>
           <option value="favorite">Favorites</option>
           <option value="hard">Hard (4+)</option>
-        </select></label>
+        </select>
       </div>
+
+      {!composers.length && (
+        <div className="empty"><h3>No music yet</h3><p>Add your first composer to start building your library.</p></div>
+      )}
 
       <div className="composer-list">{composers.map((c) => {
         const list = visible.filter((p) => p.composer_id === c.id)
-        if (!list.length && (search || filter !== 'all')) return null
+        if (!list.length && filtering) return null
         return (
           <section className="composer-section" key={c.id}>
-            <div className="section-heading"><h3>{c.name}</h3><div className="composer-actions"><button className="small" onClick={() => void renameComposer(c)}>Rename composer</button><button className="small danger-button" onClick={() => void removeComposer(c)}>Delete composer</button></div></div>
-            {list.length > 0 && (
-              <div className="table-wrap"><table>
-                <thead>
-                  <tr><th>Title</th><th>Can play</th><th>Learned</th><th>Fav</th><th>Difficulty</th><th>Rating</th><th>Notes</th><th /></tr>
-                </thead>
-                <tbody>
-                  {list.map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.pdf_path ? <a href="#" onClick={(e) => { e.preventDefault(); void openPdf(p.pdf_path!) }}>{p.title}</a> : p.title}</td>
-                      <td><input type="checkbox" checked={p.can_play} onChange={(e) => update(p, { can_play: e.target.checked })} /></td>
-                      <td><input type="checkbox" checked={p.learned} onChange={(e) => update(p, { learned: e.target.checked })} /></td>
-                      <td><input type="checkbox" checked={p.favorite} onChange={(e) => update(p, { favorite: e.target.checked })} /></td>
-                      <td>{stars(p.difficulty, (n) => update(p, { difficulty: n }))}</td>
-                      <td>{stars(p.rating, (n) => update(p, { rating: n }))}</td>
-                      <td><input defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) update(p, { notes: e.target.value }) }} /></td>
-                      <td><button className="small" onClick={() => void remove(p)}>delete</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table></div>
-            )}
+            <div className="section-heading">
+              <h3>{c.name} <span className="count">{list.length}</span></h3>
+              <div className="composer-actions">
+                <button className="link" onClick={() => void renameComposer(c)}>Rename</button>
+                <button className="link danger" onClick={() => void removeComposer(c)}>Delete</button>
+              </div>
+            </div>
+            {list.length === 0 && <p className="muted">No pieces yet.</p>}
+            {list.map((p) => (
+              <article className="piece" key={p.id}>
+                <div className="piece-main">
+                  {p.pdf_path
+                    ? <a className="piece-title" href="#" onClick={(e) => { e.preventDefault(); void openPdf(p.pdf_path!) }}>{p.title} <span aria-hidden="true">↗</span></a>
+                    : <span className="piece-title plain">{p.title}</span>}
+                  <input className="notes" aria-label={`Notes for ${p.title}`} placeholder="Add a note…" defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) update(p, { notes: e.target.value }) }} />
+                </div>
+                <div className="piece-controls">
+                  <button className={`chip${p.can_play ? ' on' : ''}`} aria-pressed={p.can_play} onClick={() => update(p, { can_play: !p.can_play })}>Can play</button>
+                  <button className={`chip${p.learned ? ' on' : ''}`} aria-pressed={p.learned} onClick={() => update(p, { learned: !p.learned })}>Learned</button>
+                  <button className={`chip fav${p.favorite ? ' on' : ''}`} aria-pressed={p.favorite} aria-label="Favorite" onClick={() => update(p, { favorite: !p.favorite })}>{p.favorite ? '♥' : '♡'}</button>
+                  <div className="meter"><span>Difficulty</span>{rating('Difficulty', p.difficulty, (n) => update(p, { difficulty: n }), '●')}</div>
+                  <div className="meter"><span>Rating</span>{rating('Rating', p.rating, (n) => update(p, { rating: n }), '★')}</div>
+                  <button className="icon-btn" aria-label={`Delete ${p.title}`} title="Delete piece" onClick={() => void remove(p)}>✕</button>
+                </div>
+              </article>
+            ))}
           </section>
         )
       })}</div>
@@ -228,8 +242,8 @@ export default function App() {
     <div className="app-shell">
       <header className="site-header">
         <div className="header-inner">
-          <div className="brand"><span>♬</span><h1>Sheet Music</h1></div>
-          {session && <button className="sign-out" onClick={() => void supabase.auth.signOut()}>Sign out</button>}
+          <div className="brand"><span aria-hidden="true">♪</span><h1>Sheet Music</h1></div>
+          {session && <button className="link" onClick={() => void supabase.auth.signOut()}>Sign out</button>}
         </div>
       </header>
       <main>{session ? <Library /> : <Login />}</main>
