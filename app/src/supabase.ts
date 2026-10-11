@@ -31,4 +31,6 @@ export type Piece = {
   notes: string | null
   youtube_url: string | null
   spotify_url: string | null
+  created_at?: string
+  last_practiced?: string | null
 }
