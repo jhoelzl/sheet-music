@@ -64,10 +64,133 @@ async function countPdfPages(blob: Blob): Promise<number | null> {
   }
 }
 
+type Status = 'none' | 'later' | 'partly' | 'full'
+
+const STATUSES: { value: Status; label: string }[] = [
+  { value: 'none', label: "Can't play yet" },
+  { value: 'later', label: 'Learn in future' },
+  { value: 'partly', label: 'Can partly play' },
+  { value: 'full', label: 'Can fully play' },
+]
+
+// The three boolean columns can hold legacy combinations; the most advanced state wins.
+function statusOf(p: Piece): Status {
+  if (p.can_play) return 'full'
+  if (p.learned) return 'partly'
+  if (p.learn_later) return 'later'
+  return 'none'
+}
+
+function statusPatch(s: Status): Partial<Piece> {
+  return { can_play: s === 'full', learned: s === 'full' || s === 'partly', learn_later: s === 'later' }
+}
+
+type SortKey = 'title' | 'rating' | 'difficulty' | 'recent'
+
+const SORTS: { value: SortKey; label: string }[] = [
+  { value: 'title', label: 'Title' },
+  { value: 'rating', label: 'Rating (best first)' },
+  { value: 'difficulty', label: 'Difficulty (hardest first)' },
+  { value: 'recent', label: 'Recently added' },
+]
+
+function sortPieces(list: Piece[], key: SortKey): Piece[] {
+  const byTitle = (a: Piece, b: Piece) => a.title.localeCompare(b.title)
+  const byNumber = (get: (p: Piece) => number | null) => (a: Piece, b: Piece) =>
+    (get(b) ?? -1) - (get(a) ?? -1) || byTitle(a, b)
+  const cmp = {
+    title: byTitle,
+    rating: byNumber((p) => p.rating),
+    difficulty: byNumber((p) => p.difficulty),
+    recent: (a: Piece, b: Piece) => (b.created_at ?? '').localeCompare(a.created_at ?? '') || byTitle(a, b),
+  }[key]
+  return [...list].sort(cmp)
+}
+
+// Only http(s) links are allowed; bare hosts get https:// prepended.
+function safeUrl(value: string | null | undefined): string | null {
+  const v = value?.trim()
+  if (!v) return null
+  const candidate = /^[a-z][a-z0-9+.-]*:/i.test(v) ? v : `https://${v}`
+  try {
+    const u = new URL(candidate)
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null
+  } catch {
+    return null
+  }
+}
+
+function todayISO(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+}
+
+function practicedText(date: string): string {
+  const [y, m, d] = date.split('-').map(Number)
+  const now = new Date()
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - new Date(y, m - 1, d).getTime()) / 86400000)
+  const plural = (n: number, unit: string) => `${n} ${unit}${n === 1 ? '' : 's'} ago`
+  if (days <= 0) return 'Practiced today'
+  if (days === 1) return 'Practiced yesterday'
+  if (days < 30) return `Practiced ${plural(days, 'day')}`
+  if (days < 365) return `Practiced ${plural(Math.floor(days / 30), 'month')}`
+  return `Practiced ${plural(Math.floor(days / 365), 'year')}`
+}
+
+const strokeIcon = (d: string) => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
+)
+const EditIcon = strokeIcon('M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z')
+const CloseIcon = strokeIcon('M18 6 6 18M6 6l12 12')
+
+const brandIcon = (d: string) => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d={d} /></svg>
+)
+
+const LINKS = [
+  {
+    key: 'youtube_url', label: 'YouTube',
+    glyph: brandIcon('M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z'),
+  },
+  {
+    key: 'spotify_url', label: 'Spotify',
+    glyph: brandIcon('M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z'),
+  },
+] as const
+
+function Rating({ label, value, glyph, onChange }: { label: string; value: number | null; glyph: string; onChange: (n: number | null) => void }) {
+  const [hover, setHover] = useState<number | null>(null)
+  const shown = hover ?? value ?? 0
+  return (
+    <div className="rating" role="group" aria-label={label} onMouseLeave={() => setHover(null)}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" className={`rate${n <= shown ? ' on' : ''}${hover !== null ? ' preview' : ''}`}
+          aria-label={`${label} ${n}`} aria-pressed={value === n}
+          title={value === n ? `Clear ${label.toLowerCase()}` : `${label}: ${n} of 5`}
+          onMouseEnter={() => setHover(n)} onFocus={() => setHover(n)} onBlur={() => setHover(null)}
+          onClick={() => onChange(value === n ? null : n)}>{glyph}</button>
+      ))}
+    </div>
+  )
+}
+
+type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
+
 function Library() {
   const [composers, setComposers] = useState<Composer[]>([])
   const [pieces, setPieces] = useState<Piece[]>([])
-  const [error, setError] = useState('')
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const [sort, setSort] = useState<SortKey>('title')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draftTitle, setDraftTitle] = useState('')
+  const [editingComposerId, setEditingComposerId] = useState<string | null>(null)
+  const [draftComposer, setDraftComposer] = useState('')
+  const [openLink, setOpenLink] = useState<string | null>(null)
+  const [uploadingId, setUploadingId] = useState<string | null>(null)
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
+  const [countFailed, setCountFailed] = useState<Set<string>>(new Set())
+  const toastSeq = useRef(0)
+  const deleteTimers = useRef(new Map<string, number>())
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>('all')
@@ -78,13 +201,22 @@ function Library() {
   const [file, setFile] = useState<File | null>(null)
   const [panel, setPanel] = useState<'composer' | 'piece' | null>(null)
 
+  const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
+
+  const notify = useCallback((message: string, kind: Toast['kind'] = 'error', undo?: () => void) => {
+    const id = ++toastSeq.current
+    setToasts((t) => [...t, { id, message, kind, undo }])
+    window.setTimeout(() => dismissToast(id), undo ? 6000 : 5000)
+    return id
+  }, [dismissToast])
+
   const load = useCallback(async () => {
     const c = await supabase.from('sm_composers').select('*').order('name')
     const p = await supabase.from('sm_pieces').select('*').order('title')
-    if (c.error || p.error) setError((c.error ?? p.error)!.message)
+    if (c.error || p.error) notify((c.error ?? p.error)!.message)
     setComposers(c.data ?? [])
     setPieces(p.data ?? [])
-  }, [])
+  }, [notify])
 
   useEffect(() => { void load() }, [load])
 
@@ -101,6 +233,8 @@ function Library() {
         if (pages) {
           await supabase.from('sm_pieces').update({ pdf_pages: pages }).eq('id', p.id)
           setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, pdf_pages: pages } : x)))
+        } else {
+          setCountFailed((prev) => new Set(prev).add(p.id))
         }
       }
     })()
@@ -108,8 +242,9 @@ function Library() {
 
   const run = async (op: PromiseLike<{ error: { message: string } | null }>) => {
     const { error } = await op
-    setError(error?.message ?? '')
+    if (error) notify(error.message)
     await load()
+    return !error
   }
 
   const addComposer = (e: React.FormEvent) => {
@@ -126,50 +261,116 @@ function Library() {
       pdf_pages = await countPdfPages(file)
       pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
       const up = await supabase.storage.from('sheet-music').upload(pdf_path, file, { contentType: 'application/pdf' })
-      if (up.error) { setError(up.error.message); return }
+      if (up.error) { notify(`Upload failed: ${up.error.message}`); return }
     }
-    await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path, ...(pdf_pages ? { pdf_pages } : {}), instruments: newInstruments }))
+    const ok = await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path, ...(pdf_pages ? { pdf_pages } : {}), instruments: newInstruments }))
+    if (!ok) return
     setTitle(''); setFile(null); setNewInstruments(['piano']); setPanel(null)
   }
 
   const update = (p: Piece, patch: Partial<Piece>) =>
     void run(supabase.from('sm_pieces').update(patch).eq('id', p.id))
 
-  const remove = async (p: Piece) => {
-    if (!confirm(`Delete "${p.title}"?`)) return
-    if (p.pdf_path) await supabase.storage.from('sheet-music').remove([p.pdf_path])
-    await run(supabase.from('sm_pieces').delete().eq('id', p.id))
+  // Hide the piece right away and only delete it for real once the undo window has passed.
+  const remove = (p: Piece) => {
+    setHiddenIds((h) => new Set(h).add(p.id))
+    const unhide = () => setHiddenIds((h) => { const n = new Set(h); n.delete(p.id); return n })
+    const toastId = notify(`Deleted "${p.title}"`, 'info', () => {
+      window.clearTimeout(deleteTimers.current.get(p.id))
+      deleteTimers.current.delete(p.id)
+      unhide()
+      dismissToast(toastId)
+    })
+    deleteTimers.current.set(p.id, window.setTimeout(() => {
+      deleteTimers.current.delete(p.id)
+      void (async () => {
+        if (p.pdf_path) await supabase.storage.from('sheet-music').remove([p.pdf_path])
+        await run(supabase.from('sm_pieces').delete().eq('id', p.id))
+        unhide()
+      })()
+    }, 6000))
   }
 
-  const removeComposer = async (c: Composer) => {
-    if (!confirm(`Delete ${c.name} and all their pieces?`)) return
-    const paths = pieces.filter((p) => p.composer_id === c.id && p.pdf_path).map((p) => p.pdf_path!)
-    if (paths.length) await supabase.storage.from('sheet-music').remove(paths)
-    await run(supabase.from('sm_composers').delete().eq('id', c.id))
+  const startEdit = (p: Piece) => { setEditingId(p.id); setDraftTitle(p.title) }
+
+  const commitEdit = (p: Piece) => {
+    if (editingId !== p.id) return
+    setEditingId(null)
+    const next = draftTitle.trim()
+    if (!next) { notify('Title cannot be empty.'); return }
+    if (next !== p.title) update(p, { title: next })
   }
 
-  const renameComposer = async (c: Composer) => {
-    const name = window.prompt('Composer name', c.name)
-    if (name === null) return
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      setError('Composer name cannot be empty.')
+  const saveLink = (p: Piece, key: 'youtube_url' | 'spotify_url', raw: string) => {
+    const value = raw.trim()
+    if (!value) {
+      if (p[key]) update(p, { [key]: null })
+      setOpenLink(null)
       return
     }
-    if (trimmedName !== c.name) {
-      await run(supabase.from('sm_composers').update({ name: trimmedName }).eq('id', c.id))
+    const url = safeUrl(value)
+    if (!url) { notify('Please enter a valid http(s) link.'); return }
+    if (url !== p[key]) update(p, { [key]: url })
+    setOpenLink(null)
+  }
+
+  const attachPdf = async (p: Piece, f: File) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    setUploadingId(p.id)
+    const pdf_pages = await countPdfPages(f)
+    const pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
+    const up = await supabase.storage.from('sheet-music').upload(pdf_path, f, { contentType: 'application/pdf' })
+    if (up.error) {
+      notify(`Upload failed: ${up.error.message}`)
     } else {
-      setError('')
+      const ok = await run(supabase.from('sm_pieces').update({ pdf_path, ...(pdf_pages ? { pdf_pages } : {}) }).eq('id', p.id))
+      if (!ok) await supabase.storage.from('sheet-music').remove([pdf_path])
     }
+    setUploadingId(null)
+  }
+
+  // Hide the composer (and their pieces) right away and only delete once the undo window has passed.
+  const removeComposer = (c: Composer) => {
+    const key = `composer:${c.id}`
+    const count = pieces.filter((p) => p.composer_id === c.id).length
+    setHiddenIds((h) => new Set(h).add(key))
+    const unhide = () => setHiddenIds((h) => { const n = new Set(h); n.delete(key); return n })
+    const toastId = notify(`Deleted "${c.name}"${count ? ` and ${count} ${count === 1 ? 'piece' : 'pieces'}` : ''}`, 'info', () => {
+      window.clearTimeout(deleteTimers.current.get(key))
+      deleteTimers.current.delete(key)
+      unhide()
+      dismissToast(toastId)
+    })
+    const paths = pieces.filter((p) => p.composer_id === c.id && p.pdf_path).map((p) => p.pdf_path!)
+    deleteTimers.current.set(key, window.setTimeout(() => {
+      deleteTimers.current.delete(key)
+      void (async () => {
+        if (paths.length) await supabase.storage.from('sheet-music').remove(paths)
+        await run(supabase.from('sm_composers').delete().eq('id', c.id))
+        unhide()
+      })()
+    }, 6000))
+  }
+
+  const startEditComposer = (c: Composer) => { setEditingComposerId(c.id); setDraftComposer(c.name) }
+
+  const commitComposerEdit = (c: Composer) => {
+    if (editingComposerId !== c.id) return
+    setEditingComposerId(null)
+    const next = draftComposer.trim()
+    if (!next) { notify('Composer name cannot be empty.'); return }
+    if (next !== c.name) void run(supabase.from('sm_composers').update({ name: next }).eq('id', c.id))
   }
 
   const openPdf = async (path: string) => {
     const { data, error } = await supabase.storage.from('sheet-music').createSignedUrl(path, 300)
-    if (error) setError(error.message)
+    if (error) notify(error.message)
     else window.open(data.signedUrl, '_blank', 'noopener')
   }
 
   const visible = pieces.filter((p) => {
+    if (hiddenIds.has(p.id)) return false
     const cn = composers.find((c) => c.id === p.composer_id)?.name ?? ''
     if (search && !`${p.title} ${cn}`.toLowerCase().includes(search.toLowerCase())) return false
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
@@ -184,20 +385,19 @@ function Library() {
     }
   })
 
-  const rating = (label: string, value: number | null, onChange: (n: number | null) => void, glyph: string) => (
-    <div className="rating" role="group" aria-label={label} title={label}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button key={n} type="button" className={`rate${value !== null && n <= value ? ' on' : ''}`} aria-label={`${label} ${n}`} aria-pressed={value === n}
-          onClick={() => onChange(value === n ? null : n)}>{glyph}</button>
-      ))}
-    </div>
-  )
-
   const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all'
 
   return (
     <>
-      {error && <p className="error" role="alert">{error}</p>}
+      <div className="toasts" role="region" aria-live="polite" aria-label="Notifications">
+        {toasts.map((t) => (
+          <div key={t.id} className={`toast ${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
+            <span>{t.message}</span>
+            {t.undo && <button type="button" className="toast-action" onClick={t.undo}>Undo</button>}
+            <button type="button" className="toast-close" aria-label="Dismiss" onClick={() => dismissToast(t.id)}>✕</button>
+          </div>
+        ))}
+      </div>
       <div className="library-intro">
         <div>
           <h2>Library</h2>
@@ -242,6 +442,12 @@ function Library() {
           <input aria-label="Search title or composer" placeholder="Search title or composer" value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setSearch('')}>✕</button>}
         </label>
+        <label className="sort-field">
+          <span>Sort</span>
+          <select aria-label="Sort pieces" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            {SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
         {filtering && <button type="button" className="link" onClick={() => { setSearch(''); setFilter('all'); setInstrumentFilter('all') }}>Clear filters</button>}
       </div>
 
@@ -261,29 +467,60 @@ function Library() {
         <div className="empty"><h3>No music yet</h3><p>Add your first composer to start building your library.</p></div>
       )}
 
-      <div className="composer-list">{composers.map((c) => {
-        const list = visible.filter((p) => p.composer_id === c.id)
+      <div className="composer-list">{composers.filter((c) => !hiddenIds.has(`composer:${c.id}`)).map((c) => {
+        const list = sortPieces(visible.filter((p) => p.composer_id === c.id), sort)
         if (!list.length && filtering) return null
         return (
           <section className="composer-section" key={c.id}>
             <div className="section-heading">
-              <h3>{c.name} <span className="count">{list.length}</span></h3>
-              <div className="composer-actions">
-                <button className="link" onClick={() => void renameComposer(c)}>Rename</button>
-                <button className="link danger" onClick={() => void removeComposer(c)}>Delete</button>
+              <div className="piece-titleline">
+                {editingComposerId === c.id ? (
+                  <input className="title-edit" aria-label="Composer name" autoFocus value={draftComposer}
+                    onChange={(e) => setDraftComposer(e.target.value)}
+                    onBlur={() => commitComposerEdit(c)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') commitComposerEdit(c); if (e.key === 'Escape') setEditingComposerId(null) }} />
+                ) : (
+                  <h3 title="Double-click to rename" onDoubleClick={() => startEditComposer(c)}>{c.name}</h3>
+                )}
+                <span className="count">{list.length}</span>
+              </div>
+              <div className="piece-actions">
+                <button className="icon-btn edit" aria-label={`Rename ${c.name}`} title="Rename" onClick={() => startEditComposer(c)}>{EditIcon}</button>
+                <button className="icon-btn" aria-label={`Delete ${c.name}`} title="Delete composer" onClick={() => removeComposer(c)}>{CloseIcon}</button>
               </div>
             </div>
             {list.length === 0 && <p className="muted">No pieces yet.</p>}
-            {list.map((p) => (
+            {list.map((p) => {
+              const status = statusOf(p)
+              const pending = !!p.pdf_path && 'pdf_pages' in p && p.pdf_pages == null && !countFailed.has(p.id)
+              return (
               <article className="piece" key={p.id}>
                 <div className="piece-head">
                   <div className="piece-titleline">
-                    {p.pdf_path
-                      ? <a className="piece-title" href="#" title="Open PDF" onClick={(e) => { e.preventDefault(); void openPdf(p.pdf_path!) }}>{p.title} <span aria-hidden="true">↗</span></a>
-                      : <span className="piece-title plain">{p.title}</span>}
+                    {editingId === p.id ? (
+                      <input className="title-edit" aria-label="Piece title" autoFocus value={draftTitle}
+                        onChange={(e) => setDraftTitle(e.target.value)}
+                        onBlur={() => commitEdit(p)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(p); if (e.key === 'Escape') setEditingId(null) }} />
+                    ) : p.pdf_path ? (
+                      <a className="piece-title" href="#" title="Open PDF (double-click to rename)" onDoubleClick={() => startEdit(p)} onClick={(e) => { e.preventDefault(); void openPdf(p.pdf_path!) }}>{p.title} <span aria-hidden="true">↗</span></a>
+                    ) : (
+                      <span className="piece-title plain" title="Double-click to rename" onDoubleClick={() => startEdit(p)}>{p.title}</span>
+                    )}
                     {p.pdf_pages ? <span className="page-count" title="Pages in the PDF">{p.pdf_pages} {p.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
+                    {pending && <span className="skeleton" role="status" aria-label="Counting pages" />}
                   </div>
-                  <button className="icon-btn" aria-label={`Delete ${p.title}`} title="Delete piece" onClick={() => void remove(p)}>✕</button>
+                  <div className="piece-actions">
+                    {!p.pdf_path && (
+                      <label className={`attach-btn${uploadingId === p.id ? ' busy' : ''}`}>
+                        {uploadingId === p.id ? 'Uploading…' : '+ Attach PDF'}
+                        <input type="file" accept="application/pdf" hidden disabled={uploadingId === p.id}
+                          onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void attachPdf(p, f) }} />
+                      </label>
+                    )}
+                    <button className="icon-btn edit" aria-label={`Rename ${p.title}`} title="Rename" onClick={() => startEdit(p)}>{EditIcon}</button>
+                    <button className="icon-btn" aria-label={`Delete ${p.title}`} title="Delete piece" onClick={() => remove(p)}>{CloseIcon}</button>
+                  </div>
                 </div>
                 <input className="notes" aria-label={`Notes for ${p.title}`} placeholder="Add a note…" defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) update(p, { notes: e.target.value }) }} />
                 <div className="piece-row">
@@ -293,28 +530,46 @@ function Library() {
                         onClick={() => update(p, { instruments: toggleInstrument(p.instruments, i.value) })}>{i.icon} {i.label}</button>
                     ))}
                   </div>
-                  <div className="chip-group" role="group" aria-label={`Progress for ${p.title}`}>
-                    <button className={`chip${p.can_play ? ' on' : ''}`} aria-pressed={p.can_play} onClick={() => update(p, { can_play: !p.can_play })}>Can fully play</button>
-                    <button className={`chip${p.learned ? ' on' : ''}`} aria-pressed={p.learned} onClick={() => update(p, { learned: !p.learned })}>Can partly play</button>
-                    <button className={`chip${p.learn_later ? ' on' : ''}`} aria-pressed={p.learn_later} onClick={() => update(p, { learn_later: !p.learn_later })}>Learn in future</button>
+                  <div className="segmented" role="radiogroup" aria-label={`Progress for ${p.title}`}>
+                    {STATUSES.map((st) => (
+                      <button key={st.value} type="button" role="radio" aria-checked={status === st.value} className={status === st.value ? 'on' : ''}
+                        onClick={() => { if (status !== st.value) update(p, statusPatch(st.value)) }}>{st.label}</button>
+                    ))}
                   </div>
                 </div>
                 <div className="piece-row piece-foot">
                   <div className="links">
-                    {([['youtube_url', 'YouTube'], ['spotify_url', 'Spotify']] as const).map(([k, label]) => (
-                      <span className="link-field" key={k}>
-                        {p[k] && <a className={`link-badge ${k}`} href={p[k]!} target="_blank" rel="noreferrer">▶ {label}</a>}
-                        <input aria-label={`${label} link for ${p.title}`} placeholder={p[k] ? 'edit link' : `+ ${label} link`} defaultValue={p[k] ?? ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (p[k] ?? '')) update(p, { [k]: v || null }) }} />
-                      </span>
-                    ))}
+                    {LINKS.map(({ key, label, glyph }) => {
+                      const href = safeUrl(p[key])
+                      const id = `${p.id}:${key}`
+                      return (
+                        <span className="link-field" key={key}>
+                          {openLink === id ? (
+                            <input autoFocus type="url" aria-label={`${label} link for ${p.title}`} placeholder={`${label} link`} defaultValue={p[key] ?? ''}
+                              onBlur={(e) => saveLink(p, key, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') saveLink(p, key, e.currentTarget.value); if (e.key === 'Escape') setOpenLink(null) }} />
+                          ) : href ? (
+                            <>
+                              <a className={`link-toggle on ${key}`} href={href} target="_blank" rel="noopener noreferrer" title={`Open on ${label}`} aria-label={`Open on ${label}`}>{glyph}</a>
+                              <button className="icon-btn edit small" aria-label={`Edit ${label} link`} title={`Edit ${label} link`} onClick={() => setOpenLink(id)}>{EditIcon}</button>
+                            </>
+                          ) : (
+                            <button className="link-toggle" aria-label={`Add ${label} link`} title={`Add ${label} link`} onClick={() => setOpenLink(id)}>{glyph}</button>
+                          )}
+                        </span>
+                      )
+                    })}
+                    <button className="practiced-btn" title="Record that you practiced this today" onClick={() => update(p, { last_practiced: todayISO() })}>✓ Practiced today</button>
+                    {p.last_practiced && <span className="practiced-text">{practicedText(p.last_practiced)}</span>}
                   </div>
                   <div className="meters">
-                    <div className="meter"><span>Difficulty</span>{rating('Difficulty', p.difficulty, (n) => update(p, { difficulty: n }), '●')}</div>
-                    <div className="meter stars"><span>Rating</span>{rating('Rating', p.rating, (n) => update(p, { rating: n }), '★')}</div>
+                    <div className="meter"><span>Difficulty</span><Rating label="Difficulty" glyph="●" value={p.difficulty} onChange={(n) => update(p, { difficulty: n })} /></div>
+                    <div className="meter stars"><span>Rating</span><Rating label="Rating" glyph="★" value={p.rating} onChange={(n) => update(p, { rating: n })} /></div>
                   </div>
                 </div>
               </article>
-            ))}
+              )
+            })}
           </section>
         )
       })}</div>

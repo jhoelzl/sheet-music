@@ -62,7 +62,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 14px 20px; border-bottom: 1px solid var(--line); }
 .section-heading h3 { font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
 .count { margin-left: 6px; padding: 1px 8px; color: var(--muted); background: #f4f2ee; border-radius: 99px; font-size: 12px; font-weight: 600; }
-.composer-actions { display: flex; gap: 2px; }
+.section-heading .piece-titleline { gap: 4px; }
+.section-heading h3 { cursor: text; }
+.section-heading .count { margin-left: 4px; }
 .muted { padding: 18px 20px; color: var(--muted); font-size: 14px; }
 
 /* Pieces */
@@ -94,8 +96,9 @@ a.piece-title:hover { text-decoration: underline; }
 .rate.on { color: var(--accent); }
 .rate:hover { color: #818cf8; }
 .meter.stars .rate.on { color: #f59e0b; }
-.icon-btn { flex-shrink: 0; width: 28px; height: 28px; margin: -4px -4px 0 0; color: #b3aea5; background: none; border: 0; border-radius: 8px; font-size: 12px; }
+.icon-btn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; padding: 0; width: 28px; height: 28px; margin: -4px -4px 0 0; color: #b3aea5; background: none; border: 0; border-radius: 8px; }
 .icon-btn:hover { color: var(--danger); background: #fff1ea; }
+.icon-btn.edit:hover { color: var(--accent); background: #eef0ff; }
 
 /* Empty / error / auth */
 .empty { padding: 56px 20px; text-align: center; background: var(--surface); border: 1px dashed #d6d1c9; border-radius: var(--radius); }
@@ -108,18 +111,48 @@ a.piece-title:hover { text-decoration: underline; }
 .auth-head h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
 .auth-head p { margin-top: 4px; margin-bottom: 6px; color: var(--muted); font-size: 14px; }
 
-@media (max-width: 820px) {
-}
 @media (max-width: 640px) {
   .header-inner, main { padding-left: 16px; padding-right: 16px; }
   .library-intro, .panel { flex-direction: column; align-items: stretch; }
 }
 
-.links { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
 .link-field { display: inline-flex; align-items: center; gap: 6px; }
-.link-field input { width: 110px; height: 24px; padding: 0 6px; font-size: 12px; color: var(--muted); background: transparent; border: 0; border-radius: 6px; }
-.link-field input:focus { width: 200px; background: #f4f2ee; box-shadow: none; }
+.link-field input { width: 200px; max-width: 60vw; height: 30px; padding: 0 10px; font-size: 12px; }
 .page-count { padding: 2px 9px; font-size: 12px; font-weight: 500; color: var(--muted); background: #f4f2ee; border-radius: 99px; white-space: nowrap; }
 .link-badge { padding: 2px 8px; font-size: 12px; font-weight: 500; text-decoration: none; border-radius: 99px; }
 .link-badge.youtube_url { color: #dc2626; background: #fef2f2; }
-.link-badge.spotify_url { color: #15803d; background: #f0fdf4; }
+.link-badge.spotify_url { color: #1db954; background: #f0fdf4; }
+
+.piece-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.piece-actions .icon-btn { margin: 0; }
+.icon-btn.small { width: 22px; height: 22px; margin: 0; font-size: 11px; }
+.title-edit { height: 32px; padding: 0 10px; font-size: 16px; font-weight: 600; }
+.attach-btn { display: inline-flex; align-items: center; height: 28px; margin-right: 6px; padding: 0 12px; color: var(--accent); background: var(--accent-soft); border: 1px dashed #c3c8ff; border-radius: 99px; font-size: 12px; font-weight: 500; cursor: pointer; }
+.attach-btn:hover { border-style: solid; }
+.attach-btn.busy { opacity: .6; cursor: progress; }
+.skeleton { display: inline-block; width: 52px; height: 20px; border-radius: 99px; background: linear-gradient(90deg, #f0ede8 25%, #e4e0d9 50%, #f0ede8 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+.segmented { display: inline-flex; padding: 2px; background: #f4f2ee; border-radius: 10px; }
+.segmented button { height: 28px; padding: 0 12px; color: var(--muted); background: transparent; border: 0; border-radius: 8px; font-size: 12px; white-space: nowrap; }
+.segmented button:hover { color: var(--text); }
+.segmented button.on { color: var(--accent); background: var(--surface); box-shadow: 0 1px 2px rgba(0,0,0,.1); font-weight: 600; }
+.link-toggle { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 50%; font-size: 12px; text-decoration: none; }
+.link-toggle:hover { color: var(--text); border-color: #d6d1c9; }
+.link-toggle.on.youtube_url { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
+.link-toggle.on.spotify_url { color: #1db954; background: #f0fdf4; border-color: #bbf7d0; }
+.practiced-btn { height: 30px; padding: 0 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; font-size: 12px; }
+.practiced-btn:hover { color: var(--accent); border-color: #c3c8ff; }
+.practiced-text { color: var(--muted); font-size: 12px; }
+.rate.preview { color: #818cf8; }
+.meter.stars .rate.preview { color: #fbbf24; }
+.sort-field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.sort-field select { width: auto; height: 40px; padding: 0 10px; }
+.toasts { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: grid; gap: 8px; max-width: min(420px, calc(100vw - 40px)); }
+.toast { display: flex; align-items: center; gap: 10px; padding: 11px 14px; color: #fff; background: #27272a; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: 13px; }
+.toast.error { background: #9a3412; }
+.toast span { flex: 1; }
+.toast-action { padding: 2px 8px; color: #fff; background: rgba(255,255,255,.16); border: 0; border-radius: 6px; font-size: 12px; font-weight: 600; }
+.toast-action:hover { background: rgba(255,255,255,.28); }
+.toast-close { color: rgba(255,255,255,.7); background: none; border: 0; font-size: 12px; }
+.toast-close:hover { color: #fff; }
