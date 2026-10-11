@@ -39,8 +39,8 @@ function Library() {
   const [file, setFile] = useState<File | null>(null)
 
   const load = useCallback(async () => {
-    const c = await supabase.from('composers').select('*').order('name')
-    const p = await supabase.from('pieces').select('*').order('title')
+    const c = await supabase.from('sm_composers').select('*').order('name')
+    const p = await supabase.from('sm_pieces').select('*').order('title')
     if (c.error || p.error) setError((c.error ?? p.error)!.message)
     setComposers(c.data ?? [])
     setPieces(p.data ?? [])
@@ -56,7 +56,7 @@ function Library() {
 
   const addComposer = (e: React.FormEvent) => {
     e.preventDefault()
-    void run(supabase.from('composers').insert({ name: composerName.trim() })).then(() => setComposerName(''))
+    void run(supabase.from('sm_composers').insert({ name: composerName.trim() })).then(() => setComposerName(''))
   }
 
   const addPiece = async (e: React.FormEvent) => {
@@ -68,24 +68,24 @@ function Library() {
       const up = await supabase.storage.from('sheet-music').upload(pdf_path, file, { contentType: 'application/pdf' })
       if (up.error) { setError(up.error.message); return }
     }
-    await run(supabase.from('pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path }))
+    await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path }))
     setTitle(''); setFile(null)
   }
 
   const update = (p: Piece, patch: Partial<Piece>) =>
-    void run(supabase.from('pieces').update(patch).eq('id', p.id))
+    void run(supabase.from('sm_pieces').update(patch).eq('id', p.id))
 
   const remove = async (p: Piece) => {
     if (!confirm(`Delete "${p.title}"?`)) return
     if (p.pdf_path) await supabase.storage.from('sheet-music').remove([p.pdf_path])
-    await run(supabase.from('pieces').delete().eq('id', p.id))
+    await run(supabase.from('sm_pieces').delete().eq('id', p.id))
   }
 
   const removeComposer = async (c: Composer) => {
     if (!confirm(`Delete ${c.name} and all their pieces?`)) return
     const paths = pieces.filter((p) => p.composer_id === c.id && p.pdf_path).map((p) => p.pdf_path!)
     if (paths.length) await supabase.storage.from('sheet-music').remove(paths)
-    await run(supabase.from('composers').delete().eq('id', c.id))
+    await run(supabase.from('sm_composers').delete().eq('id', c.id))
   }
 
   const openPdf = async (path: string) => {
