@@ -1,4 +1,4 @@
-create table composers (
+create table sm_composers (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name text not null,
@@ -8,10 +8,10 @@ create table composers (
   created_at timestamptz not null default now()
 );
 
-create table pieces (
+create table sm_pieces (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
-  composer_id uuid not null references composers(id) on delete cascade,
+  composer_id uuid not null references sm_composers(id) on delete cascade,
   title text not null,
   pdf_path text,
   can_play boolean not null default false,
@@ -23,12 +23,12 @@ create table pieces (
   created_at timestamptz not null default now()
 );
 
-create index on pieces (composer_id);
+create index on sm_pieces (composer_id);
 
-alter table composers enable row level security;
-alter table pieces enable row level security;
-create policy "own composers" on composers for all using (user_id = auth.uid()) with check (user_id = auth.uid());
-create policy "own pieces" on pieces for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+alter table sm_composers enable row level security;
+alter table sm_pieces enable row level security;
+create policy "own composers" on sm_composers for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own pieces" on sm_pieces for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 insert into storage.buckets (id, name, public) values ('sheet-music', 'sheet-music', false);
 create policy "own pdfs" on storage.objects for all
