@@ -13,11 +13,15 @@ export type Composer = {
   notes: string | null
 }
 
+export type Instrument = 'piano' | 'guitar'
+
 export type Piece = {
+  instruments: Instrument[]
   id: string
   composer_id: string
   title: string
   pdf_path: string | null
+  pdf_pages?: number | null
   can_play: boolean
   learned: boolean
   favorite: boolean
