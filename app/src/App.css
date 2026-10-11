@@ -37,6 +37,7 @@ button { border: 0; border-radius: 10px; cursor: pointer; font-weight: 600; tran
 .composer-section { overflow: hidden; background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 1px 2px rgb(0 0 0 / 3%); }
 .section-heading { justify-content: space-between; padding: 17px 18px; border-bottom: 1px solid #f0f1f3; }
 .section-heading h3 { font-size: 16px; letter-spacing: -.015em; }
+.composer-actions { display: flex; gap: 8px; }
 .small { padding: 5px 8px; font-size: 11px; }
 .danger-button { color: #6b7280; background: transparent; }
 .danger-button:hover { color: #dc2626; background: #fef2f2; }
@@ -64,5 +65,5 @@ td input, td select { min-width: 70px; padding: 6px; border-radius: 7px; font-si
   .toolbar { align-items: stretch; flex-direction: column; }
   .filter-field { justify-content: space-between; }
   .filter-field select { width: auto; }
-  .section-heading { align-items: flex-start; }
+  .section-heading { align-items: flex-start; flex-direction: column; }
 }

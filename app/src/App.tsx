@@ -96,6 +96,21 @@ function Library() {
     await run(supabase.from('sm_composers').delete().eq('id', c.id))
   }
 
+  const renameComposer = async (c: Composer) => {
+    const name = window.prompt('Composer name', c.name)
+    if (name === null) return
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      setError('Composer name cannot be empty.')
+      return
+    }
+    if (trimmedName !== c.name) {
+      await run(supabase.from('sm_composers').update({ name: trimmedName }).eq('id', c.id))
+    } else {
+      setError('')
+    }
+  }
+
   const openPdf = async (path: string) => {
     const { data, error } = await supabase.storage.from('sheet-music').createSignedUrl(path, 300)
     if (error) setError(error.message)
@@ -171,7 +186,7 @@ function Library() {
         if (!list.length && (search || filter !== 'all')) return null
         return (
           <section className="composer-section" key={c.id}>
-            <div className="section-heading"><h3>{c.name}</h3><button className="small danger-button" onClick={() => void removeComposer(c)}>Delete composer</button></div>
+            <div className="section-heading"><h3>{c.name}</h3><div className="composer-actions"><button className="small" onClick={() => void renameComposer(c)}>Rename composer</button><button className="small danger-button" onClick={() => void removeComposer(c)}>Delete composer</button></div></div>
             {list.length > 0 && (
               <div className="table-wrap"><table>
                 <thead>
