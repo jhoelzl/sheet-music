@@ -125,7 +125,7 @@ function Library() {
       case 'cannot_play': return !p.can_play
       case 'learned': return p.learned
       case 'to_learn': return !p.learned
-      case 'favorite': return p.favorite
+      case 'learn_later': return p.learn_later
       case 'hard': return (p.difficulty ?? 0) >= 4
       default: return true
     }
@@ -178,11 +178,11 @@ function Library() {
         <label className="search-field"><span aria-hidden="true">⌕</span><input aria-label="Search title or composer" placeholder="Search title or composer" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
         <select aria-label="Filter pieces" value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">All pieces</option>
-          <option value="can_play">I can play</option>
+          <option value="can_play">I can fully play</option>
           <option value="cannot_play">I can't play yet</option>
           <option value="learned">Learned</option>
           <option value="to_learn">Not learned</option>
-          <option value="favorite">Favorites</option>
+          <option value="learn_later">Learn in future</option>
           <option value="hard">Hard (4+)</option>
         </select>
       </div>
@@ -211,11 +211,19 @@ function Library() {
                     ? <a className="piece-title" href="#" onClick={(e) => { e.preventDefault(); void openPdf(p.pdf_path!) }}>{p.title} <span aria-hidden="true">↗</span></a>
                     : <span className="piece-title plain">{p.title}</span>}
                   <input className="notes" aria-label={`Notes for ${p.title}`} placeholder="Add a note…" defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) update(p, { notes: e.target.value }) }} />
+                  <div className="links">
+                    {([['youtube_url', 'YouTube'], ['spotify_url', 'Spotify']] as const).map(([k, label]) => (
+                      <span className="link-field" key={k}>
+                        {p[k] && <a className={`link-badge ${k}`} href={p[k]!} target="_blank" rel="noreferrer">▶ {label}</a>}
+                        <input aria-label={`${label} link for ${p.title}`} placeholder={p[k] ? 'edit link' : `+ ${label} link`} defaultValue={p[k] ?? ''} onBlur={(e) => { const v = e.target.value.trim(); if (v !== (p[k] ?? '')) update(p, { [k]: v || null }) }} />
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 <div className="piece-controls">
-                  <button className={`chip${p.can_play ? ' on' : ''}`} aria-pressed={p.can_play} onClick={() => update(p, { can_play: !p.can_play })}>Can play</button>
+                  <button className={`chip${p.can_play ? ' on' : ''}`} aria-pressed={p.can_play} onClick={() => update(p, { can_play: !p.can_play })}>Can fully play</button>
                   <button className={`chip${p.learned ? ' on' : ''}`} aria-pressed={p.learned} onClick={() => update(p, { learned: !p.learned })}>Learned</button>
-                  <button className={`chip fav${p.favorite ? ' on' : ''}`} aria-pressed={p.favorite} aria-label="Favorite" onClick={() => update(p, { favorite: !p.favorite })}>{p.favorite ? '♥' : '♡'}</button>
+                  <button className={`chip${p.learn_later ? ' on' : ''}`} aria-pressed={p.learn_later} onClick={() => update(p, { learn_later: !p.learn_later })}>Learn in future</button>
                   <div className="meter"><span>Difficulty</span>{rating('Difficulty', p.difficulty, (n) => update(p, { difficulty: n }), '●')}</div>
                   <div className="meter"><span>Rating</span>{rating('Rating', p.rating, (n) => update(p, { rating: n }), '★')}</div>
                   <button className="icon-btn" aria-label={`Delete ${p.title}`} title="Delete piece" onClick={() => void remove(p)}>✕</button>
