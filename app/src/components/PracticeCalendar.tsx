@@ -3,6 +3,9 @@ import type { Composer, Piece, PracticeLog } from '../supabase'
 import { WEEKS, isoOf, todayISO } from '../lib/dates'
 import { CloseIcon } from './icons'
 
+// Show the most recent weeks first when the heatmap overflows (small screens).
+const scrollToEnd = (el: HTMLDivElement | null) => { if (el) el.scrollLeft = el.scrollWidth }
+
 export function PracticeCalendar({ logs, pieces, composers }: { logs: PracticeLog[]; pieces: Piece[]; composers: Composer[] }) {
   const [selected, setSelected] = useState<string | null>(null)
   const byDay = new Map<string, string[]>()
@@ -66,7 +69,7 @@ export function PracticeCalendar({ logs, pieces, composers }: { logs: PracticeLo
           </span></div>
         </div>
       </div>
-      <div className="cal-scroll">
+      <div className="cal-scroll" ref={scrollToEnd}>
         <div className="cal-months" style={{ gridTemplateColumns: `repeat(${WEEKS}, 14px)` }}>
           {monthLabels.map((m, i) => <span key={i}>{m}</span>)}
         </div>
