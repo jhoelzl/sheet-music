@@ -1,6 +1,8 @@
 # sheet-music
 
-Web app (React + Vite + Supabase) to organise piano sheet music PDFs by composer, with metadata per piece: can play, learned, favorite, difficulty (1-5), rating (1-5) and notes.
+Web app (React + Vite + Supabase) to organise piano sheet music PDFs by composer, with metadata per piece: play progress (0/25/50/75/100%), difficulty (1-5), rating (1-5), instruments, notes and multiple YouTube/Spotify/Instagram/other links. It also has an inline PDF preview, a practice log with calendar, and four switchable list views (grouped, table, grid, board).
+
+See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
 
 ## Setup
 1. Create a Supabase project and run the SQL files in `supabase/migrations` in order (creates the `sm_composers` and `sm_pieces` tables, row-level security and a private `sheet-music` storage bucket). On an existing project, run `0002_prefix_tables.sql` to rename the existing tables without losing data.
