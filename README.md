@@ -1,6 +1,6 @@
 # sheet-music
 
-Web app (React + Vite + Supabase) to organise piano sheet music PDFs by composer, with metadata per piece: play progress (0/25/50/75/100%), difficulty (1-5), rating (1-5), instruments, notes and multiple YouTube/Spotify/Instagram/other links. It also has an inline PDF preview, a practice log with calendar, and four switchable list views (grouped, table, grid, board).
+Web app (React + Vite + Supabase) to organise piano sheet music PDFs by composer, with metadata per piece: play progress (0/25/50/75/100%), difficulty (1-5), rating (1-5), instruments, free-form tags, notes and multiple YouTube/Spotify/Instagram/other links. It also has an inline PDF preview, a practice log with calendar, and four switchable list views (grouped, table, grid, board).
 
 See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
 
