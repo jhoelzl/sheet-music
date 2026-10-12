@@ -18,7 +18,6 @@ A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M*
 
 ## UI / UX
 
-- 🔴 **Mobile layout.** Check the Table and Board views and the practice calendar on small screens. Consider a bottom sheet instead of the modal for the PDF preview. (M)
 - 🟡 **Keyboard accessibility.** Make every icon button reachable and labelled. Add arrow-key support to the progress slider and `Esc` to close the PDF modal and inline editors. Run an axe / Lighthouse pass. (M)
 - 🟡 **Remember filters and sort.** The view is stored in `localStorage['sm:view']`; do the same for filter, sort and search. (S)
 - 🟡 **Drag and drop.** Drop a PDF anywhere to add a piece. Drag cards between Board columns to change progress. (M)
