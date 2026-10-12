@@ -37,3 +37,5 @@ export type Piece = {
   created_at?: string
   last_practiced?: string | null
 }
+
+export type PracticeLog = { id: string; piece_id: string; practiced_on: string }
