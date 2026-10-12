@@ -92,6 +92,15 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: 'recent', label: 'Recently added' },
 ]
 
+type View = 'grouped' | 'table' | 'grid' | 'board'
+const VIEWS: { value: View; label: string }[] = [
+  { value: 'grouped', label: 'Grouped' },
+  { value: 'table', label: 'Table' },
+  { value: 'grid', label: 'Grid' },
+  { value: 'board', label: 'Board' },
+]
+type TableKey = 'title' | 'composer' | 'status' | 'difficulty' | 'rating' | 'pages' | 'practiced'
+
 function sortPieces(list: Piece[], key: SortKey): Piece[] {
   const byTitle = (a: Piece, b: Piece) => a.title.localeCompare(b.title)
   const byNumber = (get: (p: Piece) => number | null) => (a: Piece, b: Piece) =>
@@ -288,6 +297,12 @@ function Library() {
   const [preview, setPreview] = useState<{ title: string; url: string; pages: number | null } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [sort, setSort] = useState<SortKey>('title')
+  const [view, setViewState] = useState<View>(() => {
+    const v = localStorage.getItem('sm:view')
+    return VIEWS.some((x) => x.value === v) ? (v as View) : 'grouped'
+  })
+  const setView = (v: View) => { setViewState(v); localStorage.setItem('sm:view', v) }
+  const [tableSort, setTableSort] = useState<{ key: TableKey; dir: 1 | -1 }>({ key: 'title', dir: 1 })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
   const [editingComposerId, setEditingComposerId] = useState<string | null>(null)
@@ -531,6 +546,100 @@ function Library() {
 
   const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all'
 
+  const composerNameOf = (id: string) => composers.find((c) => c.id === id)?.name ?? ''
+  const nextStatus = (s: Status, step: 1 | -1) => STATUSES[(STATUSES.findIndex((x) => x.value === s) + step + 3) % 3].value
+  const statusLabel = (s: Status) => STATUSES.find((x) => x.value === s)?.short ?? ''
+
+  const tableRows = [...visible].sort((a, b) => {
+    const val = (p: Piece): string | number => {
+      switch (tableSort.key) {
+        case 'composer': return composerNameOf(p.composer_id).toLowerCase()
+        case 'status': return STATUSES.findIndex((s) => s.value === statusOf(p))
+        case 'difficulty': return p.difficulty ?? -1
+        case 'rating': return p.rating ?? -1
+        case 'pages': return p.pdf_pages ?? -1
+        case 'practiced': return p.last_practiced ?? ''
+        default: return p.title.toLowerCase()
+      }
+    }
+    const x = val(a), y = val(b)
+    const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))
+    return c * tableSort.dir || a.title.localeCompare(b.title)
+  })
+
+  const sortBy = (key: TableKey) =>
+    setTableSort((s) => (s.key === key ? { key, dir: s.dir === 1 ? -1 : 1 } : { key, dir: key === 'title' || key === 'composer' ? 1 : -1 }))
+
+  const titleNode = (p: Piece) => editingId === p.id ? (
+    <input className="title-edit" aria-label="Piece title" autoFocus value={draftTitle}
+      onChange={(e) => setDraftTitle(e.target.value)}
+      onBlur={() => commitEdit(p)}
+      onKeyDown={(e) => { if (e.key === 'Enter') commitEdit(p); if (e.key === 'Escape') setEditingId(null) }} />
+  ) : p.pdf_path ? (
+    <a className="piece-title" href="#" title="Preview PDF (double-click to rename)" onDoubleClick={() => startEdit(p)} onClick={(e) => { e.preventDefault(); void openPdf(p) }}>{p.title} <span aria-hidden="true">↗</span></a>
+  ) : (
+    <span className="piece-title plain" title="Double-click to rename" onDoubleClick={() => startEdit(p)}>{p.title}</span>
+  )
+
+  const actionsNode = (p: Piece) => (
+    <div className="piece-actions">
+      <button className="icon-btn edit" aria-label={`Rename ${p.title}`} title="Rename" onClick={() => startEdit(p)}>{EditIcon}</button>
+      <button className="icon-btn" aria-label={`Delete ${p.title}`} title="Delete piece" onClick={() => remove(p)}>{CloseIcon}</button>
+    </div>
+  )
+
+  const practiceNode = (p: Piece) => (
+    <button className={`practiced-btn${practicedToday.has(p.id) ? ' done' : ''}`} aria-pressed={practicedToday.has(p.id)}
+      title={practicedToday.has(p.id) ? 'Practiced today — click to undo' : 'Record that you practiced this today'}
+      onClick={() => void togglePracticed(p)}>✓ {practicedToday.has(p.id) ? 'Today' : 'Practice'}</button>
+  )
+
+  const statusPill = (p: Piece) => {
+    const s = statusOf(p)
+    return (
+      <button className={`status-pill ${s}`} title="Click to change status" onClick={() => update(p, statusPatch(nextStatus(s, 1)))}>
+        <i aria-hidden="true" />{statusLabel(s)}
+      </button>
+    )
+  }
+
+  const instrumentIcons = (p: Piece) => (
+    <span className="inst-icons">{INSTRUMENTS.filter((i) => p.instruments.includes(i.value)).map((i) => <span key={i.value} title={i.label}>{i.icon}</span>)}</span>
+  )
+
+  const miniCard = (p: Piece, board = false) => {
+    const s = statusOf(p)
+    return (
+      <article className="piece mini" key={p.id}>
+        <div className="piece-head">
+          <div className="mini-title">
+            {titleNode(p)}
+            <span className="mini-composer">{composerNameOf(p.composer_id)}</span>
+          </div>
+          {actionsNode(p)}
+        </div>
+        <div className="mini-meta">
+          {instrumentIcons(p)}
+          {p.pdf_pages ? <span className="page-count">{p.pdf_pages} p.</span> : null}
+          {p.last_practiced && <span className="practiced-text">{practicedText(p.last_practiced)}</span>}
+        </div>
+        <div className="mini-foot">
+          <Rating label="Rating" glyph="★" value={p.rating} onChange={(n) => update(p, { rating: n })} />
+          {board ? (
+            <span className="move-btns">
+              <button className="icon-btn" aria-label="Move back" title="Move back" disabled={s === 'none'} onClick={() => update(p, statusPatch(nextStatus(s, -1)))}>←</button>
+              <button className="icon-btn" aria-label="Move forward" title="Move forward" disabled={s === 'full'} onClick={() => update(p, statusPatch(nextStatus(s, 1)))}>→</button>
+            </span>
+          ) : statusPill(p)}
+          {practiceNode(p)}
+        </div>
+      </article>
+    )
+  }
+
+  const flat = sortPieces(visible, sort)
+  const noMatches = composers.length > 0 && visible.length === 0
+
   return (
     <>
       <div className="toasts" role="region" aria-live="polite" aria-label="Notifications">
@@ -603,12 +712,19 @@ function Library() {
           <input aria-label="Search pieces" placeholder="Search title, composer, notes…" value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setSearch('')}>✕</button>}
         </label>
-        <label className="sort-field">
-          <span>Sort</span>
-          <select aria-label="Sort pieces" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
-            {SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </label>
+        {view !== 'table' && (
+          <label className="sort-field">
+            <span>Sort</span>
+            <select aria-label="Sort pieces" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+              {SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+        )}
+        <div className="view-switch" role="group" aria-label="View">
+          {VIEWS.map((v) => (
+            <button key={v.value} type="button" className={view === v.value ? 'on' : ''} aria-pressed={view === v.value} onClick={() => setView(v.value)}>{v.label}</button>
+          ))}
+        </div>
         {filtering && <button type="button" className="link" onClick={() => { setSearch(''); setFilter('all'); setInstrumentFilter('all') }}>Clear filters</button>}
       </div>
 
@@ -628,7 +744,61 @@ function Library() {
         <div className="empty"><h3>No music yet</h3><p>Add your first composer to start building your library.</p></div>
       )}
 
-      <div className="composer-list">{composers.filter((c) => !hiddenIds.has(`composer:${c.id}`)).map((c) => {
+      {view !== 'grouped' && noMatches && <div className="empty"><h3>No pieces found</h3><p>Try clearing the filters or add a piece.</p></div>}
+
+      {view === 'table' && visible.length > 0 && (
+        <div className="table-wrap">
+          <table className="piece-table">
+            <thead>
+              <tr>
+                {([['title', 'Title'], ['composer', 'Composer'], [null, 'Instruments'], ['status', 'Status'], ['difficulty', 'Difficulty'], ['rating', 'Rating'], ['pages', 'Pages'], ['practiced', 'Practiced']] as [TableKey | null, string][]).map(([key, label]) => (
+                  <th key={label} aria-sort={key && tableSort.key === key ? (tableSort.dir === 1 ? 'ascending' : 'descending') : undefined}>
+                    {key ? (
+                      <button type="button" className={tableSort.key === key ? 'on' : ''} onClick={() => sortBy(key)}>
+                        {label}<span aria-hidden="true">{tableSort.key === key ? (tableSort.dir === 1 ? ' ▲' : ' ▼') : ''}</span>
+                      </button>
+                    ) : label}
+                  </th>
+                ))}
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {tableRows.map((p) => (
+                <tr key={p.id}>
+                  <td className="t-title">{titleNode(p)}</td>
+                  <td className="t-muted">{composerNameOf(p.composer_id)}</td>
+                  <td>{instrumentIcons(p)}</td>
+                  <td>{statusPill(p)}</td>
+                  <td><Rating label="Difficulty" glyph="●" value={p.difficulty} onChange={(n) => update(p, { difficulty: n })} /></td>
+                  <td className="stars"><Rating label="Rating" glyph="★" value={p.rating} onChange={(n) => update(p, { rating: n })} /></td>
+                  <td className="t-muted">{p.pdf_pages ?? '–'}</td>
+                  <td className="t-muted">{p.last_practiced ? practicedText(p.last_practiced) : '–'}</td>
+                  <td className="t-actions">{practiceNode(p)}{actionsNode(p)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {view === 'grid' && flat.length > 0 && <div className="piece-grid">{flat.map((p) => miniCard(p))}</div>}
+
+      {view === 'board' && visible.length > 0 && (
+        <div className="board">
+          {STATUSES.map((st) => {
+            const col = flat.filter((p) => statusOf(p) === st.value)
+            return (
+              <section className={`board-col ${st.value}`} key={st.value}>
+                <h3>{st.label}<span className="count">{col.length}</span></h3>
+                {col.length === 0 ? <p className="muted">Nothing here.</p> : col.map((p) => miniCard(p, true))}
+              </section>
+            )
+          })}
+        </div>
+      )}
+
+      {view === 'grouped' && <div className="composer-list">{composers.filter((c) => !hiddenIds.has(`composer:${c.id}`)).map((c) => {
         const list = sortPieces(visible.filter((p) => p.composer_id === c.id), sort)
         if (!list.length && filtering) return null
         return (
@@ -742,7 +912,7 @@ function Library() {
             })}
           </section>
         )
-      })}</div>
+      })}</div>}
     </>
   )
 }
