@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import type { Composer, Instrument, LinkType, Piece, PieceLink } from './supabase'
+import type { Composer, Instrument, LinkType, Piece, PieceLink, PracticeLog } from './supabase'
 import './App.css'
 
 function Login() {
@@ -135,6 +135,89 @@ function practicedText(date: string): string {
   return `Practiced ${plural(Math.floor(days / 365), 'year')}`
 }
 
+function isoOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const WEEKS = 26
+
+function PracticeCalendar({ logs, pieces }: { logs: PracticeLog[]; pieces: Piece[] }) {
+  const [selected, setSelected] = useState<string | null>(null)
+  const byDay = new Map<string, string[]>()
+  for (const l of logs) byDay.set(l.practiced_on, [...(byDay.get(l.practiced_on) ?? []), l.piece_id])
+
+  const todayStr = todayISO()
+  const [ty, tm, td] = todayStr.split('-').map(Number)
+  const today = new Date(ty, tm - 1, td)
+  const mondayOffset = (today.getDay() + 6) % 7
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mondayOffset - (WEEKS - 1) * 7)
+  const weeks = Array.from({ length: WEEKS }, (_, w) =>
+    Array.from({ length: 7 }, (_, d) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + d)))
+
+  // The streak survives until the end of today, so it still counts when today has no entry yet.
+  let streak = 0
+  const cursor = new Date(today)
+  if (!byDay.has(todayStr)) cursor.setDate(cursor.getDate() - 1)
+  while (byDay.has(isoOf(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1) }
+
+  const weekDays = weeks[WEEKS - 1].filter((d) => byDay.has(isoOf(d))).length
+  const todayCount = byDay.get(todayStr)?.length ?? 0
+  const level = (n: number) => (n === 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 5 ? 3 : 4)
+  const dayLabel = (iso: string) => {
+    const [y, m, d] = iso.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+  }
+  const monthLabels = weeks.map((w, i) => {
+    const monthStart = w.find((d) => d.getDate() === 1)
+    return i === 0 ? (weeks[1].some((d) => d.getDate() === 1) ? '' : w[0].toLocaleDateString(undefined, { month: 'short' })) : monthStart ? monthStart.toLocaleDateString(undefined, { month: 'short' }) : ''
+  })
+  const selectedPieces = selected ? (byDay.get(selected) ?? []).map((id) => pieces.find((p) => p.id === id)).filter((p): p is Piece => !!p) : []
+
+  return (
+    <section className="panel practice-cal" aria-label="Practice calendar">
+      <div className="cal-head">
+        <div className="cal-stats">
+          <div><strong>{streak}</strong><span>day streak 🔥</span></div>
+          <div><strong>{todayCount}</strong><span>{todayCount === 1 ? 'piece' : 'pieces'} today</span></div>
+          <div><strong>{weekDays}/7</strong><span>days this week</span></div>
+        </div>
+      </div>
+      <div className="cal-scroll">
+        <div className="cal-months" style={{ gridTemplateColumns: `repeat(${WEEKS}, 14px)` }}>
+          {monthLabels.map((m, i) => <span key={i}>{m}</span>)}
+        </div>
+        <div className="cal-grid" style={{ gridTemplateColumns: `repeat(${WEEKS}, 14px)` }}>
+          {weeks.map((w, wi) => (
+            <div className="cal-col" key={wi}>
+              {w.map((d) => {
+                const iso = isoOf(d)
+                const n = byDay.get(iso)?.length ?? 0
+                if (d > today) return <span className="cal-cell future" key={iso} />
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    className={`cal-cell l${level(n)}${iso === todayStr ? ' today' : ''}${iso === selected ? ' sel' : ''}`}
+                    title={`${dayLabel(iso)} · ${n} ${n === 1 ? 'piece' : 'pieces'}`}
+                    aria-label={`${dayLabel(iso)}: ${n} ${n === 1 ? 'piece' : 'pieces'} practiced`}
+                    onClick={() => setSelected(selected === iso ? null : iso)}
+                  />
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      {selected && (
+        <div className="cal-detail">
+          <strong>{dayLabel(selected)}</strong>
+          {selectedPieces.length ? <span>{selectedPieces.map((p) => p.title).join(' · ')}</span> : <span className="muted">Nothing practiced.</span>}
+        </div>
+      )}
+    </section>
+  )
+}
+
 const strokeIcon = (d: string) => (
   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>
 )
@@ -200,6 +283,7 @@ type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () =>
 function Library() {
   const [composers, setComposers] = useState<Composer[]>([])
   const [pieces, setPieces] = useState<Piece[]>([])
+  const [logs, setLogs] = useState<PracticeLog[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [preview, setPreview] = useState<{ title: string; url: string; pages: number | null } | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -239,6 +323,9 @@ function Library() {
     if (c.error || p.error) notify((c.error ?? p.error)!.message)
     setComposers(c.data ?? [])
     setPieces(p.data ?? [])
+    // Missing table (migration 0010 not run yet) just leaves the calendar empty.
+    const l = await supabase.from('sm_practice_log').select('id, piece_id, practiced_on').order('practiced_on', { ascending: false }).limit(5000)
+    setLogs(l.data ?? [])
   }, [notify])
 
   useEffect(() => { void load() }, [load])
@@ -289,6 +376,26 @@ function Library() {
     const ok = await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path, ...(pdf_pages ? { pdf_pages } : {}), instruments: newInstruments }))
     if (!ok) return
     setTitle(''); setFile(null); setNewInstruments(['piano']); setPanel(null)
+  }
+
+  const practicedToday = new Set(logs.filter((l) => l.practiced_on === todayISO()).map((l) => l.piece_id))
+
+  const togglePracticed = async (p: Piece) => {
+    const today = todayISO()
+    const existing = logs.find((l) => l.piece_id === p.id && l.practiced_on === today)
+    const sync = (dates: string[]) => supabase.from('sm_pieces').update({ last_practiced: dates.sort().pop() ?? null }).eq('id', p.id)
+    const others = logs.filter((l) => l.piece_id === p.id && l.practiced_on !== today).map((l) => l.practiced_on)
+    if (existing) {
+      const ok = await run(supabase.from('sm_practice_log').delete().eq('id', existing.id))
+      if (ok) await sync(others)
+    } else {
+      const ok = await run(supabase.from('sm_practice_log').insert({ piece_id: p.id, practiced_on: today }))
+      if (ok) {
+        await sync([...others, today])
+        notify(`Logged practice: ${p.title}`, 'info')
+      }
+    }
+    await load()
   }
 
   const update = (p: Piece, patch: Partial<Piece>) =>
@@ -461,6 +568,8 @@ function Library() {
         </div>
       </div>
 
+      <PracticeCalendar logs={logs} pieces={pieces} />
+
       {panel === 'composer' && (
         <form className="panel" onSubmit={addComposer}>
           <label className="grow">Composer name<input autoFocus placeholder="e.g. Clara Schumann" value={composerName} onChange={(e) => setComposerName(e.target.value)} required /></label>
@@ -620,7 +729,7 @@ function Library() {
                     ) : (
                       <button className="add-link" title="Add a YouTube, Spotify, Instagram or other link" onClick={() => setOpenLink(p.id)}>+ Link</button>
                     )}
-                    <button className="practiced-btn" title="Record that you practiced this today" onClick={() => update(p, { last_practiced: todayISO() })}>✓ Practiced today</button>
+                    <button className={`practiced-btn${practicedToday.has(p.id) ? ' done' : ''}`} aria-pressed={practicedToday.has(p.id)} title={practicedToday.has(p.id) ? 'Practiced today — click to undo' : 'Record that you practiced this today'} onClick={() => void togglePracticed(p)}>✓ {practicedToday.has(p.id) ? 'Practiced today' : 'Practice today'}</button>
                     {p.last_practiced && <span className="practiced-text">{practicedText(p.last_practiced)}</span>}
                   </div>
                   <div className="meters">
