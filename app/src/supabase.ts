@@ -21,6 +21,7 @@ export type PieceLink = { type: LinkType; url: string }
 
 export type Piece = {
   instruments: Instrument[]
+  tags?: string[]
   id: string
   composer_id: string
   title: string

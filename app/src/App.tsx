@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
@@ -51,6 +51,44 @@ const INSTRUMENTS: { value: Instrument; label: string; icon: string }[] = [
 function toggleInstrument(current: Instrument[], i: Instrument): Instrument[] {
   const next = current.includes(i) ? current.filter((x) => x !== i) : [...current, i]
   return next.length ? next : current
+}
+
+const MAX_TAGS = 20
+const MAX_TAG_LENGTH = 24
+
+function normalizeTag(raw: string): string {
+  return raw.trim().replace(/^#+/, '').replace(/\s+/g, ' ').toLowerCase().slice(0, MAX_TAG_LENGTH).trim()
+}
+
+function TagInput({ tags, suggestions, label, onChange }: { tags: string[]; suggestions: string[]; label: string; onChange: (tags: string[]) => void }) {
+  const [draft, setDraft] = useState('')
+  const listId = useId()
+  const add = (raw: string) => {
+    const t = normalizeTag(raw)
+    setDraft('')
+    if (t && !tags.includes(t) && tags.length < MAX_TAGS) onChange([...tags, t])
+  }
+  return (
+    <div className="tag-input" role="group" aria-label={label}>
+      {tags.map((t) => (
+        <span className="tag" key={t}>
+          #{t}
+          <button type="button" className="tag-remove" aria-label={`Remove tag ${t}`} onClick={() => onChange(tags.filter((x) => x !== t))}>{CloseIcon}</button>
+        </span>
+      ))}
+      <input list={listId} aria-label="Add tag" placeholder={tags.length ? 'Add tag…' : '+ Tag (e.g. recital)'} maxLength={MAX_TAG_LENGTH} value={draft}
+        onChange={(e) => {
+          const v = e.target.value
+          if (v.includes(',')) { v.split(',').forEach((part, i, all) => { if (i < all.length - 1) add(part); else setDraft(part) }) } else setDraft(v)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); add(draft) }
+          else if (e.key === 'Backspace' && !draft && tags.length) onChange(tags.slice(0, -1))
+        }}
+        onBlur={() => { if (draft.trim()) add(draft) }} />
+      <datalist id={listId}>{suggestions.filter((s) => !tags.includes(s)).map((s) => <option key={s} value={s} />)}</datalist>
+    </div>
+  )
 }
 
 async function countPdfPages(blob: Blob): Promise<number | null> {
@@ -148,7 +186,7 @@ function isoOf(d: Date): string {
 
 const WEEKS = 26
 
-function PracticeCalendar({ logs, pieces }: { logs: PracticeLog[]; pieces: Piece[] }) {
+function PracticeCalendar({ logs, pieces, composers }: { logs: PracticeLog[]; pieces: Piece[]; composers: Composer[] }) {
   const [selected, setSelected] = useState<string | null>(null)
   const byDay = new Map<string, string[]>()
   for (const l of logs) byDay.set(l.practiced_on, [...(byDay.get(l.practiced_on) ?? []), l.piece_id])
@@ -167,7 +205,26 @@ function PracticeCalendar({ logs, pieces }: { logs: PracticeLog[]; pieces: Piece
   if (!byDay.has(todayStr)) cursor.setDate(cursor.getDate() - 1)
   while (byDay.has(isoOf(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1) }
 
-  const weekDays = weeks[WEEKS - 1].filter((d) => byDay.has(isoOf(d))).length
+  // Longest run of consecutive practice days across the whole log.
+  let bestStreak = 0
+  let run = 0
+  let prev: number | null = null
+  for (const iso of [...byDay.keys()].sort()) {
+    const [y, m, d] = iso.split('-').map(Number)
+    const t = Date.UTC(y, m - 1, d)
+    run = prev !== null && t - prev === 86400000 ? run + 1 : 1
+    prev = t
+    bestStreak = Math.max(bestStreak, run)
+  }
+  bestStreak = Math.max(bestStreak, streak)
+
+  const weekTotals = (w: Date[]) => {
+    const ids = w.flatMap((d) => byDay.get(isoOf(d)) ?? [])
+    return { days: w.filter((d) => byDay.has(isoOf(d))).length, sessions: ids.length }
+  }
+  const thisWeek = weekTotals(weeks[WEEKS - 1])
+  const lastWeek = weekTotals(weeks[WEEKS - 2])
+  const weekDelta = thisWeek.sessions - lastWeek.sessions
   const todayCount = byDay.get(todayStr)?.length ?? 0
   const level = (n: number) => (n === 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 5 ? 3 : 4)
   const dayLabel = (iso: string) => {
@@ -184,9 +241,12 @@ function PracticeCalendar({ logs, pieces }: { logs: PracticeLog[]; pieces: Piece
     <section className="panel practice-cal" aria-label="Practice calendar">
       <div className="cal-head">
         <div className="cal-stats">
-          <div><strong>{streak}</strong><span>day streak 🔥</span></div>
+          <div><strong>{streak}</strong><span>day streak 🔥 · best {bestStreak}</span></div>
           <div><strong>{todayCount}</strong><span>{todayCount === 1 ? 'piece' : 'pieces'} today</span></div>
-          <div><strong>{weekDays}/7</strong><span>days this week</span></div>
+          <div><strong>{thisWeek.sessions}</strong><span>
+            {thisWeek.sessions === 1 ? 'practice' : 'practices'} this week · {thisWeek.days}/7 days
+            {weekDelta !== 0 && <em className={weekDelta > 0 ? 'up' : 'down'}> {weekDelta > 0 ? '▲' : '▼'} {Math.abs(weekDelta)} vs last week</em>}
+          </span></div>
         </div>
       </div>
       <div className="cal-scroll">
@@ -217,8 +277,21 @@ function PracticeCalendar({ logs, pieces }: { logs: PracticeLog[]; pieces: Piece
       </div>
       {selected && (
         <div className="cal-detail">
-          <strong>{dayLabel(selected)}</strong>
-          {selectedPieces.length ? <span>{selectedPieces.map((p) => p.title).join(' · ')}</span> : <span className="muted">Nothing practiced.</span>}
+          <div className="cal-detail-head">
+            <strong>{dayLabel(selected)}</strong>
+            <span className="muted">{selectedPieces.length ? `${selectedPieces.length} ${selectedPieces.length === 1 ? 'piece' : 'pieces'} practiced` : 'Nothing practiced.'}</span>
+            <button type="button" className="cal-detail-close" aria-label="Close details" onClick={() => setSelected(null)}>{CloseIcon}</button>
+          </div>
+          {selectedPieces.length > 0 && (
+            <ul className="cal-detail-list">
+              {selectedPieces.map((p) => (
+                <li key={p.id}>
+                  <span>{p.title}</span>
+                  <span className="muted">{composers.find((c) => c.id === p.composer_id)?.name ?? ''}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </section>
@@ -315,6 +388,8 @@ function Library() {
   const [filter, setFilter] = useState('all')
   const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>('all')
   const [newInstruments, setNewInstruments] = useState<Instrument[]>(['piano'])
+  const [newTags, setNewTags] = useState<string[]>([])
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [composerName, setComposerName] = useState('')
   const [title, setTitle] = useState('')
   const [composerId, setComposerId] = useState('')
@@ -386,9 +461,9 @@ function Library() {
       const up = await supabase.storage.from('sheet-music').upload(pdf_path, file, { contentType: 'application/pdf' })
       if (up.error) { notify(`Upload failed: ${up.error.message}`); return }
     }
-    const ok = await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path, ...(pdf_pages ? { pdf_pages } : {}), instruments: newInstruments }))
+    const ok = await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path, ...(pdf_pages ? { pdf_pages } : {}), instruments: newInstruments, ...(newTags.length ? { tags: newTags } : {}) }))
     if (!ok) return
-    setTitle(''); setFile(null); setNewInstruments(['piano']); setPanel(null)
+    setTitle(''); setFile(null); setNewInstruments(['piano']); setNewTags([]); setPanel(null)
   }
 
   const practicedToday = new Set(logs.filter((l) => l.practiced_on === todayISO()).map((l) => l.piece_id))
@@ -528,10 +603,11 @@ function Library() {
     if (hiddenIds.has(p.id)) return false
     const cn = composers.find((c) => c.id === p.composer_id)?.name ?? ''
     if (terms.length) {
-      const haystack = `${p.title} ${cn} ${p.notes ?? ''} ${p.instruments.join(' ')}`.toLowerCase()
+      const haystack = `${p.title} ${cn} ${p.notes ?? ''} ${p.instruments.join(' ')} ${(p.tags ?? []).join(' ')}`.toLowerCase()
       if (!terms.every((t) => haystack.includes(t))) return false
     }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
+    if (tagFilter && !(p.tags ?? []).includes(tagFilter)) return false
     switch (filter) {
       case 'can_play': return p.play_progress === 100
       case 'cannot_play': return p.play_progress === 0
@@ -541,7 +617,8 @@ function Library() {
     }
   })
 
-  const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all'
+  const allTags = [...new Set([...pieces.flatMap((p) => p.tags ?? []), ...(tagFilter ? [tagFilter] : [])])].sort()
+  const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all' || Boolean(tagFilter)
 
   const composerNameOf = (id: string) => composers.find((c) => c.id === id)?.name ?? ''
   const nextStatus = (s: Status, step: 1 | -1) => STATUSES[(STATUSES.findIndex((x) => x.value === s) + step + STATUSES.length) % STATUSES.length].value
@@ -604,6 +681,14 @@ function Library() {
     <span className="inst-icons">{INSTRUMENTS.filter((i) => p.instruments.includes(i.value)).map((i) => <span key={i.value} title={i.label}>{i.icon}</span>)}</span>
   )
 
+  const tagList = (p: Piece) => (p.tags?.length ? (
+    <span className="tag-list">
+      {p.tags.map((t) => (
+        <button key={t} type="button" className={`tag${tagFilter === t ? ' on' : ''}`} title={`Filter by #${t}`} onClick={() => setTagFilter(tagFilter === t ? null : t)}>#{t}</button>
+      ))}
+    </span>
+  ) : null)
+
   const miniCard = (p: Piece, board = false) => {
     const s = statusOf(p)
     return (
@@ -620,6 +705,7 @@ function Library() {
           {p.pdf_pages ? <span className="page-count">{p.pdf_pages} p.</span> : null}
           {p.last_practiced && <span className="practiced-text">{practicedText(p.last_practiced)}</span>}
         </div>
+        {tagList(p)}
         <div className="mini-foot">
           <Rating label="Rating" glyph="★" value={p.rating} onChange={(n) => update(p, { rating: n })} />
           {board ? (
@@ -674,7 +760,7 @@ function Library() {
         </div>
       </div>
 
-      <PracticeCalendar logs={logs} pieces={pieces} />
+      <PracticeCalendar logs={logs} pieces={pieces} composers={composers} />
 
       {panel === 'composer' && (
         <form className="panel" onSubmit={addComposer}>
@@ -697,6 +783,10 @@ function Library() {
                   onClick={() => setNewInstruments(toggleInstrument(newInstruments, i.value))}>{i.icon} {i.label}</button>
               ))}
             </div>
+          </div>
+          <div className="field-group">
+            <span>Tags</span>
+            <TagInput tags={newTags} suggestions={allTags} label="Tags for new piece" onChange={setNewTags} />
           </div>
           <label>PDF score (optional)<input type="file" accept="application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
           <button className="btn primary" type="submit">Add piece</button>
@@ -722,7 +812,7 @@ function Library() {
             <button key={v.value} type="button" className={view === v.value ? 'on' : ''} aria-pressed={view === v.value} onClick={() => setView(v.value)}>{v.label}</button>
           ))}
         </div>
-        {filtering && <button type="button" className="link" onClick={() => { setSearch(''); setFilter('all'); setInstrumentFilter('all') }}>Clear filters</button>}
+        {filtering && <button type="button" className="link" onClick={() => { setSearch(''); setFilter('all'); setInstrumentFilter('all'); setTagFilter(null) }}>Clear filters</button>}
       </div>
 
       <div className="filter-bar" role="group" aria-label="Filter by instrument">
@@ -737,6 +827,15 @@ function Library() {
         ))}
       </div>
 
+      {allTags.length > 0 && (
+        <div className="filter-bar" role="group" aria-label="Filter by tag">
+          <button type="button" className={`filter-pill${tagFilter === null ? ' active' : ''}`} aria-pressed={tagFilter === null} onClick={() => setTagFilter(null)}>All tags</button>
+          {allTags.map((t) => (
+            <button key={t} type="button" className={`filter-pill${tagFilter === t ? ' active' : ''}`} aria-pressed={tagFilter === t} onClick={() => setTagFilter(tagFilter === t ? null : t)}>#{t}</button>
+          ))}
+        </div>
+      )}
+
       {!composers.length && (
         <div className="empty"><h3>No music yet</h3><p>Add your first composer to start building your library.</p></div>
       )}
@@ -748,7 +847,7 @@ function Library() {
           <table className="piece-table">
             <thead>
               <tr>
-                {([['title', 'Title'], ['composer', 'Composer'], [null, 'Instruments'], ['status', 'Status'], ['difficulty', 'Difficulty'], ['rating', 'Rating'], ['pages', 'Pages'], ['practiced', 'Practiced']] as [TableKey | null, string][]).map(([key, label]) => (
+                {([['title', 'Title'], ['composer', 'Composer'], [null, 'Instruments'], [null, 'Tags'], ['status', 'Status'], ['difficulty', 'Difficulty'], ['rating', 'Rating'], ['pages', 'Pages'], ['practiced', 'Practiced']] as [TableKey | null, string][]).map(([key, label]) => (
                   <th key={label} aria-sort={key && tableSort.key === key ? (tableSort.dir === 1 ? 'ascending' : 'descending') : undefined}>
                     {key ? (
                       <button type="button" className={tableSort.key === key ? 'on' : ''} onClick={() => sortBy(key)}>
@@ -766,6 +865,7 @@ function Library() {
                   <td className="t-title">{titleNode(p)}</td>
                   <td className="t-muted">{composerNameOf(p.composer_id)}</td>
                   <td>{instrumentIcons(p)}</td>
+                  <td>{tagList(p)}</td>
                   <td>{statusPill(p)}</td>
                   <td><Rating label="Difficulty" glyph="●" value={p.difficulty} onChange={(n) => update(p, { difficulty: n })} /></td>
                   <td className="stars"><Rating label="Rating" glyph="★" value={p.rating} onChange={(n) => update(p, { rating: n })} /></td>
@@ -856,6 +956,9 @@ function Library() {
                   </div>
                 </div>
                 <input className="notes" aria-label={`Notes for ${p.title}`} placeholder="Add a note…" defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) update(p, { notes: e.target.value }) }} />
+                <div className="piece-row">
+                  <TagInput tags={p.tags ?? []} suggestions={allTags} label={`Tags for ${p.title}`} onChange={(tags) => update(p, { tags })} />
+                </div>
                 <div className="piece-row">
                   <div className="chip-group" role="group" aria-label={`Instruments for ${p.title}`}>
                     {INSTRUMENTS.map((i) => (
