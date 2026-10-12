@@ -1,0 +1,83 @@
+# Improvement ideas
+
+A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M** (a day or two), **L** (several days). Priority: 🔴 high, 🟡 medium, 🟢 nice to have.
+
+## Security
+
+| Pri | Effort | Item |
+| --- | --- | --- |
+| 🔴 | S | **Server-side link validation.** `safeUrl` only runs in the browser. Add a `check` constraint or trigger on the piece links so only `http(s)` URLs can be stored, even through direct API calls. |
+| 🔴 | S | **Upload limits.** Restrict the `sheet-music` bucket to `application/pdf` with a max file size (bucket `file_size_limit` / `allowed_mime_types`). Today only the client checks the type. |
+| 🔴 | S | **Verify storage policy scoping.** Confirm the `own pdfs` policy ties objects to `auth.uid()` via the path prefix for select, insert, update and delete. Add a test with a second user. |
+| 🟡 | S | **Bound text fields.** Add length checks (title, notes, composer name) and array-size limits (links, instruments) in the database. |
+| 🟡 | M | **Password policy and email confirmation.** Enforce a minimum password length and require email confirmation. Add a password reset flow and optionally MFA. |
+| 🟡 | S | **Security headers.** Set CSP (`default-src 'self'`, allow the Supabase host), `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors 'none'` on the hosting layer. |
+| 🟡 | S | **`rel="noopener noreferrer"`** on every external link (check all `target="_blank"` usages). |
+| 🟢 | S | **Dependency hygiene.** Enable Dependabot / `npm audit` in CI. |
+| 🟢 | M | **Rate limiting** on auth and upload endpoints (Supabase auth rate limits, plus an Edge Function for uploads if added). |
+
+## UI / UX
+
+- 🔴 **Mobile layout.** Check the Table and Board views and the practice calendar on small screens. Consider a bottom sheet instead of the modal for the PDF preview. (M)
+- 🟡 **Keyboard accessibility.** Make every icon button reachable and labelled. Add arrow-key support to the progress slider and `Esc` to close the PDF modal and inline editors. Run an axe / Lighthouse pass. (M)
+- 🟡 **Remember filters and sort.** The view is stored in `localStorage['sm:view']`; do the same for filter, sort and search. (S)
+- 🟡 **Drag and drop.** Drop a PDF anywhere to add a piece. Drag cards between Board columns to change progress. (M)
+- 🟡 **Bulk actions.** Multi-select pieces to change progress or instrument, or to delete. (M)
+- 🟢 **Practice calendar details.** Click a day to list the pieces practised, show streaks and a weekly total. (M)
+- 🟢 **Thumbnails.** Render page 1 of each PDF as a cover for the Grid view. (M)
+- 🟢 **Undo for more actions.** Extend the undo toast to rename, progress changes and composer delete. (S)
+- 🟢 **Language switch** (EN/DE). Move strings to a small i18n layer. (M)
+
+## Features
+
+- 🔴 **Practice sessions with duration.** Store minutes per practice entry, not only a date, and show weekly/monthly totals. (M)
+- 🟡 **Goals and reminders.** Weekly practice goal, plus an optional "not practised in N days" nudge. (M)
+- 🟡 **Setlists / playlists.** Group pieces for a concert or lesson independent of the composer. (L)
+- 🟡 **Tags.** Free-form tags (e.g. "recital", "etude") alongside instruments. (M)
+- 🟡 **Import / export.** Export the library as JSON/CSV and import it back, so the data is never locked in. (M)
+- 🟡 **Metadata fields.** Key, tempo, opus number, year, and source (book / IMSLP). Add them to search. (M)
+- 🟢 **Multiple files per piece.** Score, parts, fingering versions. (L)
+- 🟢 **IMSLP lookup.** Search by title and composer to prefill metadata and link. (L)
+- 🟢 **PDF annotations / bookmarks** in the preview modal, or at least a "jump to page" bookmark. (L)
+- 🟢 **Sharing.** Read-only public link to a composer or setlist. (L)
+- 🟢 **Installable PWA** with offline access to recently opened PDFs. (M)
+
+## Refactoring
+
+- 🔴 **Split `App.tsx` (~940 lines).** `Library` holds all state, handlers and four views. Extract:
+  - `components/`: `Login`, `PracticeCalendar`, `Rating`, `ProgressSlider`, `PieceCard`, `PdfModal`, `Toasts`, and one component per view (`GroupedView`, `TableView`, `GridView`, `BoardView`).
+  - `lib/`: `links.ts` (`safeUrl`, `detectLinkType`, `linkLabel`), `status.ts` (`STATUSES`, `statusOf`, `statusPatch`), `dates.ts`, `sort.ts`, `filters.ts`.
+  - `hooks/`: `usePieces`, `useComposers`, `usePracticeLog`, `useToasts`, `useLocalStorage`. (L)
+- 🟡 **Data layer.** Move Supabase calls out of components into one `api/` module with typed return values and a single error-handling path. Consider TanStack Query for caching, optimistic updates and retries. (M)
+- 🟡 **Typed database client.** Generate types with `supabase gen types typescript` instead of the hand-written `Piece` type in `supabase.ts`. Also replace `select('*')` with explicit columns. (S)
+- 🟡 **Split `App.css`.** Use CSS modules or one file per component. Extract repeated colours (progress levels) into tokens. (M)
+- 🟡 **Fix the `set-state-in-effect` lint warning** around the page-count backfill by moving it into a hook or event handler. (S)
+- 🟢 **Remove unused `favorite`** from the `Piece` type and table, if nothing reads it. (S)
+- 🟢 **Replace magic values** (`WEEKS = 26`, signed URL TTL `3600`, bucket name) with named constants in one config file. (S)
+- 🟢 **Lazy-load pdf.js.** The build already warns about a ~420 kB chunk. Load it only when the PDF modal opens or a page count is needed. (S)
+
+## Data and backend
+
+- 🔴 **Migration workflow.** Migrations are run by hand. Adopt the Supabase CLI (`supabase db push`) so they are applied in order and tracked. (S)
+- 🟡 **Indexes.** Add indexes on `sm_pieces(user_id, composer_id)` and the practice log `(user_id, practiced_on)`. (S)
+- 🟡 **Normalise links.** If links need metadata (title, added date), move them from an array/JSON column to a `sm_piece_links` table. (M)
+- 🟡 **Orphan cleanup.** Deleting a piece removes its PDF from the client; do this server-side (trigger or Edge Function) so storage never leaks files. (M)
+- 🟢 **Backups.** Schedule exports of the database and bucket. (S)
+- 🟢 **Server-side search.** Use Postgres full-text search if the library grows beyond what client filtering handles. (M)
+
+## Quality and tooling
+
+- 🔴 **Tests.** None exist today. Start with unit tests (Vitest) for the pure helpers (`safeUrl`, `statusOf`, `sortPieces`, `practicedText`, filters), then component tests for the slider and calendar. (M)
+- 🟡 **End-to-end tests** (Playwright): login, add piece with PDF, change progress, practise today, delete with undo. (M)
+- 🟡 **CI.** GitHub Actions running `npm ci`, `tsc -b`, `npm run lint`, tests and build on every PR. (S)
+- 🟡 **Error monitoring** (e.g. Sentry) for failed uploads and saves. (S)
+- 🟢 **Formatter and pre-commit hooks** (Prettier or Biome, lint-staged). (S)
+- 🟢 **Documentation.** Update `README.md`: it still lists "can play, learned, favorite", while the app now uses 0–100% progress, multiple links, a practice log and four views. Add a short architecture note and a deploy guide. (S)
+
+## Suggested order
+
+1. Security basics: server-side link check, bucket limits, storage policy test.
+2. Tooling: Supabase CLI migrations, CI, first unit tests.
+3. Refactor `App.tsx` into components, hooks and a data layer.
+4. Features with the most daily value: practice duration, remembered filters, bulk actions.
+5. Polish: mobile layout, accessibility, dark mode, PWA.
