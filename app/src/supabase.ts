@@ -26,10 +26,8 @@ export type Piece = {
   title: string
   pdf_path: string | null
   pdf_pages?: number | null
-  can_play: boolean
-  learned: boolean
+  play_progress: number
   favorite: boolean
-  learn_later: boolean
   difficulty: number | null
   rating: number | null
   notes: string | null

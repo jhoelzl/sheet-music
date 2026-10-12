@@ -37,10 +37,9 @@ function Login() {
 
 const FILTERS: { value: string; label: string }[] = [
   { value: 'all', label: 'All' },
-  { value: 'can_play', label: 'Can fully play' },
-  { value: 'learned', label: 'Can partly play' },
-  { value: 'cannot_play', label: "Can't play yet" },
-  { value: 'to_learn', label: "Can't partly play" },
+  { value: 'can_play', label: 'Can fully play (100%)' },
+  { value: 'learned', label: 'In progress (25–75%)' },
+  { value: 'cannot_play', label: "Can't play yet (0%)" },
   { value: 'hard', label: 'Hard (4+)' },
 ]
 
@@ -64,23 +63,22 @@ async function countPdfPages(blob: Blob): Promise<number | null> {
   }
 }
 
-type Status = 'none' | 'partly' | 'full'
+type Status = 0 | 25 | 50 | 75 | 100
 
 const STATUSES: { value: Status; label: string; short: string }[] = [
-  { value: 'none', label: "Can't play yet", short: "Can't play" },
-  { value: 'partly', label: 'Can partly play', short: 'Partly' },
-  { value: 'full', label: 'Can fully play', short: 'Fully' },
+  { value: 0, label: "Can't play yet (0%)", short: '0%' },
+  { value: 25, label: 'Just started (25%)', short: '25%' },
+  { value: 50, label: 'Can partly play (50%)', short: '50%' },
+  { value: 75, label: 'Almost there (75%)', short: '75%' },
+  { value: 100, label: 'Can fully play (100%)', short: '100%' },
 ]
 
-// The boolean columns can hold legacy combinations; the most advanced state wins.
 function statusOf(p: Piece): Status {
-  if (p.can_play) return 'full'
-  if (p.learned) return 'partly'
-  return 'none'
+  return (STATUSES.find((s) => s.value === p.play_progress)?.value ?? 0) as Status
 }
 
 function statusPatch(s: Status): Partial<Piece> {
-  return { can_play: s === 'full', learned: s === 'full' || s === 'partly', learn_later: false }
+  return { play_progress: s }
 }
 
 type SortKey = 'title' | 'rating' | 'difficulty' | 'recent'
@@ -535,10 +533,9 @@ function Library() {
     }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
     switch (filter) {
-      case 'can_play': return p.can_play
-      case 'cannot_play': return !p.can_play
-      case 'learned': return p.learned
-      case 'to_learn': return !p.learned
+      case 'can_play': return p.play_progress === 100
+      case 'cannot_play': return p.play_progress === 0
+      case 'learned': return p.play_progress > 0 && p.play_progress < 100
       case 'hard': return (p.difficulty ?? 0) >= 4
       default: return true
     }
@@ -547,14 +544,14 @@ function Library() {
   const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all'
 
   const composerNameOf = (id: string) => composers.find((c) => c.id === id)?.name ?? ''
-  const nextStatus = (s: Status, step: 1 | -1) => STATUSES[(STATUSES.findIndex((x) => x.value === s) + step + 3) % 3].value
+  const nextStatus = (s: Status, step: 1 | -1) => STATUSES[(STATUSES.findIndex((x) => x.value === s) + step + STATUSES.length) % STATUSES.length].value
   const statusLabel = (s: Status) => STATUSES.find((x) => x.value === s)?.short ?? ''
 
   const tableRows = [...visible].sort((a, b) => {
     const val = (p: Piece): string | number => {
       switch (tableSort.key) {
         case 'composer': return composerNameOf(p.composer_id).toLowerCase()
-        case 'status': return STATUSES.findIndex((s) => s.value === statusOf(p))
+        case 'status': return statusOf(p)
         case 'difficulty': return p.difficulty ?? -1
         case 'rating': return p.rating ?? -1
         case 'pages': return p.pdf_pages ?? -1
@@ -597,7 +594,7 @@ function Library() {
   const statusPill = (p: Piece) => {
     const s = statusOf(p)
     return (
-      <button className={`status-pill ${s}`} title="Click to change status" onClick={() => update(p, statusPatch(nextStatus(s, 1)))}>
+      <button className={`status-pill s${s}`} title="Click to change status" onClick={() => update(p, statusPatch(nextStatus(s, 1)))}>
         <i aria-hidden="true" />{statusLabel(s)}
       </button>
     )
@@ -627,8 +624,8 @@ function Library() {
           <Rating label="Rating" glyph="★" value={p.rating} onChange={(n) => update(p, { rating: n })} />
           {board ? (
             <span className="move-btns">
-              <button className="icon-btn" aria-label="Move back" title="Move back" disabled={s === 'none'} onClick={() => update(p, statusPatch(nextStatus(s, -1)))}>←</button>
-              <button className="icon-btn" aria-label="Move forward" title="Move forward" disabled={s === 'full'} onClick={() => update(p, statusPatch(nextStatus(s, 1)))}>→</button>
+              <button className="icon-btn" aria-label="Move back" title="Move back" disabled={s === 0} onClick={() => update(p, statusPatch(nextStatus(s, -1)))}>←</button>
+              <button className="icon-btn" aria-label="Move forward" title="Move forward" disabled={s === 100} onClick={() => update(p, statusPatch(nextStatus(s, 1)))}>→</button>
             </span>
           ) : statusPill(p)}
           {practiceNode(p)}
@@ -789,7 +786,7 @@ function Library() {
           {STATUSES.map((st) => {
             const col = flat.filter((p) => statusOf(p) === st.value)
             return (
-              <section className={`board-col ${st.value}`} key={st.value}>
+              <section className={`board-col s${st.value}`} key={st.value}>
                 <h3>{st.label}<span className="count">{col.length}</span></h3>
                 {col.length === 0 ? <p className="muted">Nothing here.</p> : col.map((p) => miniCard(p, true))}
               </section>
@@ -866,8 +863,8 @@ function Library() {
                         onClick={() => update(p, { instruments: toggleInstrument(p.instruments, i.value) })}>{i.icon} {i.label}</button>
                     ))}
                   </div>
-                  <div className={`progress ${status}`}>
-                    <input type="range" min={0} max={2} step={1} value={STATUSES.findIndex((s) => s.value === status)}
+                  <div className={`progress s${status}`}>
+                    <input type="range" min={0} max={STATUSES.length - 1} step={1} value={STATUSES.findIndex((s) => s.value === status)}
                       aria-label={`Progress for ${p.title}`}
                       aria-valuetext={STATUSES.find((s) => s.value === status)?.label}
                       onChange={(e) => { const next = STATUSES[Number(e.target.value)].value; if (next !== status) update(p, statusPatch(next)) }} />

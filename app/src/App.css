@@ -140,9 +140,15 @@ a.piece-title:hover { text-decoration: underline; }
 .attach-btn.busy { opacity: .6; cursor: progress; }
 .skeleton { display: inline-block; width: 52px; height: 20px; border-radius: 99px; background: linear-gradient(90deg, #f0ede8 25%, #e4e0d9 50%, #f0ede8 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
-.progress { --c: #a8a29a; --pct: 0%; width: 220px; max-width: 100%; }
-.progress.partly { --c: #d97706; --pct: 50%; }
-.progress.full { --c: #16a34a; --pct: 100%; }
+.progress { --c: #a8a29a; --pct: 0%; width: 260px; max-width: 100%; }
+.progress.s25 { --pct: 25%; }
+.progress.s50 { --pct: 50%; }
+.progress.s75 { --pct: 75%; }
+.progress.s100 { --pct: 100%; }
+.progress.s25, .status-pill.s25, .board-col.s25 { --c: #ca8a04; }
+.progress.s50, .status-pill.s50, .board-col.s50 { --c: #d97706; }
+.progress.s75, .status-pill.s75, .board-col.s75 { --c: #65a30d; }
+.progress.s100, .status-pill.s100, .board-col.s100 { --c: #16a34a; }
 .progress input[type=range] { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 22px; margin: 0; background: transparent; cursor: pointer; }
 .progress input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--c) var(--pct), #e8e4dd var(--pct)); transition: background .2s; }
 .progress input[type=range]::-moz-range-track { height: 6px; border-radius: 99px; background: #e8e4dd; }
@@ -150,11 +156,8 @@ a.piece-title:hover { text-decoration: underline; }
 .progress input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -6px; border-radius: 50%; background: var(--surface); border: 3px solid var(--c); box-shadow: 0 1px 3px rgba(0,0,0,.2); transition: border-color .2s; }
 .progress input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 3px solid var(--c); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
 .progress input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 99px; }
-.progress-labels { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 2px; }
+.progress-labels { display: flex; justify-content: space-between; margin-top: 2px; }
 .progress-labels button { padding: 0; color: var(--muted); background: none; border: 0; font-size: 11px; white-space: nowrap; }
-.progress-labels button:nth-child(1) { text-align: left; }
-.progress-labels button:nth-child(2) { text-align: center; }
-.progress-labels button:nth-child(3) { text-align: right; }
 .progress-labels button:hover { color: var(--text); }
 .progress-labels button.on { color: var(--c); font-weight: 600; }
 .practiced-btn { height: 30px; padding: 0 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; font-size: 12px; }
@@ -214,8 +217,6 @@ a.piece-title:hover { text-decoration: underline; }
 /* Status pill */
 .status-pill { --c: #a8a29a; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; color: var(--c); background: color-mix(in srgb, var(--c) 12%, white); border: 0; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .status-pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
-.status-pill.partly { --c: #d97706; }
-.status-pill.full { --c: #16a34a; }
 .status-pill:hover { filter: brightness(.95); }
 .inst-icons { display: inline-flex; gap: 4px; }
 
@@ -244,10 +245,8 @@ a.piece-title:hover { text-decoration: underline; }
 .move-btns .icon-btn:disabled { opacity: .3; cursor: default; }
 
 /* Board */
-.board { display: grid; grid-template-columns: repeat(3, minmax(240px, 1fr)); gap: 14px; align-items: start; overflow-x: auto; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 14px; align-items: start; overflow-x: auto; }
 .board-col { --c: #a8a29a; display: grid; gap: 10px; padding: 12px; background: #f6f3ee; border-radius: var(--radius); border-top: 3px solid var(--c); }
-.board-col.partly { --c: #d97706; }
-.board-col.full { --c: #16a34a; }
 .board-col h3 { margin: 0 0 2px; font-size: 14px; display: flex; align-items: center; }
 .board-col .empty-row { padding: 12px 0; text-align: center; }
 .piece-table th:not(:has(button)) { padding: 10px 12px; color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
