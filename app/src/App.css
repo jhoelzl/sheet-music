@@ -118,12 +118,18 @@ a.piece-title:hover { text-decoration: underline; }
 }
 
 .links { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.link-field { display: inline-flex; align-items: center; gap: 6px; }
-.link-field input { width: 200px; max-width: 60vw; height: 30px; padding: 0 10px; font-size: 12px; }
+.link-input { width: 280px; max-width: 100%; height: 30px; padding: 0 10px; font-size: 12px; }
+.link-chip { --c: var(--muted); --bg: #f4f2ee; display: inline-flex; align-items: center; height: 30px; color: var(--c); background: var(--bg); border-radius: 99px; font-size: 12px; font-weight: 500; }
+.link-chip a { display: inline-flex; align-items: center; gap: 6px; height: 100%; padding: 0 4px 0 11px; color: inherit; text-decoration: none; }
+.link-chip a:hover { text-decoration: underline; }
+.link-chip.youtube { --c: #dc2626; --bg: #fef2f2; }
+.link-chip.spotify { --c: #15a34a; --bg: #f0fdf4; }
+.link-chip.instagram { --c: #c026d3; --bg: #fdf4ff; }
+.link-remove { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; margin-right: 4px; padding: 0; color: inherit; background: none; border: 0; border-radius: 50%; opacity: .45; cursor: pointer; }
+.link-remove:hover { opacity: 1; background: rgba(0,0,0,.07); }
+.add-link { height: 30px; padding: 0 12px; color: var(--muted); background: var(--surface); border: 1px dashed #d6d1c9; border-radius: 99px; font-size: 12px; cursor: pointer; }
+.add-link:hover { color: var(--accent); border-color: #c3c8ff; }
 .page-count { padding: 2px 9px; font-size: 12px; font-weight: 500; color: var(--muted); background: #f4f2ee; border-radius: 99px; white-space: nowrap; }
-.link-badge { padding: 2px 8px; font-size: 12px; font-weight: 500; text-decoration: none; border-radius: 99px; }
-.link-badge.youtube_url { color: #dc2626; background: #fef2f2; }
-.link-badge.spotify_url { color: #1db954; background: #f0fdf4; }
 
 .piece-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .piece-actions .icon-btn { margin: 0; }
@@ -151,10 +157,6 @@ a.piece-title:hover { text-decoration: underline; }
 .progress-labels button:nth-child(3) { text-align: right; }
 .progress-labels button:hover { color: var(--text); }
 .progress-labels button.on { color: var(--c); font-weight: 600; }
-.link-toggle { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 50%; font-size: 12px; text-decoration: none; }
-.link-toggle:hover { color: var(--text); border-color: #d6d1c9; }
-.link-toggle.on.youtube_url { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
-.link-toggle.on.spotify_url { color: #1db954; background: #f0fdf4; border-color: #bbf7d0; }
 .practiced-btn { height: 30px; padding: 0 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; font-size: 12px; }
 .practiced-btn:hover { color: var(--accent); border-color: #c3c8ff; }
 .practiced-text { color: var(--muted); font-size: 12px; }
