@@ -42,15 +42,10 @@ A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M*
 
 ## Refactoring
 
-- 🔴 **Split `App.tsx` (~940 lines).** `Library` holds all state, handlers and four views. Extract:
-  - `components/`: `Login`, `PracticeCalendar`, `Rating`, `ProgressSlider`, `PieceCard`, `PdfModal`, `Toasts`, and one component per view (`GroupedView`, `TableView`, `GridView`, `BoardView`).
-  - `lib/`: `links.ts` (`safeUrl`, `detectLinkType`, `linkLabel`), `status.ts` (`STATUSES`, `statusOf`, `statusPatch`), `dates.ts`, `sort.ts`, `filters.ts`.
-  - `hooks/`: `usePieces`, `useComposers`, `usePracticeLog`, `useToasts`, `useLocalStorage`. (L)
 - 🟡 **Data layer.** Move Supabase calls out of components into one `api/` module with typed return values and a single error-handling path. Consider TanStack Query for caching, optimistic updates and retries. (M)
 - 🟡 **Typed database client.** Generate types with `supabase gen types typescript` instead of the hand-written `Piece` type in `supabase.ts`. Also replace `select('*')` with explicit columns. (S)
 - 🟡 **Split `App.css`.** Use CSS modules or one file per component. Extract repeated colours (progress levels) into tokens. (M)
 - 🟡 **Fix the `set-state-in-effect` lint warning** around the page-count backfill by moving it into a hook or event handler. (S)
-- 🟢 **Remove unused `favorite`** from the `Piece` type and table, if nothing reads it. (S)
 - 🟢 **Replace magic values** (`WEEKS = 26`, signed URL TTL `3600`, bucket name) with named constants in one config file. (S)
 - 🟢 **Lazy-load pdf.js.** The build already warns about a ~420 kB chunk. Load it only when the PDF modal opens or a page count is needed. (S)
 
@@ -76,6 +71,6 @@ A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M*
 
 1. Security basics: server-side link check, bucket limits, storage policy test.
 2. Tooling: Supabase CLI migrations, CI, first unit tests.
-3. Refactor `App.tsx` into components, hooks and a data layer.
+3. Add a data layer (`api/` module) now that `App.tsx` is split into components, hooks and `lib/`.
 4. Features with the most daily value: practice duration, remembered filters, bulk actions.
 5. Polish: mobile layout, accessibility, dark mode, PWA.
