@@ -15,6 +15,10 @@ export type Composer = {
 
 export type Instrument = 'piano' | 'guitar'
 
+export type LinkType = 'youtube' | 'spotify' | 'instagram' | 'other'
+
+export type PieceLink = { type: LinkType; url: string }
+
 export type Piece = {
   instruments: Instrument[]
   id: string
@@ -29,8 +33,7 @@ export type Piece = {
   difficulty: number | null
   rating: number | null
   notes: string | null
-  youtube_url: string | null
-  spotify_url: string | null
+  links?: PieceLink[]
   created_at?: string
   last_practiced?: string | null
 }

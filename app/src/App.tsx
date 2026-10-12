@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
-import type { Composer, Instrument, Piece } from './supabase'
+import type { Composer, Instrument, LinkType, Piece, PieceLink } from './supabase'
 import './App.css'
 
 function Login() {
@@ -144,16 +145,39 @@ const brandIcon = (d: string) => (
   <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d={d} /></svg>
 )
 
-const LINKS = [
-  {
-    key: 'youtube_url', label: 'YouTube',
-    glyph: brandIcon('M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z'),
+const LINK_TYPES: Record<LinkType, { label: string; glyph: ReactNode }> = {
+  youtube: { label: 'YouTube', glyph: brandIcon('M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z') },
+  spotify: { label: 'Spotify', glyph: brandIcon('M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z') },
+  instagram: {
+    label: 'Instagram',
+    glyph: (
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r=".6" fill="currentColor" /></svg>
+    ),
   },
-  {
-    key: 'spotify_url', label: 'Spotify',
-    glyph: brandIcon('M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z'),
+  other: {
+    label: 'Link',
+    glyph: strokeIcon('M10 13a5 5 0 0 0 7.07 0l3-3a5 5 0 0 0-7.07-7.07l-1.5 1.5M14 11a5 5 0 0 0-7.07 0l-3 3a5 5 0 0 0 7.07 7.07l1.5-1.5'),
   },
-] as const
+}
+
+function detectLinkType(url: string): LinkType {
+  const host = new URL(url).hostname.replace(/^www\./, '').toLowerCase()
+  const is = (d: string) => host === d || host.endsWith(`.${d}`)
+  if (is('youtube.com') || is('youtu.be')) return 'youtube'
+  if (is('spotify.com') || is('spotify.link')) return 'spotify'
+  if (is('instagram.com') || is('instagr.am')) return 'instagram'
+  return 'other'
+}
+
+// Short label for a link chip; same-type links are numbered, other links show their host.
+function linkLabel(link: PieceLink, links: PieceLink[]): string {
+  if (link.type === 'other') {
+    try { return new URL(link.url).hostname.replace(/^www\./, '') } catch { return LINK_TYPES.other.label }
+  }
+  const same = links.filter((l) => l.type === link.type)
+  const base = LINK_TYPES[link.type].label
+  return same.length > 1 ? `${base} ${same.indexOf(link) + 1}` : base
+}
 
 function Rating({ label, value, glyph, onChange }: { label: string; value: number | null; glyph: string; onChange: (n: number | null) => void }) {
   const [hover, setHover] = useState<number | null>(null)
@@ -300,18 +324,19 @@ function Library() {
     if (next !== p.title) update(p, { title: next })
   }
 
-  const saveLink = (p: Piece, key: 'youtube_url' | 'spotify_url', raw: string) => {
+  const addLink = (p: Piece, raw: string) => {
     const value = raw.trim()
-    if (!value) {
-      if (p[key]) update(p, { [key]: null })
-      setOpenLink(null)
-      return
-    }
+    if (!value) { setOpenLink(null); return }
     const url = safeUrl(value)
     if (!url) { notify('Please enter a valid http(s) link.'); return }
-    if (url !== p[key]) update(p, { [key]: url })
+    const links = p.links ?? []
+    if (links.some((l) => l.url === url)) { notify('This link is already added.'); return }
+    update(p, { links: [...links, { type: detectLinkType(url), url }] })
     setOpenLink(null)
   }
+
+  const removeLink = (p: Piece, link: PieceLink) =>
+    update(p, { links: (p.links ?? []).filter((l) => l.url !== link.url) })
 
   const attachPdf = async (p: Piece, f: File) => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -577,26 +602,24 @@ function Library() {
                 </div>
                 <div className="piece-row piece-foot">
                   <div className="links">
-                    {LINKS.map(({ key, label, glyph }) => {
-                      const href = safeUrl(p[key])
-                      const id = `${p.id}:${key}`
+                    {(p.links ?? []).map((link) => {
+                      const href = safeUrl(link.url)
+                      if (!href) return null
+                      const label = linkLabel(link, p.links ?? [])
                       return (
-                        <span className="link-field" key={key}>
-                          {openLink === id ? (
-                            <input autoFocus type="url" aria-label={`${label} link for ${p.title}`} placeholder={`${label} link`} defaultValue={p[key] ?? ''}
-                              onBlur={(e) => saveLink(p, key, e.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter') saveLink(p, key, e.currentTarget.value); if (e.key === 'Escape') setOpenLink(null) }} />
-                          ) : href ? (
-                            <>
-                              <a className={`link-toggle on ${key}`} href={href} target="_blank" rel="noopener noreferrer" title={`Open on ${label}`} aria-label={`Open on ${label}`}>{glyph}</a>
-                              <button className="icon-btn edit small" aria-label={`Edit ${label} link`} title={`Edit ${label} link`} onClick={() => setOpenLink(id)}>{EditIcon}</button>
-                            </>
-                          ) : (
-                            <button className="link-toggle" aria-label={`Add ${label} link`} title={`Add ${label} link`} onClick={() => setOpenLink(id)}>{glyph}</button>
-                          )}
+                        <span className={`link-chip ${link.type}`} key={link.url}>
+                          <a href={href} target="_blank" rel="noopener noreferrer" title={href}>{LINK_TYPES[link.type].glyph}{label}</a>
+                          <button className="link-remove" aria-label={`Remove ${label} link`} title="Remove link" onClick={() => removeLink(p, link)}>{CloseIcon}</button>
                         </span>
                       )
                     })}
+                    {openLink === p.id ? (
+                      <input className="link-input" autoFocus type="url" aria-label={`Add link for ${p.title}`} placeholder="Paste a YouTube, Spotify, Instagram or other link"
+                        onBlur={(e) => addLink(p, e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { e.currentTarget.value = ''; e.currentTarget.blur() } }} />
+                    ) : (
+                      <button className="add-link" title="Add a YouTube, Spotify, Instagram or other link" onClick={() => setOpenLink(p.id)}>+ Link</button>
+                    )}
                     <button className="practiced-btn" title="Record that you practiced this today" onClick={() => update(p, { last_practiced: todayISO() })}>✓ Practiced today</button>
                     {p.last_practiced && <span className="practiced-text">{practicedText(p.last_practiced)}</span>}
                   </div>
