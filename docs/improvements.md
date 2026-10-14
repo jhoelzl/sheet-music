@@ -1,6 +1,6 @@
 # Improvement ideas
 
-A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M** (a day or two), **L** (several days). Priority: 🔴 high, 🟡 medium, 🟢 nice to have.
+Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a day or two), **L** (several days). Priority: 🔴 high, 🟡 medium, 🟢 nice to have.
 
 ## Security
 
@@ -9,10 +9,9 @@ A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M*
 | 🔴 | S | **Server-side link validation.** `safeUrl` only runs in the browser. Add a `check` constraint or trigger on the piece links so only `http(s)` URLs can be stored, even through direct API calls. |
 | 🔴 | S | **Upload limits.** Restrict the `sheet-music` bucket to `application/pdf` with a max file size (bucket `file_size_limit` / `allowed_mime_types`). Today only the client checks the type. |
 | 🔴 | S | **Verify storage policy scoping.** Confirm the `own pdfs` policy ties objects to `auth.uid()` via the path prefix for select, insert, update and delete. Add a test with a second user. |
-| 🟡 | S | **Bound text fields.** Add length checks (title, notes, composer name) and array-size limits (links, instruments) in the database. |
+| 🟡 | S | **Bound text fields.** Add length checks (title, notes, composer name) and array-size limits where still missing (links, instruments). |
 | 🟡 | M | **Password policy and email confirmation.** Enforce a minimum password length and require email confirmation. Add a password reset flow and optionally MFA. |
 | 🟡 | S | **Security headers.** Set CSP (`default-src 'self'`, allow the Supabase host), `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors 'none'` on the hosting layer. |
-| 🟡 | S | **`rel="noopener noreferrer"`** on every external link (check all `target="_blank"` usages). |
 | 🟢 | S | **Dependency hygiene.** Enable Dependabot / `npm audit` in CI. |
 | 🟢 | M | **Rate limiting** on auth and upload endpoints (Supabase auth rate limits, plus an Edge Function for uploads if added). |
 
@@ -41,12 +40,11 @@ A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M*
 
 ## Refactoring
 
-- 🟡 **Data layer.** Move Supabase calls out of components into one `api/` module with typed return values and a single error-handling path. Consider TanStack Query for caching, optimistic updates and retries. (M)
+- 🟡 **Data layer.** Move Supabase calls out of hooks/components into one `api/` module with typed return values and a single error-handling path. Consider TanStack Query for caching, optimistic updates and retries. (M)
 - 🟡 **Typed database client.** Generate types with `supabase gen types typescript` instead of the hand-written `Piece` type in `supabase.ts`. Also replace `select('*')` with explicit columns. (S)
 - 🟡 **Split `App.css`.** Use CSS modules or one file per component. Extract repeated colours (progress levels) into tokens. (M)
-- 🟡 **Fix the `set-state-in-effect` lint warning** around the page-count backfill by moving it into a hook or event handler. (S)
+- 🟡 **Fix the `set-state-in-effect` lint warning** around data loading by reducing synchronous `setState` work inside effects. (S)
 - 🟢 **Replace magic values** (`WEEKS = 26`, signed URL TTL `3600`, bucket name) with named constants in one config file. (S)
-- 🟢 **Lazy-load pdf.js.** The build already warns about a ~420 kB chunk. Load it only when the PDF modal opens or a page count is needed. (S)
 
 ## Data and backend
 
@@ -64,7 +62,7 @@ A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M*
 - 🟡 **CI.** GitHub Actions running `npm ci`, `tsc -b`, `npm run lint`, tests and build on every PR. (S)
 - 🟡 **Error monitoring** (e.g. Sentry) for failed uploads and saves. (S)
 - 🟢 **Formatter and pre-commit hooks** (Prettier or Biome, lint-staged). (S)
-- 🟢 **Documentation.** Update `README.md`: it still lists "can play, learned, favorite", while the app now uses 0–100% progress, multiple links, a practice log and four views. Add a short architecture note and a deploy guide. (S)
+- 🟢 **Documentation.** Add a short architecture note and a deploy guide (`env`, Supabase migrations, hosting headers, storage policies). (S)
 
 ## Suggested order
 
@@ -72,4 +70,4 @@ A backlog of possible improvements, grouped by area. Effort: **S** (hours), **M*
 2. Tooling: Supabase CLI migrations, CI, first unit tests.
 3. Add a data layer (`api/` module) now that `App.tsx` is split into components, hooks and `lib/`.
 4. Features with the most daily value: practice duration, remembered filters, bulk actions.
-5. Polish: mobile layout, accessibility, dark mode, PWA.
+5. Polish: accessibility pass and PWA/offline.

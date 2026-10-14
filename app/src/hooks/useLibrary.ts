@@ -12,6 +12,8 @@ import { statusOf } from '../lib/status'
 export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
 export type Panel = 'composer' | 'piece' | null
 export type Preview = { title: string; url: string; pages: number | null }
+export const TABLE_COLUMNS = ['composer', 'instruments', 'tags', 'status', 'difficulty', 'rating', 'pages', 'practiced'] as const
+export type TableColumnId = (typeof TABLE_COLUMNS)[number]
 export type Library = ReturnType<typeof useLibrary>
 
 /** All library state, data loading, mutations and derived data. */
@@ -28,6 +30,32 @@ export function useLibrary() {
     return VIEWS.some((x) => x.value === v) ? (v as View) : 'grouped'
   })
   const setView = (v: View) => { setViewState(v); localStorage.setItem('sm:view', v) }
+  const [tableCompact, setTableCompactState] = useState<boolean>(() => localStorage.getItem('sm:table-compact') === '1')
+  const setTableCompact = (next: boolean) => {
+    setTableCompactState(next)
+    localStorage.setItem('sm:table-compact', next ? '1' : '0')
+  }
+  const [tableHiddenColumns, setTableHiddenColumns] = useState<TableColumnId[]>(() => {
+    const raw = localStorage.getItem('sm:table-hidden-columns')
+    if (!raw) return []
+    try {
+      const ids = JSON.parse(raw)
+      return Array.isArray(ids) ? ids.filter((id): id is TableColumnId => TABLE_COLUMNS.includes(id as TableColumnId)) : []
+    } catch {
+      return []
+    }
+  })
+  const toggleTableColumn = (id: TableColumnId) => {
+    setTableHiddenColumns((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      localStorage.setItem('sm:table-hidden-columns', JSON.stringify(next))
+      return next
+    })
+  }
+  const resetTableColumns = () => {
+    setTableHiddenColumns([])
+    localStorage.setItem('sm:table-hidden-columns', '[]')
+  }
   const [tableSort, setTableSort] = useState<{ key: TableKey; dir: 1 | -1 }>({ key: 'title', dir: 1 })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
@@ -37,6 +65,7 @@ export function useLibrary() {
   const [uploadingId, setUploadingId] = useState<string | null>(null)
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
   const [countFailed, setCountFailed] = useState<Set<string>>(new Set())
+  const [countingPageIds, setCountingPageIds] = useState<Set<string>>(new Set())
   const toastSeq = useRef(0)
   const deleteTimers = useRef(new Map<string, number>())
   const [search, setSearch] = useState('')
@@ -72,26 +101,6 @@ export function useLibrary() {
   }, [notify])
 
   useEffect(() => { void load() }, [load])
-
-  // Backfill page counts for PDFs uploaded before the pdf_pages column existed.
-  const countAttempted = useRef(new Set<string>())
-  useEffect(() => {
-    const missing = pieces.filter((p) => p.pdf_path && 'pdf_pages' in p && p.pdf_pages == null && !countAttempted.current.has(p.id))
-    if (!missing.length) return
-    void (async () => {
-      for (const p of missing) {
-        countAttempted.current.add(p.id)
-        const { data } = await supabase.storage.from('sheet-music').download(p.pdf_path!)
-        const pages = data ? await countPdfPages(data) : null
-        if (pages) {
-          await supabase.from('sm_pieces').update({ pdf_pages: pages }).eq('id', p.id)
-          setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, pdf_pages: pages } : x)))
-        } else {
-          setCountFailed((prev) => new Set(prev).add(p.id))
-        }
-      }
-    })()
-  }, [pieces])
 
   const run = async (op: PromiseLike<{ error: { message: string } | null }>) => {
     const { error } = await op
@@ -236,11 +245,28 @@ export function useLibrary() {
 
   const openPdf = async (p: Piece) => {
     if (!p.pdf_path || previewLoading) return
+    let pages = p.pdf_pages ?? null
+    if (pages == null && !countFailed.has(p.id)) {
+      setCountingPageIds((prev) => new Set(prev).add(p.id))
+      const { data } = await supabase.storage.from('sheet-music').download(p.pdf_path)
+      pages = data ? await countPdfPages(data) : null
+      setCountingPageIds((prev) => {
+        const next = new Set(prev)
+        next.delete(p.id)
+        return next
+      })
+      if (pages) {
+        await supabase.from('sm_pieces').update({ pdf_pages: pages }).eq('id', p.id)
+        setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, pdf_pages: pages } : x)))
+      } else {
+        setCountFailed((prev) => new Set(prev).add(p.id))
+      }
+    }
     setPreviewLoading(true)
     const { data, error } = await supabase.storage.from('sheet-music').createSignedUrl(p.pdf_path, 3600)
     setPreviewLoading(false)
     if (error) notify(error.message)
-    else setPreview({ title: p.title, url: data.signedUrl, pages: p.pdf_pages ?? null })
+    else setPreview({ title: p.title, url: data.signedUrl, pages })
   }
 
   useEffect(() => {
@@ -296,9 +322,9 @@ export function useLibrary() {
 
   return {
     // data
-    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, practicedToday, countFailed,
+    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, practicedToday, countFailed, countingPageIds,
     // ui state
-    sort, setSort, view, setView, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, hiddenIds,
+    sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
     search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, composerNameOf,

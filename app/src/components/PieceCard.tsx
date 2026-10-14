@@ -11,7 +11,7 @@ import { TagInput } from './TagInput'
 
 export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
   const status = statusOf(p)
-  const pending = !!p.pdf_path && 'pdf_pages' in p && p.pdf_pages == null && !lib.countFailed.has(p.id)
+  const pending = lib.countingPageIds.has(p.id)
   return (
     <article className="piece">
       <div className="piece-head">
@@ -31,11 +31,11 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
           <EditDeleteButtons lib={lib} p={p} />
         </div>
       </div>
-      <input className="notes" aria-label={`Notes for ${p.title}`} placeholder="Add a note…" defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) lib.update(p, { notes: e.target.value }) }} />
-      <div className="piece-row">
+      <div className="piece-meta-row">
         <TagInput tags={p.tags ?? []} suggestions={lib.allTags} label={`Tags for ${p.title}`} onChange={(tags) => lib.update(p, { tags })} />
+        <input className="notes" aria-label={`Notes for ${p.title}`} defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) lib.update(p, { notes: e.target.value }) }} />
       </div>
-      <div className="piece-row">
+      <div className="piece-row piece-practice-row">
         <div className="chip-group" role="group" aria-label={`Instruments for ${p.title}`}>
           {INSTRUMENTS.map((i) => (
             <button key={i.value} className={`chip${p.instruments.includes(i.value) ? ' on' : ''}`} aria-pressed={p.instruments.includes(i.value)} title={i.label}
