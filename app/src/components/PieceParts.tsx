@@ -2,7 +2,7 @@ import type { Piece } from '../supabase'
 import type { Library } from '../hooks/useLibrary'
 import { INSTRUMENTS } from '../lib/instruments'
 import { nextStatus, statusLabel, statusOf, statusPatch } from '../lib/status'
-import { CloseIcon, EditIcon } from './icons'
+import { CloseIcon, EditIcon, OpenIcon } from './icons'
 
 type Props = { lib: Library; p: Piece }
 
@@ -15,18 +15,18 @@ export function PieceTitle({ lib, p }: Props) {
         onKeyDown={(e) => { if (e.key === 'Enter') lib.commitEdit(p); if (e.key === 'Escape') lib.setEditingId(null) }} />
     )
   }
-  if (p.pdf_path) {
-    return (
-      <a className="piece-title" href="#" title="Preview PDF (double-click to rename)" onDoubleClick={() => lib.startEdit(p)} onClick={(e) => { e.preventDefault(); void lib.openPdf(p) }}>{p.title} <span aria-hidden="true">↗</span></a>
-    )
-  }
-  return <span className="piece-title plain" title="Double-click to rename" onDoubleClick={() => lib.startEdit(p)}>{p.title}</span>
+  return (
+    <button type="button" className="piece-title" title="Click to rename" onClick={() => lib.startEdit(p)}>
+      <span className="piece-title-text">{p.title}</span>
+      <span className="title-edit-hint" aria-hidden="true">{EditIcon}</span>
+    </button>
+  )
 }
 
 export function EditDeleteButtons({ lib, p }: Props) {
   return (
     <>
-      <button className="icon-btn edit" aria-label={`Rename ${p.title}`} title="Rename" onClick={() => lib.startEdit(p)}>{EditIcon}</button>
+      {p.pdf_path && <button className="icon-btn edit" aria-label={`Preview PDF for ${p.title}`} title="Preview PDF" onClick={() => void lib.openPdf(p)}>{OpenIcon}</button>}
       <button className="icon-btn" aria-label={`Delete ${p.title}`} title="Delete piece" onClick={() => lib.remove(p)}>{CloseIcon}</button>
     </>
   )

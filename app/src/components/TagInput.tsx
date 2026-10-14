@@ -18,7 +18,7 @@ export function TagInput({ tags, suggestions, label, onChange }: { tags: string[
           <button type="button" className="tag-remove" aria-label={`Remove tag ${t}`} onClick={() => onChange(tags.filter((x) => x !== t))}>{CloseIcon}</button>
         </span>
       ))}
-      <input list={listId} aria-label="Add tag" placeholder={tags.length ? 'Add tag…' : '+ Tag (e.g. recital)'} maxLength={MAX_TAG_LENGTH} value={draft}
+      <input list={listId} aria-label="Add tag" maxLength={MAX_TAG_LENGTH} value={draft}
         onChange={(e) => {
           const v = e.target.value
           if (v.includes(',')) { v.split(',').forEach((part, i, all) => { if (i < all.length - 1) add(part); else setDraft(part) }) } else setDraft(v)
