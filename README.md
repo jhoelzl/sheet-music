@@ -5,7 +5,7 @@ Web app (React + Vite + Supabase) to organise piano sheet music PDFs by composer
 See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
 
 ## Setup
-1. Create a Supabase project and run the SQL files in `supabase/migrations` in order (creates the `sm_composers` and `sm_pieces` tables, row-level security and a private `sheet-music` storage bucket). On an existing project, run `0002_prefix_tables.sql` to rename the existing tables without losing data.
+1. Create a Supabase project and run the SQL files in `supabase/migrations` in order (creates the `sm_composers` and `sm_pieces` tables, row-level security, a private `sheet-music` storage bucket, and database validation for piece links). On an existing project, run any migrations not yet applied; run `0002_prefix_tables.sql` to rename the existing tables without losing data.
 2. `cd app && cp .env.example .env` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 3. From inside `app/`: `npm install && npm run dev`
 
