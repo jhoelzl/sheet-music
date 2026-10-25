@@ -17,5 +17,3 @@ export function practicedText(date: string): string {
   if (days < 365) return `Practiced ${plural(Math.floor(days / 30), 'month')}`
   return `Practiced ${plural(Math.floor(days / 365), 'year')}`
 }
-
-export const WEEKS = 26

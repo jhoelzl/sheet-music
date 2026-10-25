@@ -42,7 +42,6 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 - 🟡 **Typed database client.** Generate types with `supabase gen types typescript` instead of the hand-written `Piece` type in `supabase.ts`. Also replace `select('*')` with explicit columns. (S)
 - 🟡 **Split `App.css`.** Use CSS modules or one file per component. Extract repeated colours (progress levels) into tokens. (M)
 - 🟡 **Fix the `set-state-in-effect` lint warning** around data loading by reducing synchronous `setState` work inside effects. (S)
-- 🟢 **Replace magic values** (`WEEKS = 26`, signed URL TTL `3600`, bucket name) with named constants in one config file. (S)
 
 ## Data and backend
 

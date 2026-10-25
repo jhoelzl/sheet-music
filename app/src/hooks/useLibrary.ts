@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { PDF_SIGNED_URL_TTL_SECONDS, PDF_STORAGE_BUCKET } from '../config'
 import { supabase } from '../supabase'
 import type { Composer, Instrument, Piece, PieceLink, PracticeLog } from '../supabase'
 import { countPdfPages } from '../lib/pdf'
@@ -122,7 +123,7 @@ export function useLibrary() {
     if (file && user) {
       pdf_pages = await countPdfPages(file)
       pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
-      const up = await supabase.storage.from('sheet-music').upload(pdf_path, file, { contentType: 'application/pdf' })
+      const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, file, { contentType: 'application/pdf' })
       if (up.error) { notify(`Upload failed: ${up.error.message}`); return }
     }
     const ok = await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path, ...(pdf_pages ? { pdf_pages } : {}), instruments: newInstruments, ...(newTags.length ? { tags: newTags } : {}) }))
@@ -166,7 +167,7 @@ export function useLibrary() {
     deleteTimers.current.set(p.id, window.setTimeout(() => {
       deleteTimers.current.delete(p.id)
       void (async () => {
-        if (p.pdf_path) await supabase.storage.from('sheet-music').remove([p.pdf_path])
+        if (p.pdf_path) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([p.pdf_path])
         await run(supabase.from('sm_pieces').delete().eq('id', p.id))
         unhide()
       })()
@@ -201,12 +202,12 @@ export function useLibrary() {
     setUploadingId(p.id)
     const pdf_pages = await countPdfPages(f)
     const pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
-    const up = await supabase.storage.from('sheet-music').upload(pdf_path, f, { contentType: 'application/pdf' })
+    const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, f, { contentType: 'application/pdf' })
     if (up.error) {
       notify(`Upload failed: ${up.error.message}`)
     } else {
       const ok = await run(supabase.from('sm_pieces').update({ pdf_path, ...(pdf_pages ? { pdf_pages } : {}) }).eq('id', p.id))
-      if (!ok) await supabase.storage.from('sheet-music').remove([pdf_path])
+      if (!ok) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([pdf_path])
     }
     setUploadingId(null)
   }
@@ -227,7 +228,7 @@ export function useLibrary() {
     deleteTimers.current.set(key, window.setTimeout(() => {
       deleteTimers.current.delete(key)
       void (async () => {
-        if (paths.length) await supabase.storage.from('sheet-music').remove(paths)
+        if (paths.length) await supabase.storage.from(PDF_STORAGE_BUCKET).remove(paths)
         await run(supabase.from('sm_composers').delete().eq('id', c.id))
         unhide()
       })()
@@ -248,7 +249,7 @@ export function useLibrary() {
     let pages = p.pdf_pages ?? null
     if (pages == null && !countFailed.has(p.id)) {
       setCountingPageIds((prev) => new Set(prev).add(p.id))
-      const { data } = await supabase.storage.from('sheet-music').download(p.pdf_path)
+      const { data } = await supabase.storage.from(PDF_STORAGE_BUCKET).download(p.pdf_path)
       pages = data ? await countPdfPages(data) : null
       setCountingPageIds((prev) => {
         const next = new Set(prev)
@@ -263,7 +264,7 @@ export function useLibrary() {
       }
     }
     setPreviewLoading(true)
-    const { data, error } = await supabase.storage.from('sheet-music').createSignedUrl(p.pdf_path, 3600)
+    const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
     setPreviewLoading(false)
     if (error) notify(error.message)
     else setPreview({ title: p.title, url: data.signedUrl, pages })

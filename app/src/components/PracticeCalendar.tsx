@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Composer, Piece, PracticeLog } from '../supabase'
-import { WEEKS, isoOf, todayISO } from '../lib/dates'
+import { PRACTICE_CALENDAR_WEEKS } from '../config'
+import { isoOf, todayISO } from '../lib/dates'
 import { CloseIcon } from './icons'
 
 // Show the most recent weeks first when the heatmap overflows (small screens).
@@ -15,8 +16,8 @@ export function PracticeCalendar({ logs, pieces, composers }: { logs: PracticeLo
   const [ty, tm, td] = todayStr.split('-').map(Number)
   const today = new Date(ty, tm - 1, td)
   const mondayOffset = (today.getDay() + 6) % 7
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mondayOffset - (WEEKS - 1) * 7)
-  const weeks = Array.from({ length: WEEKS }, (_, w) =>
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mondayOffset - (PRACTICE_CALENDAR_WEEKS - 1) * 7)
+  const weeks = Array.from({ length: PRACTICE_CALENDAR_WEEKS }, (_, w) =>
     Array.from({ length: 7 }, (_, d) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + d)))
 
   // The streak survives until the end of today, so it still counts when today has no entry yet.
@@ -42,8 +43,8 @@ export function PracticeCalendar({ logs, pieces, composers }: { logs: PracticeLo
     const ids = w.flatMap((d) => byDay.get(isoOf(d)) ?? [])
     return { days: w.filter((d) => byDay.has(isoOf(d))).length, sessions: ids.length }
   }
-  const thisWeek = weekTotals(weeks[WEEKS - 1])
-  const lastWeek = weekTotals(weeks[WEEKS - 2])
+  const thisWeek = weekTotals(weeks[PRACTICE_CALENDAR_WEEKS - 1])
+  const lastWeek = weekTotals(weeks[PRACTICE_CALENDAR_WEEKS - 2])
   const weekDelta = thisWeek.sessions - lastWeek.sessions
   const todayCount = byDay.get(todayStr)?.length ?? 0
   const level = (n: number) => (n === 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 5 ? 3 : 4)
@@ -70,10 +71,10 @@ export function PracticeCalendar({ logs, pieces, composers }: { logs: PracticeLo
         </div>
       </div>
       <div className="cal-scroll" ref={scrollToEnd}>
-        <div className="cal-months" style={{ gridTemplateColumns: `repeat(${WEEKS}, 14px)` }}>
+        <div className="cal-months" style={{ gridTemplateColumns: `repeat(${PRACTICE_CALENDAR_WEEKS}, 14px)` }}>
           {monthLabels.map((m, i) => <span key={i}>{m}</span>)}
         </div>
-        <div className="cal-grid" style={{ gridTemplateColumns: `repeat(${WEEKS}, 14px)` }}>
+        <div className="cal-grid" style={{ gridTemplateColumns: `repeat(${PRACTICE_CALENDAR_WEEKS}, 14px)` }}>
           {weeks.map((w, wi) => (
             <div className="cal-col" key={wi}>
               {w.map((d) => {
