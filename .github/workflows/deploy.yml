@@ -34,6 +34,8 @@ jobs:
 
       - run: npm run lint
 
+      - run: npm test
+
       - name: Build with secrets from 1Password
         if: github.event_name != 'pull_request'
         uses: 1password/load-secrets-action@v2
