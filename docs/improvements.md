@@ -12,7 +12,7 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 | 🟡 | S | **Bound text fields.** Add length checks (title, notes, composer name) and array-size limits where still missing (links, instruments). |
 | 🟡 | M | **Password policy and email confirmation.** Enforce a minimum password length and require email confirmation. Add a password reset flow and optionally MFA. |
 | 🟡 | S | **Security headers.** Set CSP (`default-src 'self'`, allow the Supabase host), `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors 'none'` on the hosting layer. |
-| 🟢 | S | **Dependency hygiene.** Enable Dependabot / `npm audit` in CI. |
+| ✅ | S | **Dependency hygiene.** `npm audit --audit-level=high` runs on every pull request. |
 | 🟢 | M | **Rate limiting** on auth and upload endpoints (Supabase auth rate limits, plus an Edge Function for uploads if added). |
 
 ## UI / UX
@@ -57,9 +57,10 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 
 ## Quality and tooling
 
-- 🔴 **Tests.** None exist today. Start with unit tests (Vitest) for the pure helpers (`safeUrl`, `statusOf`, `sortPieces`, `practicedText`, filters), then component tests for the slider and calendar. (M)
+- ✅ **Unit and component tests.** Vitest and Testing Library cover login/account creation, URL safety and provider detection, progress cycling, sorting and tag normalization. Run locally with `cd app && npm test`. (Initial coverage)
+- 🟡 **Expand component tests.** Add coverage for the progress slider, calendar, filters, and `practicedText`. (M)
 - 🟡 **End-to-end tests** (Playwright): login, add piece with PDF, change progress, practise today, delete with undo. (M)
-- 🟡 **CI.** GitHub Actions running `npm ci`, `tsc -b`, `npm run lint`, tests and build on every PR. (S)
+- ✅ **CI.** GitHub Actions runs lint, tests and a production build on every PR. The `tests` and `dependency-audit` checks are required by the `main` ruleset before merging. (Implemented)
 - 🟡 **Error monitoring** (e.g. Sentry) for failed uploads and saves. (S)
 - 🟢 **Formatter and pre-commit hooks** (Prettier or Biome, lint-staged). (S)
 - 🟢 **Documentation.** Add a short architecture note and a deploy guide (`env`, Supabase migrations, hosting headers, storage policies). (S)
@@ -67,7 +68,7 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 ## Suggested order
 
 1. Security basics: server-side link check, bucket limits, storage policy test.
-2. Tooling: Supabase CLI migrations, CI, first unit tests.
-3. Add a data layer (`api/` module) now that `App.tsx` is split into components, hooks and `lib/`.
+2. Expand automated coverage with interaction tests, then add Playwright end-to-end tests for the main user workflows.
+3. Adopt Supabase CLI migrations and add a data layer (`api/` module) with centralized error handling.
 4. Features with the most daily value: practice duration, remembered filters, bulk actions.
 5. Polish: accessibility pass and PWA/offline.
