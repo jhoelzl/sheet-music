@@ -6,7 +6,7 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 
 | Pri | Effort | Item |
 | --- | --- | --- |
-| 🔴 | S | **Server-side link validation.** `safeUrl` only runs in the browser. Add a `check` constraint or trigger on the piece links so only `http(s)` URLs can be stored, even through direct API calls. |
+| ✅ | S | **Server-side link validation.** Migration `0014_piece_links_http_urls.sql` adds a database constraint requiring piece links to be JSON arrays of objects with string URLs that use the `http(s)` scheme. |
 | 🔴 | S | **Upload limits.** Restrict the `sheet-music` bucket to `application/pdf` with a max file size (bucket `file_size_limit` / `allowed_mime_types`). Today only the client checks the type. |
 | 🔴 | S | **Verify storage policy scoping.** Confirm the `own pdfs` policy ties objects to `auth.uid()` via the path prefix for select, insert, update and delete. Add a test with a second user. |
 | 🟡 | S | **Bound text fields.** Add length checks (title, notes, composer name) and array-size limits where still missing (links, instruments). |
