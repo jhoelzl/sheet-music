@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  tests:
+    name: tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -34,6 +37,7 @@ jobs:
       - run: npm run lint
 
       - name: Build with secrets from 1Password
+        if: github.event_name != 'pull_request'
         uses: 1password/load-secrets-action@v2
         with:
           export-env: true
@@ -53,7 +57,8 @@ jobs:
           path: app/dist
 
   deploy:
-    needs: build
+    needs: tests
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
