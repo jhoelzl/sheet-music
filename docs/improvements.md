@@ -6,13 +6,11 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 
 | Pri | Effort | Item |
 | --- | --- | --- |
-| ✅ | S | **Server-side link validation.** Migration `0014_piece_links_http_urls.sql` adds a database constraint requiring piece links to be JSON arrays of objects with string URLs that use the `http(s)` scheme. |
 | 🔴 | S | **Upload limits.** Restrict the `sheet-music` bucket to `application/pdf` with a max file size (bucket `file_size_limit` / `allowed_mime_types`). Today only the client checks the type. |
 | 🔴 | S | **Verify storage policy scoping.** Confirm the `own pdfs` policy ties objects to `auth.uid()` via the path prefix for select, insert, update and delete. Add a test with a second user. |
 | 🟡 | S | **Bound text fields.** Add length checks (title, notes, composer name) and array-size limits where still missing (links, instruments). |
 | 🟡 | M | **Password policy and email confirmation.** Enforce a minimum password length and require email confirmation. Add a password reset flow and optionally MFA. |
 | 🟡 | S | **Security headers.** Set CSP (`default-src 'self'`, allow the Supabase host), `X-Content-Type-Options`, `Referrer-Policy` and `frame-ancestors 'none'` on the hosting layer. |
-| ✅ | S | **Dependency hygiene.** `npm audit --audit-level=high` runs on every pull request. |
 | 🟢 | M | **Rate limiting** on auth and upload endpoints (Supabase auth rate limits, plus an Edge Function for uploads if added). |
 
 ## UI / UX
@@ -57,17 +55,15 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 
 ## Quality and tooling
 
-- ✅ **Unit and component tests.** Vitest and Testing Library cover login/account creation, URL safety and provider detection, progress cycling, sorting and tag normalization. Run locally with `cd app && npm test`. (Initial coverage)
 - 🟡 **Expand component tests.** Add coverage for the progress slider, calendar, filters, and `practicedText`. (M)
 - 🟡 **End-to-end tests** (Playwright): login, add piece with PDF, change progress, practise today, delete with undo. (M)
-- ✅ **CI.** GitHub Actions runs lint, tests and a production build on every PR. The `tests` and `dependency-audit` checks are required by the `main` ruleset before merging. (Implemented)
 - 🟡 **Error monitoring** (e.g. Sentry) for failed uploads and saves. (S)
 - 🟢 **Formatter and pre-commit hooks** (Prettier or Biome, lint-staged). (S)
 - 🟢 **Documentation.** Add a short architecture note and a deploy guide (`env`, Supabase migrations, hosting headers, storage policies). (S)
 
 ## Suggested order
 
-1. Security basics: server-side link check, bucket limits, storage policy test.
+1. Security basics: bucket limits and storage policy test.
 2. Expand automated coverage with interaction tests, then add Playwright end-to-end tests for the main user workflows.
 3. Adopt Supabase CLI migrations and add a data layer (`api/` module) with centralized error handling.
 4. Features with the most daily value: practice duration, remembered filters, bulk actions.
