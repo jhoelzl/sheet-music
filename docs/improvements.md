@@ -46,7 +46,6 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 
 ## Data and backend
 
-- 🔴 **Migration workflow.** Migrations are run by hand. Adopt the Supabase CLI (`supabase db push`) so they are applied in order and tracked. (S)
 - 🟡 **Indexes.** Add indexes on `sm_pieces(user_id, composer_id)` and the practice log `(user_id, practiced_on)`. (S)
 - 🟡 **Normalise links.** If links need metadata (title, added date), move them from an array/JSON column to a `sm_piece_links` table. (M)
 - 🟡 **Orphan cleanup.** Deleting a piece removes its PDF from the client; do this server-side (trigger or Edge Function) so storage never leaks files. (M)
@@ -65,6 +64,6 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 
 1. Security basics: bucket limits and storage policy test.
 2. Expand automated coverage with interaction tests, then add Playwright end-to-end tests for the main user workflows.
-3. Adopt Supabase CLI migrations and add a data layer (`api/` module) with centralized error handling.
+3. Add a data layer (`api/` module) with centralized error handling.
 4. Features with the most daily value: practice duration, remembered filters, bulk actions.
 5. Polish: accessibility pass and PWA/offline.
