@@ -398,3 +398,16 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 }
 @keyframes sheet-up { from { transform: translateY(100%); } }
 @media (prefers-reduced-motion: reduce) { .modal { animation: none !important; } }
+
+.page-nav { display: flex; gap: 4px; }
+.page-nav button { background: none; border: 0; padding: 6px 10px; border-radius: 6px; cursor: pointer; color: inherit; font: inherit; }
+.page-nav button.on { font-weight: 600; background: rgba(127, 127, 127, 0.2); }
+.video-feed { display: flex; flex-direction: column; gap: 20px; max-width: 520px; margin: 0 auto; }
+.video-card { border: 1px solid rgba(127, 127, 127, 0.3); border-radius: 10px; overflow: hidden; }
+.video-media { aspect-ratio: 16 / 9; background: #000; }
+.video-media iframe, .video-thumb { width: 100%; height: 100%; border: 0; display: block; }
+.video-thumb { position: relative; padding: 0; background: #000; cursor: pointer; }
+.video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.video-play { position: absolute; inset: 0; margin: auto; width: 56px; height: 56px; border-radius: 50%; background: rgba(0, 0, 0, 0.65); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+.video-meta { padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.video-meta span { font-size: 0.85em; opacity: 0.75; }
