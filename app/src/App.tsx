@@ -61,7 +61,10 @@ export default function App() {
         <div className="header-inner">
           <div className="brand"><span aria-hidden="true">♪</span><h1>Sheet Music</h1></div>
           {!isIOS && navigation}
-          {session && <button className="link" onClick={() => void supabase.auth.signOut()}>Sign out</button>}
+          <div className="header-actions">
+            <button type="button" className="link" title="Reload the app; unsaved changes will be lost" onClick={() => window.location.reload()}>Reload app</button>
+            {session && <button type="button" className="link" onClick={() => void supabase.auth.signOut()}>Sign out</button>}
+          </div>
         </div>
       </header>
       <main>{session ? <AuthenticatedContent page={page} /> : <Login />}</main>
