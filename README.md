@@ -20,7 +20,7 @@ See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
    ```
    Only include versions that have actually been applied to that database. This records history; it does not execute the migration SQL.
 
-4. For future schema changes, create a migration with `supabase migration new <description>`, add its SQL, and apply it with `supabase db push`. Use `supabase db push --dry-run` to preview pending migrations.
+4. For future schema changes, create a migration with `supabase migration new <description>`, add its SQL, and apply it with `supabase db push`. Use `supabase db push --dry-run` to preview pending migrations. Migration `0015` requires resolving any existing duplicate composer names per user (ignoring case and surrounding spaces) before it can create the unique index; it does not delete or merge existing data.
 5. In `app/`, copy `.env.example` to `.env` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 6. From inside `app/`: `npm install && npm run dev`
 

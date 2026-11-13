@@ -1,23 +1,17 @@
-import { useLibrary } from '../hooks/useLibrary'
+import type { Library as LibraryState } from '../hooks/useLibrary'
 import { AddForms } from './AddForms'
 import { BoardView } from './BoardView'
 import { GridView } from './GridView'
 import { GroupedView } from './GroupedView'
-import { PdfPreview } from './PdfPreview'
 import { PracticeCalendar } from './PracticeCalendar'
 import { TableView } from './TableView'
-import { Toasts } from './Toasts'
 import { Toolbar } from './Toolbar'
 
-export function Library() {
-  const lib = useLibrary()
+export function Library({ lib }: { lib: LibraryState }) {
   const { composers, pieces, logs, panel, setPanel, view, visible, flat, noMatches } = lib
   const instrumentCount = new Set(pieces.flatMap(p => p.instruments ?? [])).size
   return (
     <>
-      <Toasts lib={lib} />
-      <PdfPreview lib={lib} />
-
       <div className="library-intro">
         <div>
           <h2>Library</h2>

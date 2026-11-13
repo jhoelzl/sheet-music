@@ -408,6 +408,14 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .page-nav { display: flex; gap: 4px; }
 .page-nav button { background: none; border: 0; padding: 6px 10px; border-radius: 6px; cursor: pointer; color: inherit; font: inherit; }
 .page-nav button.on { font-weight: 600; background: rgba(127, 127, 127, 0.2); }
+.ios-native .header-inner { flex-wrap: nowrap; }
+.ios-native.has-navigation main { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
+.ios-native.has-navigation .toasts { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+.ios-native .page-nav { position: fixed; right: 0; bottom: 0; left: 0; z-index: 20; gap: 4px; padding: 5px max(5px, env(safe-area-inset-right, 0px)) calc(5px + env(safe-area-inset-bottom, 0px)) max(5px, env(safe-area-inset-left, 0px)); background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -4px 16px rgba(0, 0, 0, .06); }
+.ios-native .page-nav button { display: flex; flex: 1 1 0; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 0; min-height: 54px; padding: 3px 0; color: var(--muted); font-size: 11px; }
+.ios-native .page-nav button.on { color: var(--accent); background: var(--accent-soft); }
+.page-nav-icon { display: flex; align-items: center; justify-content: center; }
+.page-nav-icon svg { width: 22px; height: 22px; }
 .video-feed { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
 .video-card { border: 1px solid rgba(127, 127, 127, 0.3); border-radius: 10px; overflow: hidden; }
 .video-media { aspect-ratio: 16 / 9; background: #000; }

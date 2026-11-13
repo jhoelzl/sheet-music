@@ -20,6 +20,7 @@ export type Library = ReturnType<typeof useLibrary>
 /** All library state, data loading, mutations and derived data. */
 export function useLibrary() {
   const [composers, setComposers] = useState<Composer[]>([])
+  const [composersLoaded, setComposersLoaded] = useState(false)
   const [pieces, setPieces] = useState<Piece[]>([])
   const [logs, setLogs] = useState<PracticeLog[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -76,6 +77,8 @@ export function useLibrary() {
   const [newTags, setNewTags] = useState<string[]>([])
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [composerName, setComposerName] = useState('')
+  const [composerSaving, setComposerSaving] = useState(false)
+  const composerSavingRef = useRef(false)
   const [title, setTitle] = useState('')
   const [composerId, setComposerId] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -94,6 +97,7 @@ export function useLibrary() {
     const c = await supabase.from('sm_composers').select('*').order('name')
     const p = await supabase.from('sm_pieces').select('*').order('title')
     if (c.error || p.error) notify((c.error ?? p.error)!.message)
+    setComposersLoaded(!c.error)
     setComposers(c.data ?? [])
     setPieces(p.data ?? [])
     // Missing table (migration 0010 not run yet) just leaves the calendar empty.
@@ -103,16 +107,38 @@ export function useLibrary() {
 
   useEffect(() => { void load() }, [load])
 
-  const run = async (op: PromiseLike<{ error: { message: string } | null }>) => {
+  const run = async (op: PromiseLike<{ error: { message: string; code?: string } | null }>) => {
     const { error } = await op
-    if (error) notify(error.message)
+    if (error) notify(error.code === '23505' && error.message.includes('sm_composers_name_user_unique')
+      ? 'A composer with this name already exists.'
+      : error.message)
     await load()
     return !error
   }
 
-  const addComposer = (e: FormEvent) => {
+  const duplicateComposer = (name: string, exceptId?: string) =>
+    composers.some((c) => c.id !== exceptId && c.name.trim().toLowerCase() === name.trim().toLowerCase())
+
+  const addComposer = async (e: FormEvent) => {
     e.preventDefault()
-    void run(supabase.from('sm_composers').insert({ name: composerName.trim() })).then(() => { setComposerName(''); setPanel(null) })
+    if (!composersLoaded) { notify('Composers could not be loaded. Please try again.'); return }
+    const name = composerName.trim()
+    if (!name) { notify('Composer name cannot be empty.'); return }
+    if (duplicateComposer(name)) { notify('A composer with this name already exists.'); return }
+    if (composerSavingRef.current) return
+    composerSavingRef.current = true
+    setComposerSaving(true)
+    try {
+      if (await run(supabase.from('sm_composers').insert({ name }))) {
+        setComposerName('')
+        setPanel(null)
+      }
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Could not add composer.')
+    } finally {
+      composerSavingRef.current = false
+      setComposerSaving(false)
+    }
   }
 
   const addPiece = async (e: FormEvent) => {
@@ -241,6 +267,7 @@ export function useLibrary() {
     setEditingComposerId(null)
     const next = draftComposer.trim()
     if (!next) { notify('Composer name cannot be empty.'); return }
+    if (duplicateComposer(next, c.id)) { notify('A composer with this name already exists.'); return }
     if (next !== c.name) void run(supabase.from('sm_composers').update({ name: next }).eq('id', c.id))
   }
 
@@ -330,7 +357,7 @@ export function useLibrary() {
     search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, composerNameOf,
     // new-item form state
-    composerName, setComposerName, title, setTitle, composerId, setComposerId, setFile, newInstruments, setNewInstruments, newTags, setNewTags,
+    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, composerId, setComposerId, setFile, newInstruments, setNewInstruments, newTags, setNewTags,
     // actions
     dismissToast, setPreview, addComposer, addPiece, togglePracticed, update, remove, startEdit, commitEdit,
     addLink, removeLink, attachPdf, removeComposer, startEditComposer, commitComposerEdit, openPdf,
