@@ -2,6 +2,26 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
+## iOS
+
+Install dependencies with Node.js 22 or later, then set `VITE_SUPABASE_URL` and
+`VITE_SUPABASE_ANON_KEY` in `app/.env` or the environment. From `app/`, run:
+
+```sh
+npm run ios:sync
+npm run ios:open
+```
+
+If `.env` contains 1Password `op://` references, resolve them during the build
+instead of bundling the references into the app:
+
+```sh
+op run --env-file=.env -- npm run ios:sync
+```
+
+In Xcode, select a signing team and a connected device, then build and run the
+app. Run the sync command again after changing the web app.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
