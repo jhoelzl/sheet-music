@@ -6,9 +6,9 @@ export function AddForms({ lib }: { lib: Library }) {
   const { panel, composers } = lib
   if (panel === 'composer') {
     return (
-      <form className="panel" onSubmit={lib.addComposer}>
+      <form className="panel" onSubmit={(e) => void lib.addComposer(e)}>
         <label className="grow">Composer name<input autoFocus placeholder="e.g. Clara Schumann" value={lib.composerName} onChange={(e) => lib.setComposerName(e.target.value)} required /></label>
-        <button className="btn primary" type="submit">Add composer</button>
+        <button className="btn primary" type="submit" disabled={lib.composerSaving || !lib.composersLoaded}>Add composer</button>
       </form>
     )
   }

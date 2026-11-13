@@ -1,6 +1,6 @@
 import type { Library } from '../hooks/useLibrary'
 import { sortPieces } from '../lib/sorting'
-import { CloseIcon, EditIcon } from './icons'
+import { ComposerHeading } from './ComposerHeading'
 import { PieceCard } from './PieceCard'
 
 export function GroupedView({ lib }: { lib: Library }) {
@@ -12,23 +12,7 @@ export function GroupedView({ lib }: { lib: Library }) {
         if (!list.length && filtering) return null
         return (
           <section className="composer-section" key={c.id}>
-            <div className="section-heading">
-              <div className="piece-titleline">
-                {lib.editingComposerId === c.id ? (
-                  <input className="title-edit" aria-label="Composer name" autoFocus value={lib.draftComposer}
-                    onChange={(e) => lib.setDraftComposer(e.target.value)}
-                    onBlur={() => lib.commitComposerEdit(c)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') lib.commitComposerEdit(c); if (e.key === 'Escape') lib.setEditingComposerId(null) }} />
-                ) : (
-                  <h3 title="Double-click to rename" onDoubleClick={() => lib.startEditComposer(c)}>{c.name}</h3>
-                )}
-                <span className="count">{list.length}</span>
-              </div>
-              <div className="piece-actions">
-                <button className="icon-btn edit" aria-label={`Rename ${c.name}`} title="Rename" onClick={() => lib.startEditComposer(c)}>{EditIcon}</button>
-                <button className="icon-btn" aria-label={`Delete ${c.name}`} title="Delete composer" onClick={() => lib.removeComposer(c)}>{CloseIcon}</button>
-              </div>
-            </div>
+            <ComposerHeading lib={lib} composer={c} countLabel={String(list.length)} />
             {list.length === 0 && (
               <div className="muted empty-row">
                 <span>No pieces yet.</span>
