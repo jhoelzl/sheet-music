@@ -40,6 +40,7 @@ describe('app navigation', () => {
 
     const navigation = await screen.findByRole('navigation', { name: 'Pages' })
     expect(navigation.closest('header')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reload app' }).parentElement).toBe(screen.getByRole('button', { name: 'Sign out' }).parentElement)
     expect(within(navigation).getByRole('button', { name: 'Library' }).getAttribute('aria-current')).toBe('page')
     await user.click(within(navigation).getByRole('button', { name: 'Composers' }))
     expect(screen.getByText('Composers content')).toBeTruthy()
@@ -64,6 +65,7 @@ describe('app navigation', () => {
     render(<App />)
 
     expect(await screen.findByText('Login content')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Reload app' })).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Pages' })).toBeNull()
   })
 })
