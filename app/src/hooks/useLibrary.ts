@@ -29,7 +29,7 @@ export function useLibrary() {
   const [sort, setSort] = useState<SortKey>('title')
   const [view, setViewState] = useState<View>(() => {
     const v = localStorage.getItem('sm:view')
-    return VIEWS.some((x) => x.value === v) ? (v as View) : 'grouped'
+    return VIEWS.some((x) => x.value === v) ? (v as View) : 'list'
   })
   const setView = (v: View) => { setViewState(v); localStorage.setItem('sm:view', v) }
   const [tableCompact, setTableCompactState] = useState<boolean>(() => localStorage.getItem('sm:table-compact') === '1')

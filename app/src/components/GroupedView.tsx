@@ -1,7 +1,7 @@
 import type { Library } from '../hooks/useLibrary'
 import { sortPieces } from '../lib/sorting'
 import { ComposerHeading } from './ComposerHeading'
-import { PieceCard } from './PieceCard'
+import { CompactPiece } from './CompactPiece'
 
 export function GroupedView({ lib }: { lib: Library }) {
   const { composers, visible, sort, filtering, hiddenIds } = lib
@@ -19,7 +19,7 @@ export function GroupedView({ lib }: { lib: Library }) {
                 <button type="button" className="btn" onClick={() => { lib.setComposerId(c.id); lib.setPanel('piece'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>+ Add piece</button>
               </div>
             )}
-            {list.map((p) => <PieceCard key={p.id} lib={lib} p={p} />)}
+            {list.map((p) => <CompactPiece key={p.id} lib={lib} p={p} />)}
           </section>
         )
       })}
