@@ -58,7 +58,6 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 
 ## Quality and tooling
 
-- 🟡 **Recover from startup failures.** Replace the blank screen while the session loads with a loading state and a retryable error when authentication initialization fails. (S)
 - 🟡 **Video player resilience.** Show an actionable error and retry or YouTube link when the iOS player cannot load a video; ensure browser embeds meet YouTube's 200 × 200 minimum on narrow screens. (M)
 - 🟡 **iOS build checks.** Add a macOS CI job that builds the Capacitor iOS app without production credentials, and cover native player presentation and dismissal with an iOS UI test. (M)
 - 🟡 **Expand component tests.** Add coverage for the progress slider, calendar, filters, and `practicedText`. (M)
@@ -70,7 +69,7 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 ## Suggested order
 
 1. Security basics: bucket limits and storage policy test; prevent data loss during deletion.
-2. Make practice records and history reliable, then improve startup and video error recovery.
+2. Make practice records and history reliable, then improve video error recovery.
 3. Expand automated coverage, including iOS builds and the main user workflows.
 4. Add a data layer (`api/` module) with centralized error handling.
 5. Features with the most daily value: practice duration, remembered filters, bulk actions.

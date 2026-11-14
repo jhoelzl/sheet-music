@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -24,7 +24,7 @@ vi.mock('./hooks/useLibrary', () => ({ useLibrary: () => ({}) }))
 
 describe('app navigation', () => {
   beforeEach(() => {
-    mocks.getSession.mockResolvedValue({ data: { session: {} } })
+    mocks.getSession.mockResolvedValue({ data: { session: {} }, error: null })
     mocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
   })
 
@@ -67,5 +67,70 @@ describe('app navigation', () => {
     expect(await screen.findByText('Login content')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reload app' })).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Pages' })).toBeNull()
+  })
+
+  it('shows a loading state until the session is restored', async () => {
+    let resolveSession!: (result: { data: { session: null }; error: null }) => void
+    mocks.getSession.mockReturnValueOnce(new Promise((resolve) => { resolveSession = resolve }))
+    render(<App />)
+
+    expect(screen.getByRole('status').textContent).toContain('Loading your session')
+    expect(screen.queryByText('Login content')).toBeNull()
+    await act(async () => { resolveSession({ data: { session: null }, error: null }) })
+    expect(await screen.findByText('Login content')).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('reports a session error and retries without treating it as a signed-out session', async () => {
+    const unsubscribe = vi.fn()
+    mocks.onAuthStateChange.mockImplementationOnce((callback) => {
+      callback('INITIAL_SESSION', null)
+      return { data: { subscription: { unsubscribe } } }
+    })
+    mocks.getSession.mockResolvedValueOnce({ data: { session: null }, error: { message: 'Session unavailable' } })
+    let resolveRetry!: (result: { data: { session: null }; error: null }) => void
+    mocks.getSession.mockReturnValueOnce(new Promise((resolve) => { resolveRetry = resolve }))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load your session')
+    expect(screen.queryByText('Login content')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(unsubscribe).toHaveBeenCalledOnce()
+    expect(screen.getByRole('status').textContent).toContain('Loading your session')
+    await act(async () => { resolveRetry({ data: { session: null }, error: null }) })
+    expect(await screen.findByText('Login content')).toBeTruthy()
+    expect(mocks.getSession).toHaveBeenCalledTimes(2)
+    consoleError.mockRestore()
+  })
+
+  it('allows retry after a rejected initialization', async () => {
+    mocks.getSession.mockRejectedValueOnce(new Error('Network failed'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const user = userEvent.setup()
+    render(<App />)
+
+    expect(await screen.findByRole('alert')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Library content')).toBeTruthy()
+    consoleError.mockRestore()
+  })
+
+  it('does not overwrite an auth change with an older session response', async () => {
+    let authChange!: (event: string, session: object | null) => void
+    let resolveSession!: (result: { data: { session: object }; error: null }) => void
+    mocks.onAuthStateChange.mockImplementationOnce((callback) => {
+      authChange = callback
+      return { data: { subscription: { unsubscribe: vi.fn() } } }
+    })
+    mocks.getSession.mockReturnValueOnce(new Promise((resolve) => { resolveSession = resolve }))
+    render(<App />)
+
+    act(() => { authChange('SIGNED_OUT', null) })
+    await act(async () => { resolveSession({ data: { session: {} }, error: null }) })
+    expect(await screen.findByText('Login content')).toBeTruthy()
+    act(() => { authChange('SIGNED_IN', {}) })
+    expect(screen.getByText('Library content')).toBeTruthy()
   })
 })

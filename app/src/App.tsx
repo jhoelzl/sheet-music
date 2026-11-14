@@ -17,6 +17,7 @@ const composersIcon = strokeIcon('M20 21a8 8 0 0 0-16 0M12 12a4 4 0 1 0 0-8 4 4 
 const videosIcon = strokeIcon('M4 5h16v14H4zM10 9l5 3-5 3z')
 
 type Page = 'library' | 'composers' | 'videos'
+type AuthState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; session: Session | null }
 
 function AuthenticatedContent({ page, isIOS }: { page: Page; isIOS: boolean }) {
   const lib = useLibrary()
@@ -30,16 +31,37 @@ function AuthenticatedContent({ page, isIOS }: { page: Page; isIOS: boolean }) {
 }
 
 export default function App() {
-  const [session, setSession] = useState<Session | null>(null)
-  const [ready, setReady] = useState(false)
+  const [auth, setAuth] = useState<AuthState>({ status: 'loading' })
+  const [authAttempt, setAuthAttempt] = useState(0)
   const [page, setPage] = useState<Page>('library')
   const isIOS = Capacitor.getPlatform() === 'ios'
   useEffect(() => {
-    void supabase.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true) })
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
-    return () => data.subscription.unsubscribe()
-  }, [])
-  if (!ready) return null
+    let active = true
+    let subscription: { unsubscribe: () => void } | undefined
+    let sessionChanged = false
+    let latestSession: Session | null = null
+    const initialize = async () => {
+      try {
+        subscription = supabase.auth.onAuthStateChange((event, nextSession) => {
+          if (!active || event === 'INITIAL_SESSION') return
+          sessionChanged = true
+          latestSession = nextSession
+          setAuth((current) => current.status === 'ready' ? { status: 'ready', session: nextSession } : current)
+        }).data.subscription
+        const { data, error } = await supabase.auth.getSession()
+        if (error) throw error
+        if (active) setAuth({ status: 'ready', session: sessionChanged ? latestSession : data.session })
+      } catch (error) {
+        if (active) {
+          console.error('Could not initialize authentication', error)
+          setAuth({ status: 'error' })
+        }
+      }
+    }
+    void initialize()
+    return () => { active = false; subscription?.unsubscribe() }
+  }, [authAttempt])
+  const session = auth.status === 'ready' ? auth.session : null
   const navigation = session && (
     <nav className="page-nav" aria-label="Pages">
       <button type="button" className={page === 'library' ? 'on' : ''} aria-current={page === 'library' ? 'page' : undefined} onClick={() => setPage('library')}>
@@ -67,7 +89,18 @@ export default function App() {
           </div>
         </div>
       </header>
-      <main>{session ? <AuthenticatedContent page={page} isIOS={isIOS} /> : <Login />}</main>
+      <main>
+        {auth.status === 'loading' ? (
+          <div className="auth-wrap"><div className="panel auth-card" role="status">Loading your session…</div></div>
+        ) : auth.status === 'error' ? (
+          <div className="auth-wrap">
+            <div className="panel auth-card">
+              <div role="alert"><h2>Could not load your session</h2><p>Check your connection and try again.</p></div>
+              <button type="button" className="btn primary" onClick={() => { setAuth({ status: 'loading' }); setAuthAttempt((attempt) => attempt + 1) }}>Try again</button>
+            </div>
+          </div>
+        ) : session ? <AuthenticatedContent page={page} isIOS={isIOS} /> : <Login />}
+      </main>
       {isIOS && navigation}
     </div>
   )
