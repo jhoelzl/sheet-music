@@ -1,8 +1,10 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLibrary } from '../hooks/useLibrary'
 import { ComposersPage } from './ComposersPage'
+import { Library } from './Library'
 import { Toasts } from './Toasts'
 
 const mocks = vi.hoisted(() => ({ from: vi.fn(), insert: vi.fn(), update: vi.fn() }))
@@ -11,6 +13,16 @@ vi.mock('../supabase', () => ({ supabase: { from: mocks.from } }))
 function TestPage() {
   const lib = useLibrary()
   return <><Toasts lib={lib} /><ComposersPage lib={lib} /></>
+}
+
+function TestNavigation() {
+  const lib = useLibrary()
+  const [page, setPage] = useState<'library' | 'composers'>('library')
+  return <>
+    <button onClick={() => setPage('library')}>Library tab</button>
+    <button onClick={() => setPage('composers')}>Composers tab</button>
+    {page === 'library' ? <Library lib={lib} isIOS /> : <ComposersPage lib={lib} />}
+  </>
 }
 
 describe('composer management', () => {
@@ -34,6 +46,20 @@ describe('composer management', () => {
   })
 
   afterEach(() => { cleanup(); vi.clearAllMocks() })
+
+  it('keeps composer creation on the iOS Composers page', async () => {
+    const user = userEvent.setup()
+    render(<TestNavigation />)
+    await screen.findByText('Clara Schumann')
+    expect(screen.queryByRole('button', { name: '+ Composer' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Composers tab' }))
+    await user.click(screen.getByRole('button', { name: '+ Composer' }))
+    expect(screen.getByLabelText('Composer name')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Library tab' }))
+    expect(screen.queryByLabelText('Composer name')).toBeNull()
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    expect(screen.getByLabelText('Title')).toBeTruthy()
+  })
 
   it('rejects duplicate names regardless of case and surrounding spaces', async () => {
     const user = userEvent.setup()

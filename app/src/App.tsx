@@ -18,13 +18,13 @@ const videosIcon = strokeIcon('M4 5h16v14H4zM10 9l5 3-5 3z')
 
 type Page = 'library' | 'composers' | 'videos'
 
-function AuthenticatedContent({ page }: { page: Page }) {
+function AuthenticatedContent({ page, isIOS }: { page: Page; isIOS: boolean }) {
   const lib = useLibrary()
   return (
     <>
       <Toasts lib={lib} />
       <PdfPreview lib={lib} />
-      {page === 'composers' ? <ComposersPage lib={lib} /> : page === 'videos' ? <VideosPage /> : <Library lib={lib} />}
+      {page === 'composers' ? <ComposersPage lib={lib} /> : page === 'videos' ? <VideosPage /> : <Library lib={lib} isIOS={isIOS} />}
     </>
   )
 }
@@ -67,7 +67,7 @@ export default function App() {
           </div>
         </div>
       </header>
-      <main>{session ? <AuthenticatedContent page={page} /> : <Login />}</main>
+      <main>{session ? <AuthenticatedContent page={page} isIOS={isIOS} /> : <Login />}</main>
       {isIOS && navigation}
     </div>
   )

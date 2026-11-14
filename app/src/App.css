@@ -356,15 +356,16 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 
 /* ---- Mobile ---- */
 @media (max-width: 640px) {
+  input:not([type="range"]), select, textarea { font-size: 16px; }
   .library-intro h2 { font-size: 24px; }
   .intro-actions { flex-wrap: wrap; }
   .panel label { min-width: 0; }
 
   .toolbar { flex-wrap: wrap; gap: 8px; }
-  .search-field { flex-basis: 100%; }
+  .search-field { flex-basis: 100%; min-width: 0; }
   .sort-field { flex: 1; }
   .sort-field select { flex: 1; min-width: 0; }
-  .view-switch { flex-basis: 100%; margin-left: 0; }
+  .view-switch { flex-basis: 100%; min-width: 0; margin-left: 0; }
   .view-switch button { flex: 1; padding: 0 6px; height: 38px; }
 
   .piece-grid { grid-template-columns: 1fr; }
@@ -388,7 +389,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
   .piece-table tbody tr:hover { background: var(--surface); }
 
   /* Board: one swipeable column at a time */
-  .board { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 84%; scroll-snap-type: x mandatory; padding-bottom: 6px; margin: 0 -16px; padding-left: 16px; padding-right: 16px; scroll-padding-left: 16px; }
+  .board { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 84%; min-width: 0; scroll-snap-type: x mandatory; padding-bottom: 6px; margin: 0 -16px; padding-left: 16px; padding-right: 16px; scroll-padding-left: 16px; }
   .board-col { scroll-snap-align: start; }
 
   /* Practice calendar */
