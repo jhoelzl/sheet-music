@@ -3,11 +3,17 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VideosPage } from './VideosPage'
 
-const mocks = vi.hoisted(() => ({ from: vi.fn() }))
+const mocks = vi.hoisted(() => ({ from: vi.fn(), getPlatform: vi.fn(), open: vi.fn() }))
 vi.mock('../supabase', () => ({ supabase: { from: mocks.from } }))
+vi.mock('@capacitor/core', () => ({
+  Capacitor: { getPlatform: mocks.getPlatform },
+  registerPlugin: () => ({ open: mocks.open }),
+}))
 
 describe('video feed', () => {
   beforeEach(() => {
+    mocks.getPlatform.mockReturnValue('web')
+    mocks.open.mockResolvedValue(undefined)
     mocks.from.mockImplementation((table: string) => ({
       select: () => {
         const data = table === 'sm_composers'
@@ -20,6 +26,24 @@ describe('video feed', () => {
         return Object.assign(Promise.resolve(result), { order: () => Promise.resolve(result) })
       },
     }))
+  })
+
+  it('uses the native player on iOS and reports failures with a usable YouTube link', async () => {
+    mocks.getPlatform.mockReturnValue('ios')
+    mocks.open.mockRejectedValueOnce(new Error('Player unavailable'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const user = userEvent.setup()
+    render(<VideosPage />)
+    const play = await screen.findByRole('button', { name: 'Play Romance' })
+
+    await user.click(play)
+    expect(mocks.open).toHaveBeenCalledWith({ videoId: 'abcdefghi', title: 'Romance' })
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not open the video player')
+    expect(screen.getByRole('link', { name: 'Open Romance on YouTube' })).toBeTruthy()
+    expect(screen.queryByTitle('Romance')).toBeNull()
+    await user.click(play)
+    expect(screen.queryByRole('alert')).toBeNull()
+    consoleError.mockRestore()
   })
 
   afterEach(() => { cleanup(); vi.clearAllMocks() })
