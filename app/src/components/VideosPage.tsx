@@ -51,10 +51,18 @@ export function VideosPage() {
   if (!videos.length) return <div className="empty"><h3>No videos yet</h3><p>Add a YouTube link to a piece to see it here.</p></div>
   return (
     <>
-      <div className="library-intro"><div><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'}</p></div></div>
+      <div className="library-intro video-intro"><div><span className="library-kicker">Your music</span><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'} from your library</p></div></div>
       <div className="video-feed">
         {videos.map((v) => (
           <article className="video-card" key={v.key}>
+            <div className="video-meta">
+              <span className="video-avatar" aria-hidden="true">{Array.from(v.composer.trim())[0]?.toLocaleUpperCase() ?? '♪'}</span>
+              <div className="video-details">
+                <strong>{v.title}</strong>
+                <span>{v.composer || 'Unknown composer'}</span>
+              </div>
+              <a className="video-source" href={v.href} target="_blank" rel="noopener noreferrer" aria-label={`Open ${v.title} on YouTube`}>YouTube <span aria-hidden="true">↗</span></a>
+            </div>
             <div className="video-media">
               {playing === v.key ? (
                 <iframe src={`https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1`} title={v.title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
@@ -64,10 +72,6 @@ export function VideosPage() {
                   <span className="video-play" aria-hidden="true">▶</span>
                 </button>
               )}
-            </div>
-            <div className="video-meta">
-              <strong>{v.title}</strong>
-              <span>{v.composer} · <a href={v.href} target="_blank" rel="noopener noreferrer">YouTube</a></span>
             </div>
           </article>
         ))}
