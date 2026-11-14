@@ -1,48 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Capacitor, registerPlugin } from '@capacitor/core'
 import { supabase } from '../supabase'
 import type { Composer, Piece } from '../supabase'
 import { safeUrl } from '../lib/links'
-
-export function youtubeId(url: string): string | null {
-  try {
-    const u = new URL(url)
-    const host = u.hostname.replace(/^(www|m|music)\./, '')
-    let id: string | null = null
-    if (host === 'youtu.be') id = u.pathname.slice(1).split('/')[0]
-    else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
-      const m = u.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/]+)/)
-      id = u.pathname === '/watch' ? u.searchParams.get('v') : m ? m[1] : null
-    }
-    return id && /^[\w-]{6,}$/.test(id) ? id : null
-  } catch {
-    return null
-  }
-}
-
-type Video = { key: string; id: string; href: string; title: string; composer: string }
-
-const YouTubePlayer = registerPlugin<{ open(options: { videoId: string; title: string }): Promise<void> }>('YouTubePlayer')
+import { youtubeId } from '../lib/youtube'
+import { VideoFeed } from './VideoFeed'
+import type { Video } from './VideoFeed'
 
 export function VideosPage() {
   const [videos, setVideos] = useState<Video[] | null>(null)
   const [error, setError] = useState('')
-  const [playing, setPlaying] = useState<string | null>(null)
-  const [playerError, setPlayerError] = useState<string | null>(null)
-
-  const playVideo = async (video: Video) => {
-    setPlayerError(null)
-    if (Capacitor.getPlatform() !== 'ios') {
-      setPlaying(video.key)
-      return
-    }
-    try {
-      await YouTubePlayer.open({ videoId: video.id, title: video.title })
-    } catch (error) {
-      console.error('Unable to open the YouTube player', error)
-      setPlayerError(video.key)
-    }
-  }
 
   useEffect(() => {
     void (async () => {
@@ -70,31 +36,7 @@ export function VideosPage() {
   return (
     <>
       <div className="library-intro video-intro"><div><span className="library-kicker">Your music</span><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'} from your library</p></div></div>
-      <div className="video-feed">
-        {videos.map((v) => (
-          <article className="video-card" key={v.key}>
-            <div className="video-meta">
-              <span className="video-avatar" aria-hidden="true">{Array.from(v.composer.trim())[0]?.toLocaleUpperCase() ?? '♪'}</span>
-              <div className="video-details">
-                <strong>{v.title}</strong>
-                <span>{v.composer || 'Unknown composer'}</span>
-              </div>
-              <a className="video-source" href={v.href} target="_blank" rel="noopener noreferrer" aria-label={`Open ${v.title} on YouTube`}>YouTube <span aria-hidden="true">↗</span></a>
-            </div>
-            <div className="video-media">
-              {playing === v.key ? (
-                <iframe src={`https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1`} title={v.title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen />
-              ) : (
-                <button type="button" className="video-thumb" aria-label={`Play ${v.title}`} onClick={() => void playVideo(v)}>
-                  <img src={`https://i.ytimg.com/vi/${v.id}/hqdefault.jpg`} alt="" loading="lazy" />
-                  <span className="video-play" aria-hidden="true">▶</span>
-                </button>
-              )}
-            </div>
-            {playerError === v.key && <p className="video-error" role="alert">Could not open the video player. Use the YouTube link above to watch.</p>}
-          </article>
-        ))}
-      </div>
+      <VideoFeed videos={videos} />
     </>
   )
 }

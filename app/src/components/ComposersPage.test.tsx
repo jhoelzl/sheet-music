@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,12 +31,16 @@ describe('composer management', () => {
       { id: '1', name: 'Clara Schumann', born_year: null, died_year: null, notes: null },
       { id: '2', name: 'Johann Bach', born_year: null, died_year: null, notes: null },
     ]
+    const pieces = [
+      { id: 'p1', composer_id: '1', title: 'Romance', instruments: ['piano'], links: [{ type: 'youtube', url: 'https://youtu.be/abcdefghi' }] },
+      { id: 'p2', composer_id: '2', title: 'Prelude', instruments: ['piano'], links: [{ type: 'youtube', url: 'https://youtu.be/abcdefghj' }] },
+    ]
     mocks.insert.mockResolvedValue({ error: null })
     mocks.update.mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
     mocks.from.mockImplementation((table: string) => ({
       select: () => ({
         order: () => {
-          const result = { data: table === 'sm_composers' ? composers : [], error: null }
+          const result = { data: table === 'sm_composers' ? composers : table === 'sm_pieces' ? pieces : [], error: null }
           return Object.assign(Promise.resolve(result), { limit: () => Promise.resolve(result) })
         },
       }),
@@ -61,10 +65,23 @@ describe('composer management', () => {
     expect(screen.getByLabelText('Title')).toBeTruthy()
   })
 
+  it('shows only a composer’s pieces and playable videos when expanded', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<TestPage />)
+    await screen.findByRole('heading', { name: 'Clara Schumann' })
+
+    await user.click(screen.getAllByText('Show pieces and videos', { exact: true })[0])
+    const claraSection = within(container.querySelector('.composer-section')!)
+    expect(await claraSection.findAllByText('Romance')).toHaveLength(2)
+    expect(claraSection.queryByText('Prelude')).toBeNull()
+    await user.click(claraSection.getByRole('button', { name: 'Play Romance' }))
+    expect(claraSection.getByTitle('Romance').getAttribute('src')).toContain('youtube-nocookie.com/embed/abcdefghi')
+  })
+
   it('rejects duplicate names regardless of case and surrounding spaces', async () => {
     const user = userEvent.setup()
     render(<TestPage />)
-    await screen.findByText('Clara Schumann')
+    await screen.findByRole('heading', { name: 'Clara Schumann' })
     await user.click(screen.getByRole('button', { name: '+ Composer' }))
     await user.type(screen.getByLabelText('Composer name'), '  clara schumann  ')
     await user.click(screen.getByRole('button', { name: 'Add composer' }))
@@ -78,7 +95,7 @@ describe('composer management', () => {
     mocks.insert.mockResolvedValue({ error: { code: '23505', message: 'duplicate key violates unique constraint "sm_composers_name_user_unique"' } })
     const user = userEvent.setup()
     render(<TestPage />)
-    await screen.findByText('Clara Schumann')
+    await screen.findByRole('heading', { name: 'Clara Schumann' })
     await user.click(screen.getByRole('button', { name: '+ Composer' }))
     await user.type(screen.getByLabelText('Composer name'), 'Fanny Mendelssohn')
     await user.click(screen.getByRole('button', { name: 'Add composer' }))
@@ -91,7 +108,7 @@ describe('composer management', () => {
   it('creates a new composer and closes the form on success', async () => {
     const user = userEvent.setup()
     render(<TestPage />)
-    await screen.findByText('Clara Schumann')
+    await screen.findByRole('heading', { name: 'Clara Schumann' })
     await user.click(screen.getByRole('button', { name: '+ Composer' }))
     await user.type(screen.getByLabelText('Composer name'), '  Fanny Mendelssohn  ')
     await user.click(screen.getByRole('button', { name: 'Add composer' }))
@@ -103,7 +120,7 @@ describe('composer management', () => {
   it('rejects renaming a composer to an existing name', async () => {
     const user = userEvent.setup()
     render(<TestPage />)
-    await screen.findByText('Clara Schumann')
+    await screen.findByRole('heading', { name: 'Clara Schumann' })
     await user.click(screen.getByRole('button', { name: 'Rename Johann Bach' }))
     const input = screen.getByLabelText('Composer name')
     await user.clear(input)
