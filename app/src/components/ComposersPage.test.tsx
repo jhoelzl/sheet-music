@@ -50,7 +50,7 @@ describe('composer management', () => {
   it('keeps composer creation on the iOS Composers page', async () => {
     const user = userEvent.setup()
     render(<TestNavigation />)
-    await screen.findByText('Clara Schumann')
+    await waitFor(() => expect((screen.getByRole('button', { name: '+ Piece' }) as HTMLButtonElement).disabled).toBe(false))
     expect(screen.queryByRole('button', { name: '+ Composer' })).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Composers tab' }))
     await user.click(screen.getByRole('button', { name: '+ Composer' }))

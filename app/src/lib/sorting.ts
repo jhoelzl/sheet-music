@@ -17,8 +17,9 @@ export const SORTS: { value: SortKey; label: string }[] = [
   { value: 'recent', label: 'Recently added' },
 ]
 
-export type View = 'grouped' | 'table' | 'grid' | 'board'
+export type View = 'list' | 'grouped' | 'table' | 'grid' | 'board'
 export const VIEWS: { value: View; label: string }[] = [
+  { value: 'list', label: 'List' },
   { value: 'grouped', label: 'Grouped' },
   { value: 'table', label: 'Table' },
   { value: 'grid', label: 'Grid' },
