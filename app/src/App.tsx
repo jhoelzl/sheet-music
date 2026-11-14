@@ -67,11 +67,9 @@ export default function App() {
       <button type="button" className={page === 'library' ? 'on' : ''} aria-current={page === 'library' ? 'page' : undefined} onClick={() => setPage('library')}>
         {isIOS && <span className="page-nav-icon">{libraryIcon}</span>}Library
       </button>
-      {isIOS && (
-        <button type="button" className={page === 'composers' ? 'on' : ''} aria-current={page === 'composers' ? 'page' : undefined} onClick={() => setPage('composers')}>
-          <span className="page-nav-icon">{composersIcon}</span>Composers
-        </button>
-      )}
+      <button type="button" className={page === 'composers' ? 'on' : ''} aria-current={page === 'composers' ? 'page' : undefined} onClick={() => setPage('composers')}>
+        {isIOS && <span className="page-nav-icon">{composersIcon}</span>}Composers
+      </button>
       <button type="button" className={page === 'videos' ? 'on' : ''} aria-current={page === 'videos' ? 'page' : undefined} onClick={() => setPage('videos')}>
         {isIOS && <span className="page-nav-icon">{videosIcon}</span>}Videos
       </button>

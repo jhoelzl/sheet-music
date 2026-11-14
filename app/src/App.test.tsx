@@ -50,13 +50,17 @@ describe('app navigation', () => {
     expect(within(navigation).getByRole('button', { name: 'Videos' }).getAttribute('aria-current')).toBe('page')
   })
 
-  it('keeps browser navigation in the header', async () => {
+  it('keeps browser navigation in the header and switches to Composers', async () => {
     mocks.getPlatform.mockReturnValue('web')
+    const user = userEvent.setup()
     render(<App />)
 
     const navigation = await screen.findByRole('navigation', { name: 'Pages' })
     expect(navigation.closest('header')).not.toBeNull()
     expect(screen.getByText('Library content')).toBeTruthy()
+    await user.click(within(navigation).getByRole('button', { name: 'Composers' }))
+    expect(screen.getByText('Composers content')).toBeTruthy()
+    expect(within(navigation).getByRole('button', { name: 'Composers' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('does not show navigation while signed out', async () => {
