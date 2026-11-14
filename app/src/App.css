@@ -436,6 +436,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .video-details > span { overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
 .video-source { flex-shrink: 0; color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: none; }
 .video-source:hover { color: var(--accent); }
+.video-error { margin-top: 10px; color: var(--danger-text); font-size: 13px; }
 @media (max-width: 640px) {
   .video-feed { gap: 30px; }
   .video-media { border-radius: 12px; }

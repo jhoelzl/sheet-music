@@ -22,6 +22,10 @@ op run --env-file=.env -- npm run ios:sync
 In Xcode, select a signing team and a connected device, then build and run the
 app. Run the sync command again after changing the web app.
 
+On iOS, YouTube videos open in an in-app player. Its WebView uses the app's
+bundle ID as the HTTPS base URL so YouTube receives the required referrer.
+Browser playback continues to use the embedded player in the video feed.
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
