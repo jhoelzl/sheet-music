@@ -258,13 +258,16 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .sort-field select { width: auto; height: 40px; padding: 0 10px; }
 .toasts { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: grid; gap: 8px; max-width: min(420px, calc(100vw - 40px)); }
 .modal-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 0; background: rgba(24,24,27,.55); }
-.modal { display: flex; flex-direction: column; width: 100%; height: 100dvh; background: var(--surface); border-radius: 0; box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
-.modal-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.modal { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; background: var(--surface); border-radius: 0; overflow: hidden; }
+.modal-head { display: flex; align-items: center; gap: 12px; padding: calc(8px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--line); }
 .modal-title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .modal-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.modal-head .btn { display: inline-flex; align-items: center; height: 34px; text-decoration: none; font-size: 13px; }
-.modal-head .icon-btn { margin: 0; }
-.modal-frame { flex: 1; width: 100%; border: 0; background: var(--hover); }
+.modal-head .pdf-close { flex-shrink: 0; min-height: 44px; }
+.pdf-scroll { flex: 1; min-height: 0; width: 100%; overflow: auto; overscroll-behavior: contain; background: #525659; padding-bottom: env(safe-area-inset-bottom, 0px); }
+.pdf-page { position: relative; width: 100%; background: white; margin-bottom: 8px; }
+.pdf-page canvas { display: block; width: 100%; height: 100%; }
+.pdf-page p { position: absolute; inset: 0; padding: 16px; color: #222; }
+.pdf-message { padding: 16px; color: white; }
 .toast { display: flex; align-items: center; gap: 10px; padding: 11px 14px; color: #fff; background: var(--toast-bg); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); font-size: 13px; }
 .toast.error { background: #9a3412; }
 .toast span { flex: 1; }
@@ -413,7 +416,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
   /* PDF preview slides up full screen */
   .modal-backdrop { place-items: end stretch; padding: 0; }
   .modal { animation: sheet-up .25s ease-out; }
-  .modal-head { padding: 8px 12px 10px; gap: 8px; }
+  .modal-head { gap: 8px; }
 }
 @keyframes sheet-up { from { transform: translateY(100%); } }
 @media (prefers-reduced-motion: reduce) { .modal { animation: none !important; } }

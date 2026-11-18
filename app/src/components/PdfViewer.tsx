@@ -1,90 +1,141 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist'
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
 
-export const PDF_VIEWER_HASH = '#pdf='
+function PdfPage({ doc, number, width, scrollRoot }: {
+  doc: PDFDocumentProxy
+  number: number
+  width: number
+  scrollRoot: HTMLElement | null
+}) {
+  const container = useRef<HTMLDivElement>(null)
+  const [page, setPage] = useState<PDFPageProxy | null>(null)
+  const [visible, setVisible] = useState(false)
+  const [error, setError] = useState(false)
 
-export function pdfViewerUrl(signedUrl: string, title: string) {
-  const base = `${window.location.origin}${window.location.pathname}`
-  return `${base}${PDF_VIEWER_HASH}${encodeURIComponent(signedUrl)}&title=${encodeURIComponent(title)}`
+  useEffect(() => {
+    let active = true
+    void doc.getPage(number).then((result) => {
+      if (active) setPage(result)
+    }).catch((reason: unknown) => {
+      if (active) {
+        console.error('Could not load PDF page', reason)
+        setError(true)
+      }
+    })
+    return () => { active = false }
+  }, [doc, number])
+
+  useEffect(() => {
+    const element = container.current
+    if (!element || !scrollRoot) return
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), {
+      root: scrollRoot,
+      rootMargin: '100% 0px',
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [scrollRoot])
+
+  useEffect(() => {
+    const parent = container.current
+    if (!page || !parent || !width || !visible) return
+    const element = document.createElement('canvas')
+    element.setAttribute('aria-label', `Page ${number}`)
+    parent.prepend(element)
+    let active = true
+    let task: RenderTask | undefined
+    const base = page.getViewport({ scale: 1 })
+    const cssScale = width / base.width
+    // Keep individual canvases within iOS WebKit's pixel and dimension limits.
+    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2, 4096 / width, 4096 / (width * base.height / base.width), Math.sqrt(4000000 / (width * width * base.height / base.width)))
+    const viewport = page.getViewport({ scale: cssScale * pixelRatio })
+    element.width = Math.max(1, Math.round(viewport.width))
+    element.height = Math.max(1, Math.round(viewport.height))
+    void Promise.resolve().then(() => {
+      if (!active) return
+      task = page.render({ canvas: element, viewport })
+      return task.promise
+    }).catch((reason: unknown) => {
+      if (active) {
+        console.error('Could not render PDF page', reason)
+        setError(true)
+      }
+    })
+    return () => {
+      active = false
+      task?.cancel()
+      element.remove()
+      if (task) {
+        const release = () => { element.width = 0; element.height = 0 }
+        void task.promise.then(release, release)
+      } else {
+        element.width = 0
+        element.height = 0
+      }
+    }
+  }, [page, width, visible, number])
+
+  const viewport = page?.getViewport({ scale: 1 })
+  return (
+    <div ref={container} className="pdf-page" style={{ aspectRatio: viewport ? `${viewport.width} / ${viewport.height}` : '1 / 1.414' }}>
+      {error && <p role="alert">Could not display page {number}. Close and reopen the PDF to retry.</p>}
+    </div>
+  )
 }
 
-function parseHash() {
-  const params = new URLSearchParams(window.location.hash.slice(1))
-  return { url: params.get('pdf'), title: params.get('title') ?? 'PDF' }
-}
-
-export function PdfViewer() {
-  const { url, title } = parseHash()
-  const containerRef = useRef<HTMLDivElement>(null)
+export function PdfViewer({ url, onLoad }: { url: string; onLoad: (pages: number) => void }) {
+  const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null)
+  const onLoadRef = useRef(onLoad)
+  useEffect(() => { onLoadRef.current = onLoad }, [onLoad])
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
   const [error, setError] = useState(false)
   const [width, setWidth] = useState(0)
 
-  useEffect(() => { document.title = title }, [title])
-
   useEffect(() => {
-    if (!url) { setError(true); return }
-    let cancelled = false
-    let task: PDFDocumentLoadingTask | null = null
+    let active = true
+    let task: PDFDocumentLoadingTask | undefined
     void (async () => {
       try {
         const pdfjs = await import('pdfjs-dist')
         const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+        if (!active) return
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default
         task = pdfjs.getDocument({ url })
         const loaded = await task.promise
-        if (cancelled) return
-        setDoc(loaded)
-      } catch {
-        if (!cancelled) setError(true)
+        if (active) {
+          setDoc(loaded)
+          onLoadRef.current(loaded.numPages)
+        }
+      } catch (reason) {
+        if (active) {
+          console.error('Could not load PDF', reason)
+          setError(true)
+        }
       }
     })()
-    return () => { cancelled = true; void task?.destroy() }
+    return () => {
+      active = false
+      if (task) void task.destroy().catch((reason: unknown) => console.error('Could not close PDF', reason))
+    }
   }, [url])
 
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const update = () => setWidth(el.clientWidth)
+    const element = scrollRoot
+    if (!element) return
+    const update = () => setWidth(element.clientWidth)
     update()
     const observer = new ResizeObserver(update)
-    observer.observe(el)
+    observer.observe(element)
     return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!doc || !el || !width) return
-    let cancelled = false
-    void (async () => {
-      const canvases: HTMLCanvasElement[] = []
-      for (let n = 1; n <= doc.numPages; n++) {
-        const page = await doc.getPage(n)
-        if (cancelled) return
-        const base = page.getViewport({ scale: 1 })
-        const scale = width / base.width
-        const viewport = page.getViewport({ scale: scale * Math.min(window.devicePixelRatio || 1, 3) })
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.floor(viewport.width)
-        canvas.height = Math.floor(viewport.height)
-        canvas.style.width = '100%'
-        canvas.style.display = 'block'
-        canvas.style.marginBottom = '8px'
-        await page.render({ canvas, viewport }).promise
-        if (cancelled) return
-        canvases.push(canvas)
-        if (n === 1) el.replaceChildren(canvas)
-        else el.appendChild(canvas)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [doc, width])
+  }, [scrollRoot])
 
   return (
-    <div style={{ background: '#525659', minHeight: '100vh' }}>
-      {error && <p style={{ color: '#fff', padding: 16 }}>Could not load the PDF. Close this tab and try again.</p>}
-      {!error && !doc && <p style={{ color: '#fff', padding: 16 }}>Loading…</p>}
-      <div ref={containerRef} style={{ width: '100%' }} />
+    <div ref={setScrollRoot} className="pdf-scroll" aria-label="PDF pages" tabIndex={0}>
+      {error && <p className="pdf-message" role="alert">Could not load the PDF. Check your connection, then close and reopen it.</p>}
+      {!error && !doc && <p className="pdf-message" role="status">Loading PDF…</p>}
+      {doc && Array.from({ length: doc.numPages }, (_, index) => (
+        <PdfPage key={index} doc={doc} number={index + 1} width={width} scrollRoot={scrollRoot} />
+      ))}
     </div>
   )
 }
