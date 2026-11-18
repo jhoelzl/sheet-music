@@ -12,7 +12,7 @@ import { statusOf } from '../lib/status'
 
 export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
 export type Panel = 'composer' | 'piece' | null
-export type Preview = { title: string; url: string; pages: number | null }
+export type Preview = { id: string; title: string; url: string | null; pages: number | null; error: string | null }
 export const TABLE_COLUMNS = ['composer', 'instruments', 'tags', 'status', 'difficulty', 'rating', 'pages', 'practiced'] as const
 export type TableColumnId = (typeof TABLE_COLUMNS)[number]
 export type Library = ReturnType<typeof useLibrary>
@@ -25,7 +25,7 @@ export function useLibrary() {
   const [logs, setLogs] = useState<PracticeLog[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [preview, setPreview] = useState<Preview | null>(null)
-  const [previewLoading, setPreviewLoading] = useState(false)
+  const previewRequest = useRef(0)
   const [sort, setSort] = useState<SortKey>('title')
   const [view, setViewState] = useState<View>(() => {
     const v = localStorage.getItem('sm:view')
@@ -66,8 +66,6 @@ export function useLibrary() {
   const [openLink, setOpenLink] = useState<string | null>(null)
   const [uploadingId, setUploadingId] = useState<string | null>(null)
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
-  const [countFailed, setCountFailed] = useState<Set<string>>(new Set())
-  const [countingPageIds, setCountingPageIds] = useState<Set<string>>(new Set())
   const toastSeq = useRef(0)
   const deleteTimers = useRef(new Map<string, number>())
   const [search, setSearch] = useState('')
@@ -272,37 +270,36 @@ export function useLibrary() {
   }
 
   const openPdf = async (p: Piece) => {
-    if (!p.pdf_path || previewLoading) return
-    let pages = p.pdf_pages ?? null
-    if (pages == null && !countFailed.has(p.id)) {
-      setCountingPageIds((prev) => new Set(prev).add(p.id))
-      const { data } = await supabase.storage.from(PDF_STORAGE_BUCKET).download(p.pdf_path)
-      pages = data ? await countPdfPages(data) : null
-      setCountingPageIds((prev) => {
-        const next = new Set(prev)
-        next.delete(p.id)
-        return next
-      })
-      if (pages) {
-        await supabase.from('sm_pieces').update({ pdf_pages: pages }).eq('id', p.id)
-        setPieces((prev) => prev.map((x) => (x.id === p.id ? { ...x, pdf_pages: pages } : x)))
-      } else {
-        setCountFailed((prev) => new Set(prev).add(p.id))
-      }
+    if (!p.pdf_path) return
+    const request = ++previewRequest.current
+    setPreview({ id: p.id, title: p.title, url: null, pages: p.pdf_pages ?? null, error: null })
+    try {
+      const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
+      if (request !== previewRequest.current) return
+      if (error) throw error
+      setPreview((current) => current && { ...current, url: data.signedUrl })
+    } catch (error) {
+      if (request !== previewRequest.current) return
+      setPreview((current) => current && { ...current, error: error instanceof Error ? error.message : 'Could not open this PDF.' })
     }
-    setPreviewLoading(true)
-    const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
-    setPreviewLoading(false)
-    if (error) notify(error.message)
-    else setPreview({ title: p.title, url: data.signedUrl, pages })
   }
 
-  useEffect(() => {
-    if (!preview) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreview(null) }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [preview])
+  const closePdf = () => {
+    previewRequest.current++
+    setPreview(null)
+  }
+
+  const recordPdfPages = async (id: string, pages: number) => {
+    setPreview((current) => current?.id === id ? { ...current, pages } : current)
+    if (pieces.find((piece) => piece.id === id)?.pdf_pages === pages) return
+    try {
+      const { error } = await supabase.from('sm_pieces').update({ pdf_pages: pages }).eq('id', id)
+      if (error) throw error
+      setPieces((current) => current.map((piece) => piece.id === id ? { ...piece, pdf_pages: pages } : piece))
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Could not save the PDF page count.')
+    }
+  }
 
   const terms = search.toLowerCase().split(/\s+/).filter(Boolean)
   const visible = pieces.filter((p) => {
@@ -350,7 +347,7 @@ export function useLibrary() {
 
   return {
     // data
-    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, practicedToday, countFailed, countingPageIds,
+    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, practicedToday,
     // ui state
     sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
@@ -359,7 +356,7 @@ export function useLibrary() {
     // new-item form state
     composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, composerId, setComposerId, setFile, newInstruments, setNewInstruments, newTags, setNewTags,
     // actions
-    dismissToast, setPreview, addComposer, addPiece, togglePracticed, update, remove, startEdit, commitEdit,
+    dismissToast, closePdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, remove, startEdit, commitEdit,
     addLink, removeLink, attachPdf, removeComposer, startEditComposer, commitComposerEdit, openPdf,
   }
 }

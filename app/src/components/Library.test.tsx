@@ -1,27 +1,30 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLibrary } from '../hooks/useLibrary'
 import { Library } from './Library'
+import { PdfPreview } from './PdfPreview'
 
-const mocks = vi.hoisted(() => ({ from: vi.fn() }))
-vi.mock('../supabase', () => ({ supabase: { from: mocks.from } }))
+const mocks = vi.hoisted(() => ({ from: vi.fn(), signedUrl: vi.fn() }))
+vi.mock('../supabase', () => ({ supabase: { from: mocks.from, storage: { from: () => ({ createSignedUrl: mocks.signedUrl }) } } }))
+vi.mock('./PdfViewer', () => ({ PdfViewer: ({ url }: { url: string }) => <div>PDF content: {url}</div> }))
 
 function TestLibrary() {
   const lib = useLibrary()
-  return <Library lib={lib} />
+  return <><PdfPreview lib={lib} /><Library lib={lib} /></>
 }
 
 describe('focused library', () => {
   beforeEach(() => {
     localStorage.clear()
+    mocks.signedUrl.mockResolvedValue({ data: { signedUrl: 'https://example.test/music.pdf' }, error: null })
     mocks.from.mockImplementation((table: string) => ({
       select: () => ({
         order: () => {
           const data = table === 'sm_composers'
             ? [{ id: 'c1', name: 'Clara Schumann' }]
             : table === 'sm_pieces'
-              ? [{ id: 'p1', composer_id: 'c1', title: 'Romance', instruments: ['piano'], tags: ['calm'], play_progress: 50, links: [] }]
+              ? [{ id: 'p1', composer_id: 'c1', title: 'Romance', pdf_path: 'romance.pdf', pdf_pages: 2, instruments: ['piano'], tags: ['calm'], play_progress: 50, links: [] }]
               : []
           const result = { data, error: null }
           return Object.assign(Promise.resolve(result), { limit: () => Promise.resolve(result) })
@@ -72,5 +75,50 @@ describe('focused library', () => {
     await user.selectOptions(view, 'list')
     expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
     expect(localStorage.getItem('sm:view')).toBe('list')
+  })
+
+  it('opens the PDF in place and returns to the same filtered, expanded library', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.type(screen.getByRole('textbox', { name: 'Search pieces' }), 'Romance')
+    await user.click(screen.getByText('Romance', { selector: 'summary strong' }))
+    const open = screen.getByRole('button', { name: 'Open PDF for Romance' })
+    const openWindow = vi.spyOn(window, 'open')
+    await user.click(open)
+
+    expect(await screen.findByRole('dialog', { name: 'PDF: Romance' })).toBeTruthy()
+    expect(await screen.findByText('PDF content: https://example.test/music.pdf')).toBeTruthy()
+    expect(openWindow).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: '← Library' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect((screen.getByRole('textbox', { name: 'Search pieces' }) as HTMLInputElement).value).toBe('Romance')
+    expect(screen.getByRole('button', { name: 'Open PDF for Romance' })).toBe(open)
+    expect(document.activeElement).toBe(open)
+    openWindow.mockRestore()
+  })
+
+  it('does not reopen the viewer when a signed URL arrives after closing', async () => {
+    let resolveUrl!: (value: { data: { signedUrl: string }; error: null }) => void
+    mocks.signedUrl.mockReturnValueOnce(new Promise((resolve) => { resolveUrl = resolve }))
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    expect(screen.getByRole('status').textContent).toContain('Opening PDF')
+    await user.keyboard('{Escape}')
+    await act(async () => { resolveUrl({ data: { signedUrl: 'https://example.test/music.pdf' }, error: null }) })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('keeps the library reachable when the PDF link cannot be created', async () => {
+    mocks.signedUrl.mockResolvedValueOnce({ data: null, error: new Error('Access denied') })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Access denied')
+    await user.click(screen.getByRole('button', { name: '← Library' }))
+    expect(screen.getByRole('button', { name: 'Open PDF for Romance' })).toBeTruthy()
   })
 })
