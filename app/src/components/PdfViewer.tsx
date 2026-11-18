@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
+import { scoreImageType } from '../lib/scoreImage'
 
 function PdfPage({ doc, number, width, scrollRoot }: {
   doc: PDFDocumentProxy
@@ -88,12 +89,15 @@ export function PdfViewer({ url, onLoad }: { url: string; onLoad: (pages: number
   const onLoadRef = useRef(onLoad)
   useEffect(() => { onLoadRef.current = onLoad }, [onLoad])
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null)
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const [width, setWidth] = useState(0)
 
   useEffect(() => {
     let active = true
     let task: PDFDocumentLoadingTask | undefined
+    let objectUrl: string | undefined
+    const controller = new AbortController()
     void (async () => {
       try {
         const pdfjs = await import('pdfjs-dist')
@@ -107,15 +111,33 @@ export function PdfViewer({ url, onLoad }: { url: string; onLoad: (pages: number
           onLoadRef.current(loaded.numPages)
         }
       } catch (reason) {
-        if (active) {
+        if (!active) return
+        if (reason instanceof Error && reason.name === 'InvalidPDFException') {
+          try {
+            const response = await fetch(url, { signal: controller.signal })
+            if (!response.ok) throw new Error(`Score request failed (${response.status})`)
+            const bytes = new Uint8Array(await response.arrayBuffer())
+            const type = scoreImageType(bytes)
+            if (!type) throw new Error('The score is neither a supported image nor a valid PDF')
+            if (!active) return
+            objectUrl = URL.createObjectURL(new Blob([bytes], { type }))
+            setImageUrl(objectUrl)
+            return
+          } catch (imageError) {
+            if (!active) return
+            console.error('Could not load score image', imageError)
+          }
+        } else {
           console.error('Could not load PDF', reason)
-          setError(true)
         }
+        setError(true)
       }
     })()
     return () => {
       active = false
+      controller.abort()
       if (task) void task.destroy().catch((reason: unknown) => console.error('Could not close PDF', reason))
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
   }, [url])
 
@@ -131,8 +153,9 @@ export function PdfViewer({ url, onLoad }: { url: string; onLoad: (pages: number
 
   return (
     <div ref={setScrollRoot} className="pdf-scroll" aria-label="PDF pages" tabIndex={0}>
-      {error && <p className="pdf-message" role="alert">Could not load the PDF. Check your connection, then close and reopen it.</p>}
-      {!error && !doc && <p className="pdf-message" role="status">Loading PDF…</p>}
+      {error && <p className="pdf-message" role="alert">Could not load the score. Check your connection and file format, then close and reopen it.</p>}
+      {!error && !doc && !imageUrl && <p className="pdf-message" role="status">Loading score…</p>}
+      {!error && imageUrl && <img className="score-image" src={imageUrl} alt="Sheet music" onError={() => setError(true)} />}
       {doc && Array.from({ length: doc.numPages }, (_, index) => (
         <PdfPage key={index} doc={doc} number={index + 1} width={width} scrollRoot={scrollRoot} />
       ))}

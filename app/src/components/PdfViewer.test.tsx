@@ -49,7 +49,46 @@ describe('PDF viewer', () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     mocks.getDocument.mockReturnValueOnce({ promise: Promise.reject(new Error('offline')), destroy: mocks.destroy })
     render(<PdfViewer url="https://example.test/a.pdf" onLoad={vi.fn()} />)
-    expect((await screen.findByRole('alert')).textContent).toContain('Could not load the PDF')
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load the score')
     expect(log).toHaveBeenCalled()
+  })
+
+  it('displays a JPEG even when its URL and response type say PDF', async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:score')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    const imageBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/pdf' }),
+      arrayBuffer: async () => imageBytes.buffer,
+    })))
+    mocks.getDocument.mockReturnValueOnce({
+      promise: Promise.reject(Object.assign(new Error('Invalid PDF'), { name: 'InvalidPDFException' })),
+      destroy: mocks.destroy,
+    })
+    const onLoad = vi.fn()
+    const { unmount } = render(<PdfViewer url="https://example.test/score.pdf" onLoad={onLoad} />)
+
+    const image = await screen.findByRole('img', { name: 'Sheet music' })
+    expect(image.getAttribute('src')).toBe('blob:score')
+    expect(createObjectURL.mock.calls[0][0].type).toBe('image/jpeg')
+    expect(onLoad).not.toHaveBeenCalled()
+    unmount()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:score')
+  })
+
+  it('reports an invalid file instead of displaying it as an image', async () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer })))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mocks.getDocument.mockReturnValueOnce({
+      promise: Promise.reject(Object.assign(new Error('Invalid PDF'), { name: 'InvalidPDFException' })),
+      destroy: mocks.destroy,
+    })
+    render(<PdfViewer url="https://example.test/score.pdf" onLoad={vi.fn()} />)
+    expect((await screen.findByRole('alert')).textContent).toContain('Could not load the score')
+    expect(screen.queryByRole('img')).toBeNull()
   })
 })
