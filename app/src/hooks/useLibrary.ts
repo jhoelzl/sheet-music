@@ -296,7 +296,7 @@ export function useLibrary() {
     const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
     setPreviewLoading(false)
     if (error) { tab?.close(); notify(error.message) }
-    else if (tab) { tab.opener = null; tab.location.href = data.signedUrl }
+    else if (tab) { tab.opener = null; tab.location.href = `${data.signedUrl}#view=FitH` }
     else setPreview({ title: p.title, url: data.signedUrl, pages })
   }
 
