@@ -1,3 +1,4 @@
+import { pdfViewerUrl } from '../components/PdfViewer'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { PDF_SIGNED_URL_TTL_SECONDS, PDF_STORAGE_BUCKET } from '../config'
@@ -296,7 +297,7 @@ export function useLibrary() {
     const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
     setPreviewLoading(false)
     if (error) { tab?.close(); notify(error.message) }
-    else if (tab) { tab.opener = null; tab.location.href = `${data.signedUrl}#view=FitH` }
+    else if (tab) { tab.opener = null; tab.location.href = pdfViewerUrl(data.signedUrl, p.title) }
     else setPreview({ title: p.title, url: data.signedUrl, pages })
   }
 
