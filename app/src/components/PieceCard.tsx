@@ -11,14 +11,12 @@ import { TagInput } from './TagInput'
 
 export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
   const status = statusOf(p)
-  const pending = lib.countingPageIds.has(p.id)
   return (
     <article className="piece">
       <div className="piece-head">
         <div className="piece-titleline">
           <PieceTitle lib={lib} p={p} />
           {p.pdf_pages ? <span className="page-count" title="Pages in the PDF">{p.pdf_pages} {p.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
-          {pending && <span className="skeleton" role="status" aria-label="Counting pages" />}
         </div>
         <div className="piece-actions">
           {!p.pdf_path && (
