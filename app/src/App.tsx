@@ -79,7 +79,7 @@ export default function App() {
     <div className={`app-shell${isIOS ? ' ios-native' : ''}${isIOS && session ? ' has-navigation' : ''}`}>
       <header className="site-header">
         <div className="header-inner">
-          <div className="brand"><span aria-hidden="true">♪</span><h1>Sheet Music</h1></div>
+          <div className="brand"><img className="brand-icon" src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" /><h1>Sheet Music</h1></div>
           {!isIOS && navigation}
           <div className="header-actions">
             <button type="button" className="link" title="Reload the app; unsaved changes will be lost" onClick={() => window.location.reload()}>Reload app</button>
