@@ -273,6 +273,8 @@ export function useLibrary() {
 
   const openPdf = async (p: Piece) => {
     if (!p.pdf_path || previewLoading) return
+    // Open the tab synchronously (inside the click) so popup blockers allow it
+    const tab = window.open('', '_blank')
     let pages = p.pdf_pages ?? null
     if (pages == null && !countFailed.has(p.id)) {
       setCountingPageIds((prev) => new Set(prev).add(p.id))
@@ -293,7 +295,8 @@ export function useLibrary() {
     setPreviewLoading(true)
     const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
     setPreviewLoading(false)
-    if (error) notify(error.message)
+    if (error) { tab?.close(); notify(error.message) }
+    else if (tab) { tab.opener = null; tab.location.href = data.signedUrl }
     else setPreview({ title: p.title, url: data.signedUrl, pages })
   }
 
