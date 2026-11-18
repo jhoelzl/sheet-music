@@ -26,7 +26,7 @@ export function PieceTitle({ lib, p }: Props) {
 export function EditDeleteButtons({ lib, p }: Props) {
   return (
     <>
-      {p.pdf_path && <button className="icon-btn edit" aria-label={`Preview PDF for ${p.title}`} title="Preview PDF" onClick={() => void lib.openPdf(p)}>{OpenIcon}</button>}
+      {p.pdf_path && <button type="button" className="open-pdf-btn" aria-label={`Open PDF for ${p.title}`} title="Open PDF in full screen" onClick={() => void lib.openPdf(p)}>{OpenIcon} Open PDF</button>}
       <button className="icon-btn" aria-label={`Delete ${p.title}`} title="Delete piece" onClick={() => lib.remove(p)}>{CloseIcon}</button>
     </>
   )

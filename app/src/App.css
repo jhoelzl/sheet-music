@@ -217,6 +217,9 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .piece-actions .icon-btn { margin: 0; }
 .icon-btn.small { width: 22px; height: 22px; margin: 0; font-size: 11px; }
 .title-edit { height: 32px; padding: 0 10px; font-size: 16px; font-weight: 600; }
+.open-pdf-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; margin-right: 6px; padding: 0 14px; color: #fff; background: var(--accent); border: 0; border-radius: 99px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.open-pdf-btn:hover { filter: brightness(1.1); }
+.open-pdf-btn svg { width: 16px; height: 16px; }
 .attach-btn { display: inline-flex; align-items: center; height: 28px; margin-right: 6px; padding: 0 12px; color: var(--accent); background: var(--accent-soft); border: 1px dashed var(--accent-line); border-radius: 99px; font-size: 12px; font-weight: 500; cursor: pointer; }
 .attach-btn:hover { border-style: solid; }
 .attach-btn.busy { opacity: .6; cursor: progress; }
@@ -254,8 +257,8 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .sort-field { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; white-space: nowrap; }
 .sort-field select { width: auto; height: 40px; padding: 0 10px; }
 .toasts { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: grid; gap: 8px; max-width: min(420px, calc(100vw - 40px)); }
-.modal-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px; background: rgba(24,24,27,.55); }
-.modal { display: flex; flex-direction: column; width: min(960px, 100%); height: min(92vh, 1100px); background: var(--surface); border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
+.modal-backdrop { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 0; background: rgba(24,24,27,.55); }
+.modal { display: flex; flex-direction: column; width: 100%; height: 100dvh; background: var(--surface); border-radius: 0; box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden; }
 .modal-head { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .modal-title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .modal-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -407,10 +410,9 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
   .cal-scroll { flex-basis: 100%; width: 100%; }
   .cal-detail-list { grid-template-columns: 1fr; }
 
-  /* PDF preview as a bottom sheet */
+  /* PDF preview slides up full screen */
   .modal-backdrop { place-items: end stretch; padding: 0; }
-  .modal { width: 100%; height: calc(100dvh - 24px); border-radius: 16px 16px 0 0; animation: sheet-up .25s ease-out; }
-  .modal::before { content: ''; flex-shrink: 0; width: 36px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--line); }
+  .modal { animation: sheet-up .25s ease-out; }
   .modal-head { padding: 8px 12px 10px; gap: 8px; }
 }
 @keyframes sheet-up { from { transform: translateY(100%); } }
