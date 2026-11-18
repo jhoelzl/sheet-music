@@ -19,6 +19,14 @@ instead of bundling the references into the app:
 op run --env-file=.env -- npm run ios:sync
 ```
 
+The iOS app loads the deployed GitHub Pages site on every launch (bypassing the
+local cache), so web updates appear without reinstalling and an internet
+connection is required to start. Native or Capacitor config changes still need a
+rebuild. The first launch after switching from the bundled app may require
+signing in again because the storage origin differs. Capacitor documents
+`server.url` as a live-reload feature, so this is not an officially supported
+production setup; only trust the configured site with the native bridge.
+
 In Xcode, select a signing team and a connected device, then build and run the
 app. Run the sync command again after changing the web app.
 

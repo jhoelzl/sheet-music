@@ -2,7 +2,19 @@ import Capacitor
 import UIKit
 import WebKit
 
+private class FreshWebView: WKWebView {
+    override func load(_ request: URLRequest) -> WKNavigation? {
+        var freshRequest = request
+        freshRequest.cachePolicy = .reloadIgnoringLocalCacheData
+        return super.load(freshRequest)
+    }
+}
+
 class AppBridgeViewController: CAPBridgeViewController {
+    override func webView(with frame: CGRect, configuration: WKWebViewConfiguration) -> WKWebView {
+        return FreshWebView(frame: frame, configuration: configuration)
+    }
+
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(YouTubePlayerPlugin())
     }
