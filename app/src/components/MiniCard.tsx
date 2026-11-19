@@ -17,6 +17,7 @@ export function MiniCard({ lib, p, board = false }: { lib: Library; p: Piece; bo
       <div className="mini-meta">
         <InstrumentIcons p={p} />
         {p.pdf_pages ? <span className="page-count">{p.pdf_pages} p.</span> : null}
+        {p.musical_key && <span className="page-count">{p.musical_key}</span>}
         {p.last_practiced && <span className="practiced-text">{practicedText(p.last_practiced)}</span>}
       </div>
       <TagList lib={lib} p={p} />

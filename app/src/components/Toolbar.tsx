@@ -14,7 +14,7 @@ export function Toolbar({ lib }: { lib: Library }) {
       <div className="toolbar">
         <label className="search-field">
           <span aria-hidden="true">⌕</span>
-          <input aria-label="Search pieces" placeholder="Search title, composer, notes…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <input aria-label="Search pieces" placeholder="Search title, subtitle, composer, key, notes…" value={search} onChange={(e) => setSearch(e.target.value)} />
           {search && <button type="button" className="search-clear" aria-label="Clear search" onClick={() => setSearch('')}>✕</button>}
         </label>
         <button type="button" className={`btn filter-toggle${activeFilters ? ' active' : ''}`} aria-expanded={filtersOpen} aria-controls="library-filters" onClick={() => setFiltersOpen(!filtersOpen)}>

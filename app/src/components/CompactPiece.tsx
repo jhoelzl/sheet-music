@@ -11,8 +11,11 @@ export function CompactPiece({ lib, p }: { lib: Library; p: Piece }) {
       <summary className="compact-piece-summary">
         <span className="compact-piece-icon" aria-hidden="true">♪</span>
         <span className="compact-piece-info">
-          <strong>{p.title}</strong>
-          <span>{lib.composerNameOf(p.composer_id)}{p.instruments.length > 0 ? ` · ${p.instruments.join(', ')}` : ''}</span>
+          <span className="compact-piece-title">
+            <strong>{p.title}</strong>
+            {p.subtitle && <span className="compact-piece-subtitle">{p.subtitle}</span>}
+          </span>
+          <span>{lib.composerNameOf(p.composer_id)}{p.instruments.length > 0 ? ` · ${p.instruments.join(', ')}` : ''}{p.musical_key ? ` · ${p.musical_key}` : ''}</span>
         </span>
         <span className="compact-piece-progress">{statusOf(p)}%</span>
         <span className="compact-piece-chevron" aria-hidden="true">⌄</span>
