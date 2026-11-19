@@ -182,7 +182,7 @@ export function useLibrary() {
   const remove = (p: Piece) => {
     setHiddenIds((h) => new Set(h).add(p.id))
     const unhide = () => setHiddenIds((h) => { const n = new Set(h); n.delete(p.id); return n })
-    const toastId = notify(`Deleted "${p.title}"`, 'info', () => {
+    const toastId = notify(`Removed "${p.title}" from your library`, 'info', () => {
       window.clearTimeout(deleteTimers.current.get(p.id))
       deleteTimers.current.delete(p.id)
       unhide()
