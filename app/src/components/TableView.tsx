@@ -36,7 +36,7 @@ const TOGGLE_LABELS: Record<TableColumnId, string> = {
 }
 
 export function TableView({ lib }: { lib: Library }) {
-  const { tableSort, sortBy, tableRows, composerNameOf, update, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns } = lib
+  const { tableSort, sortBy, tableRows, composerNamesOf, update, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns } = lib
   const hidden = new Set(tableHiddenColumns)
   const visibleColumns = COLUMNS.filter((c) => c.id === 'title' || !hidden.has(c.id))
   return (
@@ -81,7 +81,7 @@ export function TableView({ lib }: { lib: Library }) {
                   case 'title':
                     return <td key={column.id} className={column.className} data-label={column.dataLabel}><PieceTitle lib={lib} p={p} /></td>
                   case 'composer':
-                    return <td key={column.id} className={column.className} data-label={column.dataLabel}>{composerNameOf(p.composer_id)}</td>
+                    return <td key={column.id} className={column.className} data-label={column.dataLabel}>{composerNamesOf(p)}</td>
                   case 'instruments':
                     return <td key={column.id} className={column.className} data-label={column.dataLabel}><InstrumentIcons p={p} /></td>
                   case 'tags':

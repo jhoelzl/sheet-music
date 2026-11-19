@@ -13,13 +13,23 @@ export function AddForms({ lib }: { lib: Library }) {
     )
   }
   if (panel === 'piece') {
-    const { newInstruments, setNewInstruments } = lib
+    const { newInstruments, setNewInstruments, newComposerIds, setNewComposerIds } = lib
     return (
       <form className="panel" onSubmit={(e) => void lib.addPiece(e)}>
-        <label>Composer<select value={lib.composerId} onChange={(e) => lib.setComposerId(e.target.value)} required>
-          <option value="">Choose…</option>
-          {composers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select></label>
+        <div className="field-group">
+          <span>Composers</span>
+          <div className="composer-check-list" role="group" aria-label="Composers">
+            {composers.map((c) => (
+              <label key={c.id} className="composer-choice">
+                <input type="checkbox" checked={newComposerIds.includes(c.id)}
+                  onChange={() => setNewComposerIds(newComposerIds.includes(c.id)
+                    ? newComposerIds.filter((id) => id !== c.id)
+                    : [...newComposerIds, c.id])} />
+                {c.name}
+              </label>
+            ))}
+          </div>
+        </div>
         <label className="grow">Title<input autoFocus placeholder="Piece title" value={lib.title} onChange={(e) => lib.setTitle(e.target.value)} required /></label>
         <label>Subtitle<input placeholder="Optional subtitle" value={lib.newSubtitle} onChange={(e) => lib.setNewSubtitle(e.target.value)} /></label>
         <label>Key<input placeholder="e.g. C major" value={lib.newMusicalKey} onChange={(e) => lib.setNewMusicalKey(e.target.value)} /></label>

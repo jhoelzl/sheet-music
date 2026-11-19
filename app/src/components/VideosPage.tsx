@@ -12,18 +12,29 @@ export function VideosPage() {
 
   useEffect(() => {
     void (async () => {
-      const [c, p] = await Promise.all([
+      const [c, p, pc] = await Promise.all([
         supabase.from('sm_composers').select('*'),
         supabase.from('sm_pieces').select('*').order('title'),
+        supabase.from('sm_piece_composers').select('piece_id, composer_id, position').order('position'),
       ])
-      if (c.error || p.error) { setError((c.error ?? p.error)!.message); return }
+      if (c.error || p.error || pc.error) { setError((c.error ?? p.error ?? pc.error)!.message); return }
       const names = new Map((c.data as Composer[]).map((x) => [x.id, x.name]))
+      const composerIdsByPiece = new Map<string, string[]>()
+      for (const link of pc.data ?? []) {
+        const ids = composerIdsByPiece.get(link.piece_id) ?? []
+        ids.push(link.composer_id)
+        composerIdsByPiece.set(link.piece_id, ids)
+      }
       const out: Video[] = []
       for (const piece of p.data as Piece[]) {
+        const composerNames = [...new Set([piece.composer_id, ...(composerIdsByPiece.get(piece.id) ?? [])])]
+          .map((id) => names.get(id))
+          .filter(Boolean)
+          .join(', ')
         for (const link of piece.links ?? []) {
           const href = safeUrl(link.url)
           const id = href && youtubeId(href)
-          if (href && id) out.push({ key: `${piece.id}:${id}`, id, href, title: piece.title, composer: names.get(piece.composer_id) ?? '' })
+          if (href && id) out.push({ key: `${piece.id}:${id}`, id, href, title: piece.title, composer: composerNames })
         }
       }
       setVideos(out)

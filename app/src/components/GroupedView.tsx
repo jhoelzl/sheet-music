@@ -8,7 +8,7 @@ export function GroupedView({ lib }: { lib: Library }) {
   return (
     <div className="composer-list">
       {composers.filter((c) => !hiddenIds.has(`composer:${c.id}`)).map((c) => {
-        const list = sortPieces(visible.filter((p) => p.composer_id === c.id), sort)
+        const list = sortPieces(visible.filter((p) => lib.composerIdsOf(p).includes(c.id)), sort)
         if (!list.length && filtering) return null
         return (
           <section className="composer-section" key={c.id}>
@@ -16,7 +16,7 @@ export function GroupedView({ lib }: { lib: Library }) {
             {list.length === 0 && (
               <div className="muted empty-row">
                 <span>No pieces yet.</span>
-                <button type="button" className="btn" onClick={() => { lib.setComposerId(c.id); lib.setPanel('piece'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>+ Add piece</button>
+                <button type="button" className="btn" onClick={() => { lib.setNewComposerIds([c.id]); lib.setPanel('piece'); window.scrollTo({ top: 0, behavior: 'smooth' }) }}>+ Add piece</button>
               </div>
             )}
             {list.map((p) => <CompactPiece key={p.id} lib={lib} p={p} />)}

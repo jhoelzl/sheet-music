@@ -24,7 +24,7 @@ export function ComposersPage({ lib }: { lib: Library }) {
       {!composers.length && <div className="empty"><h3>No composers yet</h3><p>Add your first composer to get started.</p></div>}
       <div className="composer-list">
         {composers.map((c) => {
-          const pieces = lib.pieces.filter((p) => p.composer_id === c.id && !lib.hiddenIds.has(p.id))
+          const pieces = lib.pieces.filter((p) => lib.composerIdsOf(p).includes(c.id) && !lib.hiddenIds.has(p.id))
           const videos = composerVideos(pieces, c.name)
           return (
             <section className="composer-section" key={c.id}>
