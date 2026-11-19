@@ -1,5 +1,6 @@
 import type { Library } from '../hooks/useLibrary'
 import { INSTRUMENTS, toggleInstrument } from '../lib/instruments'
+import { KeySelect } from './KeySelect'
 import { TagInput } from './TagInput'
 
 export function AddForms({ lib }: { lib: Library }) {
@@ -32,7 +33,7 @@ export function AddForms({ lib }: { lib: Library }) {
         </div>
         <label className="grow">Title<input autoFocus placeholder="Piece title" value={lib.title} onChange={(e) => lib.setTitle(e.target.value)} required /></label>
         <label>Subtitle<input placeholder="Optional subtitle" value={lib.newSubtitle} onChange={(e) => lib.setNewSubtitle(e.target.value)} /></label>
-        <label>Key<input placeholder="e.g. C major" value={lib.newMusicalKey} onChange={(e) => lib.setNewMusicalKey(e.target.value)} /></label>
+        <label>Key<KeySelect value={lib.newMusicalKey} onChange={lib.setNewMusicalKey} /></label>
         <div className="field-group" role="group" aria-label="Instruments">
           <span>Instrument</span>
           <div className="instrument-toggle">
