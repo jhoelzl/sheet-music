@@ -221,9 +221,16 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .piece-actions .icon-btn { margin: 0; }
 .icon-btn.small { width: 22px; height: 22px; margin: 0; font-size: 11px; }
 .piece-composer-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--muted); font-size: 12px; }
-.composer-check-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.composer-choice { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; font-size: 12px; font-weight: 500; white-space: nowrap; }
-.composer-choice input, .setlist-tune-choice input { width: 15px; height: 15px; margin: 0; padding: 0; accent-color: var(--accent); }
+.composer-picker, .composer-picker-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.composer-picker .tag { padding-right: 4px; }
+.composer-search { position: relative; }
+.composer-search input { width: 160px; height: 32px; font-size: 12px; }
+.composer-results { position: absolute; z-index: 3; top: calc(100% + 4px); left: 0; width: max(100%, 200px); max-width: min(300px, 80vw); max-height: 240px; overflow-y: auto; padding: 4px; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 4px 16px #0002; }
+.composer-results button, .composer-results span { display: block; width: 100%; padding: 8px; text-align: left; font-size: 12px; }
+.composer-results button { color: var(--text); background: transparent; border: 0; border-radius: 6px; }
+.composer-results button:hover, .composer-results button:focus-visible { background: var(--hover); }
+.composer-results span { color: var(--muted); }
+.setlist-tune-choice input { width: 15px; height: 15px; margin: 0; padding: 0; accent-color: var(--accent); }
 .title-edit { height: 32px; padding: 0 10px; font-size: 16px; font-weight: 600; }
 .open-pdf-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; margin-right: 6px; padding: 0 14px; color: #fff; background: var(--accent); border: 0; border-radius: 99px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .open-pdf-btn:hover { filter: brightness(1.1); }

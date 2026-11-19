@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLibrary } from '../hooks/useLibrary'
 import { Library } from './Library'
+import { ComposerPicker } from './ComposerPicker'
 import { PdfPreview } from './PdfPreview'
 import { Toasts } from './Toasts'
 
@@ -150,8 +151,13 @@ describe('focused library', () => {
     render(<TestLibrary />)
     await screen.findByText('Romance', { selector: 'summary strong' })
     await user.click(screen.getByRole('button', { name: '+ Piece' }))
-    await user.click(screen.getByLabelText('Clara Schumann'))
-    await user.click(screen.getByLabelText('Fanny Mendelssohn'))
+    const composerSearch = screen.getByRole('searchbox', { name: 'Search composers for new piece' })
+    await user.type(composerSearch, 'schum')
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('button', { name: 'Remove composer Clara Schumann' })).toBeTruthy()
+    await user.type(composerSearch, 'FANNY')
+    await user.click(screen.getByRole('button', { name: 'Fanny Mendelssohn' }))
+    expect(screen.getByRole('button', { name: 'Remove composer Fanny Mendelssohn' })).toBeTruthy()
     await user.type(screen.getByLabelText('Title'), 'Nocturne')
     await user.type(screen.getByLabelText('Subtitle'), 'Op. 9 No. 2')
     await user.selectOptions(screen.getByLabelText('Key'), 'Eb major')
@@ -206,15 +212,52 @@ describe('focused library', () => {
     const user = userEvent.setup()
     render(<TestLibrary />)
     await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
-    await user.click(screen.getByLabelText('Fanny Mendelssohn'))
+    const composerSearch = screen.getByRole('searchbox', { name: 'Search composers for romance' })
+    expect((screen.getByRole('button', { name: 'Remove composer Clara Schumann' }) as HTMLButtonElement).disabled).toBe(true)
+    await user.type(composerSearch, 'mendels')
+    await user.click(screen.getByRole('button', { name: 'Fanny Mendelssohn' }))
 
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_piece_composers', [{ piece_id: 'p1', composer_id: 'c2', position: 1 }]))
-    await waitFor(() => expect((screen.getByLabelText('Fanny Mendelssohn') as HTMLInputElement).checked).toBe(true))
-    await user.click(screen.getByLabelText('Clara Schumann'))
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Remove composer Clara Schumann' }) as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.getByRole('button', { name: 'Remove composer Fanny Mendelssohn' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Remove composer Clara Schumann' }))
     await waitFor(() => {
       expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { composer_id: 'c2' }, 'id', 'p1')
       expect(mocks.delete).toHaveBeenCalledWith('sm_piece_composers', 'piece_id', 'p1', ['c1'])
     })
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Remove composer Fanny Mendelssohn' }) as HTMLButtonElement).disabled).toBe(true))
+  })
+
+  it('only suggests unselected composers and allows removing them from a new piece', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    const search = screen.getByRole('searchbox', { name: 'Search composers for new piece' })
+    await user.type(search, 'clara{Enter}')
+    await user.type(search, 'clara')
+    expect(screen.getByText('No matching composers')).toBeTruthy()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'Remove composer Clara Schumann' }))
+    await user.type(search, 'clara')
+    expect(screen.getByRole('button', { name: 'Clara Schumann' })).toBeTruthy()
+  })
+
+  it('prevents overlapping composer edits while a save is pending', async () => {
+    let finish!: () => void
+    const save = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))
+    const user = userEvent.setup()
+    render(<ComposerPicker composers={[
+      { id: 'c1', name: 'Clara Schumann', born_year: null, died_year: null, notes: null },
+      { id: 'c2', name: 'Fanny Mendelssohn', born_year: null, died_year: null, notes: null },
+    ]} selectedIds={['c1']} label="Composers for Romance" onChange={save} />)
+    const search = screen.getByRole('searchbox', { name: 'Search composers for romance' })
+    await user.type(search, 'fanny{Enter}')
+    expect(save).toHaveBeenCalledWith(['c1', 'c2'])
+    expect((search as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Remove composer Clara Schumann' }) as HTMLButtonElement).disabled).toBe(true)
+    await act(async () => finish())
+    expect((search as HTMLInputElement).disabled).toBe(false)
   })
 
   it('updates titles with apostrophes in the piece list', async () => {
