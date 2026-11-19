@@ -6,8 +6,14 @@ import { Library } from './Library'
 import { PdfPreview } from './PdfPreview'
 import { Toasts } from './Toasts'
 
-const mocks = vi.hoisted(() => ({ from: vi.fn(), signedUrl: vi.fn(), update: vi.fn() }))
-vi.mock('../supabase', () => ({ supabase: { from: mocks.from, storage: { from: () => ({ createSignedUrl: mocks.signedUrl }) } } }))
+const mocks = vi.hoisted(() => ({ from: vi.fn(), signedUrl: vi.fn(), update: vi.fn(), insert: vi.fn() }))
+vi.mock('../supabase', () => ({
+  supabase: {
+    from: mocks.from,
+    auth: { getUser: () => Promise.resolve({ data: { user: null } }) },
+    storage: { from: () => ({ createSignedUrl: mocks.signedUrl }) },
+  },
+}))
 vi.mock('./PdfViewer', () => ({ PdfViewer: ({ url }: { url: string }) => <div>PDF content: {url}</div> }))
 
 function TestLibrary() {
@@ -25,7 +31,7 @@ describe('focused library', () => {
           const data = table === 'sm_composers'
             ? [{ id: 'c1', name: 'Clara Schumann' }, { id: 'c2', name: 'Fanny Mendelssohn' }]
             : table === 'sm_pieces'
-              ? [{ id: 'p1', composer_id: 'c1', title: 'Romance', pdf_path: 'romance.pdf', pdf_pages: 2, instruments: ['piano'], tags: ['calm'], play_progress: 50, links: [] }]
+              ? [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', musical_key: 'C major', pdf_path: 'romance.pdf', pdf_pages: 2, instruments: ['piano'], tags: ['calm'], play_progress: 50, links: [] }]
               : []
           const result = { data, error: null }
           return Object.assign(Promise.resolve(result), { limit: () => Promise.resolve(result) })
@@ -37,6 +43,10 @@ describe('focused library', () => {
           return Promise.resolve({ error: null })
         },
       }),
+      insert: (values: unknown) => {
+        mocks.insert(table, values)
+        return Promise.resolve({ error: null })
+      },
     }))
   })
 
@@ -70,6 +80,38 @@ describe('focused library', () => {
     await user.click(screen.getByRole('button', { name: 'Clear filters' }))
     expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Filters' })).toBeTruthy()
+  })
+
+  it('finds pieces by a substring and ignores accents', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    const search = screen.getByRole('textbox', { name: 'Search pieces' })
+
+    await user.type(search, 'mance')
+    expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
+    await user.clear(search)
+    await user.type(search, 'etude')
+    expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
+  })
+
+  it('adds a piece with an optional subtitle and musical key', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    await user.selectOptions(screen.getByLabelText('Composer'), 'c1')
+    await user.type(screen.getByLabelText('Title'), 'Nocturne')
+    await user.type(screen.getByLabelText('Subtitle'), 'Op. 9 No. 2')
+    await user.type(screen.getByLabelText('Key'), 'E-flat major')
+    await user.click(screen.getByRole('button', { name: 'Add piece' }))
+
+    await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_pieces', expect.objectContaining({
+      title: 'Nocturne',
+      subtitle: 'Op. 9 No. 2',
+      musical_key: 'E-flat major',
+      composer_id: 'c1',
+    })))
   })
 
   it('respects a previously selected view and allows switching to the focused list', async () => {
@@ -112,6 +154,23 @@ describe('focused library', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Composer for Romance' }), 'c2')
 
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { composer_id: 'c2' }, 'id', 'p1'))
+  })
+
+  it('displays and saves a piece subtitle and key', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    expect(screen.getByText('Étude', { selector: '.piece-subtitle' })).toBeTruthy()
+    await user.clear(screen.getByRole('textbox', { name: 'Subtitle for Romance' }))
+    await user.type(screen.getByRole('textbox', { name: 'Subtitle for Romance' }), 'Op. 1')
+    await user.clear(screen.getByRole('textbox', { name: 'Key for Romance' }))
+    await user.type(screen.getByRole('textbox', { name: 'Key for Romance' }), 'A minor')
+    await user.tab()
+
+    await waitFor(() => {
+      expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { subtitle: 'Op. 1' }, 'id', 'p1')
+      expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { musical_key: 'A minor' }, 'id', 'p1')
+    })
   })
 
   it('removes a piece from the library and supports undo', async () => {

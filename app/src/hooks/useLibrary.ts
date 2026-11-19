@@ -73,6 +73,8 @@ export function useLibrary() {
   const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>('all')
   const [newInstruments, setNewInstruments] = useState<Instrument[]>(['piano'])
   const [newTags, setNewTags] = useState<string[]>([])
+  const [newSubtitle, setNewSubtitle] = useState('')
+  const [newMusicalKey, setNewMusicalKey] = useState('')
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [composerName, setComposerName] = useState('')
   const [composerSaving, setComposerSaving] = useState(false)
@@ -150,9 +152,18 @@ export function useLibrary() {
       const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, file, { contentType: 'application/pdf' })
       if (up.error) { notify(`Upload failed: ${up.error.message}`); return }
     }
-    const ok = await run(supabase.from('sm_pieces').insert({ title: title.trim(), composer_id: composerId, pdf_path, ...(pdf_pages ? { pdf_pages } : {}), instruments: newInstruments, ...(newTags.length ? { tags: newTags } : {}) }))
+    const ok = await run(supabase.from('sm_pieces').insert({
+      title: title.trim(),
+      subtitle: newSubtitle.trim() || null,
+      musical_key: newMusicalKey.trim() || null,
+      composer_id: composerId,
+      pdf_path,
+      ...(pdf_pages ? { pdf_pages } : {}),
+      instruments: newInstruments,
+      ...(newTags.length ? { tags: newTags } : {}),
+    }))
     if (!ok) return
-    setTitle(''); setFile(null); setNewInstruments(['piano']); setNewTags([]); setPanel(null)
+    setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setFile(null); setNewInstruments(['piano']); setNewTags([]); setPanel(null)
   }
 
   const practicedToday = new Set(logs.filter((l) => l.practiced_on === todayISO()).map((l) => l.piece_id))
@@ -301,12 +312,13 @@ export function useLibrary() {
     }
   }
 
-  const terms = search.toLowerCase().split(/\s+/).filter(Boolean)
+  const normalizeSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  const terms = normalizeSearch(search).split(/\s+/).filter(Boolean)
   const visible = pieces.filter((p) => {
     if (hiddenIds.has(p.id)) return false
     const cn = composers.find((c) => c.id === p.composer_id)?.name ?? ''
     if (terms.length) {
-      const haystack = `${p.title} ${cn} ${p.notes ?? ''} ${p.instruments.join(' ')} ${(p.tags ?? []).join(' ')}`.toLowerCase()
+      const haystack = normalizeSearch([p.title, p.subtitle, p.musical_key, cn, p.notes, ...p.instruments, ...(p.tags ?? [])].filter(Boolean).join(' '))
       if (!terms.every((t) => haystack.includes(t))) return false
     }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
@@ -354,7 +366,7 @@ export function useLibrary() {
     search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, composerNameOf,
     // new-item form state
-    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, composerId, setComposerId, setFile, newInstruments, setNewInstruments, newTags, setNewTags,
+    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, composerId, setComposerId, setFile, newInstruments, setNewInstruments, newTags, setNewTags,
     // actions
     dismissToast, closePdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, remove, startEdit, commitEdit,
     addLink, removeLink, attachPdf, removeComposer, startEditComposer, commitComposerEdit, openPdf,

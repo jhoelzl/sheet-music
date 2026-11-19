@@ -21,6 +21,8 @@ export function AddForms({ lib }: { lib: Library }) {
           {composers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select></label>
         <label className="grow">Title<input autoFocus placeholder="Piece title" value={lib.title} onChange={(e) => lib.setTitle(e.target.value)} required /></label>
+        <label>Subtitle<input placeholder="Optional subtitle" value={lib.newSubtitle} onChange={(e) => lib.setNewSubtitle(e.target.value)} /></label>
+        <label>Key<input placeholder="e.g. C major" value={lib.newMusicalKey} onChange={(e) => lib.setNewMusicalKey(e.target.value)} /></label>
         <div className="field-group" role="group" aria-label="Instruments">
           <span>Instrument</span>
           <div className="instrument-toggle">

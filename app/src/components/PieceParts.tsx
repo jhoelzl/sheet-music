@@ -9,17 +9,23 @@ type Props = { lib: Library; p: Piece }
 export function PieceTitle({ lib, p }: Props) {
   if (lib.editingId === p.id) {
     return (
-      <input className="title-edit" aria-label="Piece title" autoFocus value={lib.draftTitle}
-        onChange={(e) => lib.setDraftTitle(e.target.value)}
-        onBlur={() => lib.commitEdit(p)}
-        onKeyDown={(e) => { if (e.key === 'Enter') lib.commitEdit(p); if (e.key === 'Escape') lib.setEditingId(null) }} />
+      <span className="piece-heading">
+        <input className="title-edit" aria-label="Piece title" autoFocus value={lib.draftTitle}
+          onChange={(e) => lib.setDraftTitle(e.target.value)}
+          onBlur={() => lib.commitEdit(p)}
+          onKeyDown={(e) => { if (e.key === 'Enter') lib.commitEdit(p); if (e.key === 'Escape') lib.setEditingId(null) }} />
+        {p.subtitle && <span className="piece-subtitle">{p.subtitle}</span>}
+      </span>
     )
   }
   return (
-    <button type="button" className="piece-title" title="Click to rename" onClick={() => lib.startEdit(p)}>
-      <span className="piece-title-text">{p.title}</span>
-      <span className="title-edit-hint" aria-hidden="true">{EditIcon}</span>
-    </button>
+    <span className="piece-heading">
+      <button type="button" className="piece-title" title="Click to rename" onClick={() => lib.startEdit(p)}>
+        <span className="piece-title-text">{p.title}</span>
+        <span className="title-edit-hint" aria-hidden="true">{EditIcon}</span>
+      </button>
+      {p.subtitle && <span className="piece-subtitle">{p.subtitle}</span>}
+    </span>
   )
 }
 

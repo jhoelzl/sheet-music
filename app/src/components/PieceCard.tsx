@@ -35,6 +35,18 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
             {lib.composers.map((composer) => <option key={composer.id} value={composer.id}>{composer.name}</option>)}
           </select>
         </label>
+        <label className="piece-detail-field">Subtitle
+          <input aria-label={`Subtitle for ${p.title}`} defaultValue={p.subtitle ?? ''} onBlur={(e) => {
+            const subtitle = e.target.value.trim()
+            if (subtitle !== (p.subtitle ?? '')) lib.update(p, { subtitle: subtitle || null })
+          }} />
+        </label>
+        <label className="piece-detail-field">Key
+          <input aria-label={`Key for ${p.title}`} defaultValue={p.musical_key ?? ''} onBlur={(e) => {
+            const musical_key = e.target.value.trim()
+            if (musical_key !== (p.musical_key ?? '')) lib.update(p, { musical_key: musical_key || null })
+          }} />
+        </label>
         <TagInput tags={p.tags ?? []} suggestions={lib.allTags} label={`Tags for ${p.title}`} onChange={(tags) => lib.update(p, { tags })} />
         <input className="notes" aria-label={`Notes for ${p.title}`} defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) lib.update(p, { notes: e.target.value }) }} />
       </div>
