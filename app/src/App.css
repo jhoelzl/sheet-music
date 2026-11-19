@@ -509,17 +509,25 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .setlist-create { display: grid; gap: 10px; margin-bottom: 16px; }
 .setlist-create label { min-width: 0; }
 .setlist-tabs { display: grid; gap: 6px; }
+.setlist-tab-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.setlist-tab-row .setlist-tab { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.setlist-tab-row .icon-btn { width: 28px; height: 28px; flex-shrink: 0; }
 .setlist-tab { padding: 10px 12px; color: var(--text); background: transparent; border: 1px solid transparent; border-radius: 8px; text-align: left; }
 .setlist-tab:hover, .setlist-tab.on { background: var(--hover); border-color: var(--line); }
 .setlist-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .setlist-heading h3 { font-size: 18px; }
 .setlist-heading p { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.setlist-heading-actions, .setlist-rename, .setlist-placeholder { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.setlist-rename input { width: 180px; }
+.setlist-placeholder { align-items: end; padding-bottom: 16px; }
+.setlist-placeholder label { flex: 1; min-width: 160px; }
 .setlist-order { display: grid; gap: 8px; padding: 14px 0 20px; margin: 0; list-style: none; }
 .setlist-order li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; }
 .setlist-number { display: grid; place-items: center; flex: 0 0 28px; height: 28px; color: var(--accent); background: var(--accent-soft); border-radius: 50%; font-size: 12px; font-weight: 700; }
 .setlist-piece-copy { display: grid; flex: 1; min-width: 0; gap: 2px; }
 .setlist-piece-copy strong { overflow-wrap: anywhere; }
 .setlist-piece-copy > span, .setlist-piece-copy small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.setlist-piece-copy .setlist-comment { height: 32px; margin-top: 4px; font-size: 12px; }
 .setlist-piece-actions { display: flex; align-items: center; flex-shrink: 0; }
 .setlist-piece-actions .icon-btn { width: 26px; height: 26px; }
 .setlist-available { padding-top: 14px; border-top: 1px solid var(--line); }
@@ -532,6 +540,9 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
   .setlist-layout { grid-template-columns: 1fr; }
   .setlist-sidebar { display: grid; gap: 12px; }
   .setlist-create { margin: 0; }
+  .setlist-order li { flex-wrap: wrap; }
+  .setlist-piece-copy { flex-basis: calc(100% - 38px); }
+  .setlist-piece-actions { margin-left: 38px; }
 }
 @media (max-width: 640px) {
   .toolbar .search-field { flex: 1 1 150px; }
