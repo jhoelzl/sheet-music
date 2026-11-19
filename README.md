@@ -1,6 +1,6 @@
 # sheet-music
 
-Web app (React + Vite + Supabase) to organise piano sheet music PDFs by composer, with metadata per piece: play progress (0/25/50/75/100%), difficulty (1-5), rating (1-5), instruments, free-form tags, notes and multiple YouTube/Spotify/Instagram/other links. It also has an inline PDF preview, a practice log with calendar, and four switchable list views (grouped, table, grid, board).
+Web app (React + Vite + Supabase) to organise piano sheet music PDFs by composer, with metadata per piece: play progress (0/25/50/75/100%), difficulty (1-5), rating (1-5), instruments, free-form tags, notes and multiple YouTube/Spotify/Instagram/other links. It also has an inline PDF preview, a practice log with calendar, four switchable list views (grouped, table, grid, board), and setlists with ordered tunes, placeholders and per-tune comments.
 
 See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
 
@@ -12,6 +12,8 @@ See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
    supabase link --project-ref <project-ref>
    ```
 3. Apply migrations with `supabase db push`. The CLI applies pending files in `supabase/migrations` in order and records them in the remote migration history. For a fresh project, this creates the `sm_composers` and `sm_pieces` tables, row-level security, the private `sheet-music` storage bucket, and database validation for piece links.
+
+   Apply `0018_setlist_planning.sql` before deploying the setlist planning features; it preserves existing setlists and entries.
 
    If the project already has these migrations applied manually, **do not run `db push` until its migration history is reconciled**. Verify that the remote database reflects every migration, then mark those versions as applied:
    ```sh
