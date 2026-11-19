@@ -30,6 +30,11 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
         </div>
       </div>
       <div className="piece-meta-row">
+        <label className="piece-composer">Composer
+          <select aria-label={`Composer for ${p.title}`} value={p.composer_id} onChange={(e) => lib.update(p, { composer_id: e.target.value })}>
+            {lib.composers.map((composer) => <option key={composer.id} value={composer.id}>{composer.name}</option>)}
+          </select>
+        </label>
         <TagInput tags={p.tags ?? []} suggestions={lib.allTags} label={`Tags for ${p.title}`} onChange={(tags) => lib.update(p, { tags })} />
         <input className="notes" aria-label={`Notes for ${p.title}`} defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) lib.update(p, { notes: e.target.value }) }} />
       </div>

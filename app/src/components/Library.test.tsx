@@ -1,17 +1,18 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLibrary } from '../hooks/useLibrary'
 import { Library } from './Library'
 import { PdfPreview } from './PdfPreview'
+import { Toasts } from './Toasts'
 
-const mocks = vi.hoisted(() => ({ from: vi.fn(), signedUrl: vi.fn() }))
+const mocks = vi.hoisted(() => ({ from: vi.fn(), signedUrl: vi.fn(), update: vi.fn() }))
 vi.mock('../supabase', () => ({ supabase: { from: mocks.from, storage: { from: () => ({ createSignedUrl: mocks.signedUrl }) } } }))
 vi.mock('./PdfViewer', () => ({ PdfViewer: ({ url }: { url: string }) => <div>PDF content: {url}</div> }))
 
 function TestLibrary() {
   const lib = useLibrary()
-  return <><PdfPreview lib={lib} /><Library lib={lib} /></>
+  return <><Toasts lib={lib} /><PdfPreview lib={lib} /><Library lib={lib} /></>
 }
 
 describe('focused library', () => {
@@ -22,12 +23,18 @@ describe('focused library', () => {
       select: () => ({
         order: () => {
           const data = table === 'sm_composers'
-            ? [{ id: 'c1', name: 'Clara Schumann' }]
+            ? [{ id: 'c1', name: 'Clara Schumann' }, { id: 'c2', name: 'Fanny Mendelssohn' }]
             : table === 'sm_pieces'
               ? [{ id: 'p1', composer_id: 'c1', title: 'Romance', pdf_path: 'romance.pdf', pdf_pages: 2, instruments: ['piano'], tags: ['calm'], play_progress: 50, links: [] }]
               : []
           const result = { data, error: null }
           return Object.assign(Promise.resolve(result), { limit: () => Promise.resolve(result) })
+        },
+      }),
+      update: (patch: unknown) => ({
+        eq: (column: string, value: string) => {
+          mocks.update(table, patch, column, value)
+          return Promise.resolve({ error: null })
         },
       }),
     }))
@@ -96,6 +103,27 @@ describe('focused library', () => {
     expect(screen.getByRole('button', { name: 'Open PDF for Romance' })).toBe(open)
     expect(document.activeElement).toBe(open)
     openWindow.mockRestore()
+  })
+
+  it('changes a piece to another composer', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Composer for Romance' }), 'c2')
+
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { composer_id: 'c2' }, 'id', 'p1'))
+  })
+
+  it('removes a piece from the library and supports undo', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Remove Romance from library' }))
+
+    expect(screen.queryByText('Romance', { selector: 'summary strong' })).toBeNull()
+    expect(screen.getByText('Removed "Romance" from your library')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
   })
 
   it('does not reopen the viewer when a signed URL arrives after closing', async () => {

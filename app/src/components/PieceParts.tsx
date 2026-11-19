@@ -27,7 +27,7 @@ export function EditDeleteButtons({ lib, p }: Props) {
   return (
     <>
       {p.pdf_path && <button type="button" className="open-pdf-btn" aria-label={`Open PDF for ${p.title}`} title="Open PDF in full screen" onClick={() => void lib.openPdf(p)}>{OpenIcon} Open PDF</button>}
-      <button className="icon-btn" aria-label={`Delete ${p.title}`} title="Delete piece" onClick={() => lib.remove(p)}>{CloseIcon}</button>
+      <button className="icon-btn" aria-label={`Remove ${p.title} from library`} title="Remove from library" onClick={() => lib.remove(p)}>{CloseIcon}</button>
     </>
   )
 }
