@@ -7,6 +7,7 @@ import { STATUSES, statusOf, statusPatch } from '../lib/status'
 import { CloseIcon } from './icons'
 import { EditDeleteButtons, PieceTitle, PracticeButton } from './PieceParts'
 import { KeySelect } from './KeySelect'
+import { ComposerPicker } from './ComposerPicker'
 import { Rating } from './Rating'
 import { TagInput } from './TagInput'
 
@@ -31,25 +32,10 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
         </div>
       </div>
       <div className="piece-meta-row">
-        <div className="piece-composer-group" role="group" aria-label={`Composers for ${p.title}`}>
+        <div className="piece-composer-group">
           <span>Composers</span>
-          <div className="composer-check-list">
-            {lib.composers.map((composer) => {
-              const selectedIds = lib.composerIdsOf(p)
-              return (
-                <label key={composer.id} className="composer-choice">
-                  <input type="checkbox" checked={selectedIds.includes(composer.id)}
-                    onChange={() => {
-                      const nextIds = selectedIds.includes(composer.id)
-                        ? selectedIds.filter((id) => id !== composer.id)
-                        : [...selectedIds, composer.id]
-                      void lib.setPieceComposers(p, nextIds)
-                    }} />
-                  {composer.name}
-                </label>
-              )
-            })}
-          </div>
+          <ComposerPicker composers={lib.composers} selectedIds={lib.composerIdsOf(p)}
+            label={`Composers for ${p.title}`} requireOne onChange={(ids) => lib.setPieceComposers(p, ids)} />
         </div>
         <label className="piece-detail-field">Subtitle
           <input aria-label={`Subtitle for ${p.title}`} defaultValue={p.subtitle ?? ''} onBlur={(e) => {

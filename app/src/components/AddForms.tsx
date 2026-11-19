@@ -1,6 +1,7 @@
 import type { Library } from '../hooks/useLibrary'
 import { INSTRUMENTS, toggleInstrument } from '../lib/instruments'
 import { KeySelect } from './KeySelect'
+import { ComposerPicker } from './ComposerPicker'
 import { TagInput } from './TagInput'
 
 export function AddForms({ lib }: { lib: Library }) {
@@ -19,17 +20,7 @@ export function AddForms({ lib }: { lib: Library }) {
       <form className="panel" onSubmit={(e) => void lib.addPiece(e)}>
         <div className="field-group">
           <span>Composers</span>
-          <div className="composer-check-list" role="group" aria-label="Composers">
-            {composers.map((c) => (
-              <label key={c.id} className="composer-choice">
-                <input type="checkbox" checked={newComposerIds.includes(c.id)}
-                  onChange={() => setNewComposerIds(newComposerIds.includes(c.id)
-                    ? newComposerIds.filter((id) => id !== c.id)
-                    : [...newComposerIds, c.id])} />
-                {c.name}
-              </label>
-            ))}
-          </div>
+          <ComposerPicker composers={composers} selectedIds={newComposerIds} label="Composers for new piece" onChange={setNewComposerIds} />
         </div>
         <label className="grow">Title<input autoFocus placeholder="Piece title" value={lib.title} onChange={(e) => lib.setTitle(e.target.value)} required /></label>
         <label>Subtitle<input placeholder="Optional subtitle" value={lib.newSubtitle} onChange={(e) => lib.setNewSubtitle(e.target.value)} /></label>
