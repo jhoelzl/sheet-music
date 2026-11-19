@@ -154,13 +154,13 @@ describe('focused library', () => {
     await user.click(screen.getByLabelText('Fanny Mendelssohn'))
     await user.type(screen.getByLabelText('Title'), 'Nocturne')
     await user.type(screen.getByLabelText('Subtitle'), 'Op. 9 No. 2')
-    await user.type(screen.getByLabelText('Key'), 'E-flat major')
+    await user.selectOptions(screen.getByLabelText('Key'), 'Eb major')
     await user.click(screen.getByRole('button', { name: 'Add piece' }))
 
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_pieces', expect.objectContaining({
       title: 'Nocturne',
       subtitle: 'Op. 9 No. 2',
-      musical_key: 'E-flat major',
+      musical_key: 'Eb major',
       composer_id: 'c1',
     })))
     expect(mocks.insert).toHaveBeenCalledWith('sm_piece_composers', [
@@ -238,14 +238,29 @@ describe('focused library', () => {
     expect(screen.getByText('Étude', { selector: '.piece-subtitle' })).toBeTruthy()
     await user.clear(screen.getByRole('textbox', { name: 'Subtitle for Romance' }))
     await user.type(screen.getByRole('textbox', { name: 'Subtitle for Romance' }), 'Op. 1')
-    await user.clear(screen.getByRole('textbox', { name: 'Key for Romance' }))
-    await user.type(screen.getByRole('textbox', { name: 'Key for Romance' }), 'A minor')
-    await user.tab()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Key for Romance' }), 'A minor')
 
     await waitFor(() => {
       expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { subtitle: 'Op. 1' }, 'id', 'p1')
       expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { musical_key: 'A minor' }, 'id', 'p1')
     })
+  })
+
+  it('offers twelve major and twelve minor keys and retains legacy values', async () => {
+    mocks.pieces[0].musical_key = 'E-flat major'
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    const key = screen.getByRole('combobox', { name: 'Key for Romance' }) as HTMLSelectElement
+    expect(key.value).toBe('E-flat major')
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(Array.from(within(key).getByRole('group', { name: 'Major' }).querySelectorAll('option'), (option) => option.value))
+      .toEqual(['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'].map((note) => `${note} major`))
+    expect(Array.from(within(key).getByRole('group', { name: 'Minor' }).querySelectorAll('option'), (option) => option.value))
+      .toEqual(['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'G#', 'A', 'Bb', 'B'].map((note) => `${note} minor`))
+    await user.selectOptions(key, '')
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { musical_key: null }, 'id', 'p1'))
+    await waitFor(() => expect(key.value).toBe(''))
   })
 
   it('removes a piece from the library and supports undo', async () => {

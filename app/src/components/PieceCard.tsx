@@ -6,6 +6,7 @@ import { LINK_TYPES, linkLabel, safeUrl } from '../lib/links'
 import { STATUSES, statusOf, statusPatch } from '../lib/status'
 import { CloseIcon } from './icons'
 import { EditDeleteButtons, PieceTitle, PracticeButton } from './PieceParts'
+import { KeySelect } from './KeySelect'
 import { Rating } from './Rating'
 import { TagInput } from './TagInput'
 
@@ -57,10 +58,8 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
           }} />
         </label>
         <label className="piece-detail-field">Key
-          <input aria-label={`Key for ${p.title}`} defaultValue={p.musical_key ?? ''} onBlur={(e) => {
-            const musical_key = e.target.value.trim()
-            if (musical_key !== (p.musical_key ?? '')) lib.update(p, { musical_key: musical_key || null })
-          }} />
+          <KeySelect label={`Key for ${p.title}`} value={p.musical_key ?? ''}
+            onChange={(musical_key) => lib.update(p, { musical_key: musical_key || null })} />
         </label>
         <TagInput tags={p.tags ?? []} suggestions={lib.allTags} label={`Tags for ${p.title}`} onChange={(tags) => lib.update(p, { tags })} />
         <input className="notes" aria-label={`Notes for ${p.title}`} defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) lib.update(p, { notes: e.target.value }) }} />

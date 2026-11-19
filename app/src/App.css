@@ -133,7 +133,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .piece-heading { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
 .piece-subtitle { color: var(--muted); font-size: 14px; font-weight: 400; overflow-wrap: anywhere; }
 .piece-detail-field { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
-.piece-detail-field input { width: 140px; height: 28px; padding: 0 8px; font-size: 12px; }
+.piece-detail-field input, .piece-detail-field select { width: 140px; height: 28px; padding: 0 8px; font-size: 12px; }
 .piece-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
 .piece-practice-row { justify-content: space-between; }
 .piece-foot { justify-content: space-between; padding-top: 10px; border-top: 1px dashed var(--line); }
