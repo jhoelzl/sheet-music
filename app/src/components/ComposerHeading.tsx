@@ -18,7 +18,7 @@ export function ComposerHeading({ lib, composer, countLabel }: { lib: Library; c
       </div>
       <div className="piece-actions">
         <button className="icon-btn edit" aria-label={`Rename ${composer.name}`} title="Rename" onClick={() => lib.startEditComposer(composer)}>{EditIcon}</button>
-        <button className="icon-btn" aria-label={`Delete ${composer.name}`} title="Delete composer and their pieces" onClick={() => lib.removeComposer(composer)}>{CloseIcon}</button>
+        <button className="icon-btn" aria-label={`Delete ${composer.name}`} title="Delete composer and their solo pieces; shared pieces are kept" onClick={() => lib.removeComposer(composer)}>{CloseIcon}</button>
       </div>
     </div>
   )

@@ -108,7 +108,7 @@ export function PracticeCalendar({ logs, pieces, composers }: { logs: PracticeLo
               {selectedPieces.map((p) => (
                 <li key={p.id}>
                   <span>{p.title}</span>
-                  <span className="muted">{composers.find((c) => c.id === p.composer_id)?.name ?? ''}</span>
+                  <span className="muted">{(p.composer_ids ?? [p.composer_id]).map((id) => composers.find((c) => c.id === id)?.name).filter(Boolean).join(', ')}</span>
                 </li>
               ))}
             </ul>

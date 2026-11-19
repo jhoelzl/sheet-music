@@ -6,6 +6,7 @@ import './App.css'
 import { Library } from './components/Library'
 import { ComposersPage } from './components/ComposersPage'
 import { VideosPage } from './components/VideosPage'
+import { SetlistsPage } from './components/SetlistsPage'
 import { Login } from './components/Login'
 import { PdfPreview } from './components/PdfPreview'
 import { Toasts } from './components/Toasts'
@@ -15,8 +16,9 @@ import { useLibrary } from './hooks/useLibrary'
 const libraryIcon = strokeIcon('M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2m0-2a2 2 0 0 1 2-2h13M9 7h6M9 11h6')
 const composersIcon = strokeIcon('M20 21a8 8 0 0 0-16 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8')
 const videosIcon = strokeIcon('M4 5h16v14H4zM10 9l5 3-5 3z')
+const setlistsIcon = strokeIcon('M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01')
 
-type Page = 'library' | 'composers' | 'videos'
+type Page = 'library' | 'composers' | 'videos' | 'setlists'
 type AuthState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; session: Session | null }
 
 function AuthenticatedContent({ page, isIOS }: { page: Page; isIOS: boolean }) {
@@ -25,7 +27,7 @@ function AuthenticatedContent({ page, isIOS }: { page: Page; isIOS: boolean }) {
     <>
       <Toasts lib={lib} />
       <PdfPreview lib={lib} />
-      {page === 'composers' ? <ComposersPage lib={lib} /> : page === 'videos' ? <VideosPage /> : <Library lib={lib} isIOS={isIOS} />}
+      {page === 'composers' ? <ComposersPage lib={lib} /> : page === 'videos' ? <VideosPage /> : page === 'setlists' ? <SetlistsPage lib={lib} /> : <Library lib={lib} isIOS={isIOS} />}
     </>
   )
 }
@@ -72,6 +74,9 @@ export default function App() {
       </button>
       <button type="button" className={page === 'videos' ? 'on' : ''} aria-current={page === 'videos' ? 'page' : undefined} onClick={() => setPage('videos')}>
         {isIOS && <span className="page-nav-icon">{videosIcon}</span>}Videos
+      </button>
+      <button type="button" className={page === 'setlists' ? 'on' : ''} aria-current={page === 'setlists' ? 'page' : undefined} onClick={() => setPage('setlists')}>
+        {isIOS && <span className="page-nav-icon">{setlistsIcon}</span>}Setlists
       </button>
     </nav>
   )

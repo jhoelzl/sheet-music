@@ -220,8 +220,10 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .piece-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .piece-actions .icon-btn { margin: 0; }
 .icon-btn.small { width: 22px; height: 22px; margin: 0; font-size: 11px; }
-.piece-composer { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; white-space: nowrap; }
-.piece-composer select { width: auto; max-width: 220px; height: 28px; padding: 0 8px; font-size: 12px; }
+.piece-composer-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--muted); font-size: 12px; }
+.composer-check-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.composer-choice { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.composer-choice input, .setlist-tune-choice input { width: 15px; height: 15px; margin: 0; padding: 0; accent-color: var(--accent); }
 .title-edit { height: 32px; padding: 0 10px; font-size: 16px; font-weight: 600; }
 .open-pdf-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; margin-right: 6px; padding: 0 14px; color: #fff; background: var(--accent); border: 0; border-radius: 99px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .open-pdf-btn:hover { filter: brightness(1.1); }
@@ -494,6 +496,36 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .compact-piece > .piece { border-top: 1px solid var(--line); border-bottom: 0; }
 .composer-section .compact-piece { border: 0; border-radius: 0; border-bottom: 1px solid var(--line); }
 .composer-section .compact-piece:last-child { border-bottom: 0; }
+
+.setlist-layout { display: grid; grid-template-columns: minmax(210px, .7fr) minmax(0, 1.3fr); gap: 16px; align-items: start; }
+.setlist-sidebar, .setlist-editor { min-width: 0; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.setlist-create { display: grid; gap: 10px; margin-bottom: 16px; }
+.setlist-create label { min-width: 0; }
+.setlist-tabs { display: grid; gap: 6px; }
+.setlist-tab { padding: 10px 12px; color: var(--text); background: transparent; border: 1px solid transparent; border-radius: 8px; text-align: left; }
+.setlist-tab:hover, .setlist-tab.on { background: var(--hover); border-color: var(--line); }
+.setlist-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.setlist-heading h3 { font-size: 18px; }
+.setlist-heading p { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.setlist-order { display: grid; gap: 8px; padding: 14px 0 20px; margin: 0; list-style: none; }
+.setlist-order li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; }
+.setlist-number { display: grid; place-items: center; flex: 0 0 28px; height: 28px; color: var(--accent); background: var(--accent-soft); border-radius: 50%; font-size: 12px; font-weight: 700; }
+.setlist-piece-copy { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.setlist-piece-copy strong { overflow-wrap: anywhere; }
+.setlist-piece-copy > span, .setlist-piece-copy small { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.setlist-piece-actions { display: flex; align-items: center; flex-shrink: 0; }
+.setlist-piece-actions .icon-btn { width: 26px; height: 26px; }
+.setlist-available { padding-top: 14px; border-top: 1px solid var(--line); }
+.setlist-available h4 { margin: 0 0 10px; font-size: 14px; }
+.setlist-tune-list { display: grid; gap: 6px; max-height: 360px; overflow: auto; }
+.setlist-tune-choice { display: flex; align-items: flex-start; gap: 9px; padding: 9px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; font-weight: 400; }
+.setlist-tune-choice > span { display: grid; min-width: 0; gap: 2px; overflow-wrap: anywhere; }
+.setlist-tune-choice small { color: var(--muted); font-size: 11px; }
+@media (max-width: 640px) {
+  .setlist-layout { grid-template-columns: 1fr; }
+  .setlist-sidebar { display: grid; gap: 12px; }
+  .setlist-create { margin: 0; }
+}
 @media (max-width: 640px) {
   .toolbar .search-field { flex: 1 1 150px; }
   .toolbar .sort-field { flex: 1 1 125px; min-width: 0; }

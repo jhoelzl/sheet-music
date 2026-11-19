@@ -24,6 +24,7 @@ export type Piece = {
   tags?: string[]
   id: string
   composer_id: string
+  composer_ids?: string[]
   title: string
   subtitle?: string | null
   musical_key?: string | null

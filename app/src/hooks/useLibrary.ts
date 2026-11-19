@@ -72,6 +72,7 @@ export function useLibrary() {
   const [filter, setFilter] = useState('all')
   const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>('all')
   const [newInstruments, setNewInstruments] = useState<Instrument[]>(['piano'])
+  const [newComposerIds, setNewComposerIds] = useState<string[]>([])
   const [newTags, setNewTags] = useState<string[]>([])
   const [newSubtitle, setNewSubtitle] = useState('')
   const [newMusicalKey, setNewMusicalKey] = useState('')
@@ -80,7 +81,6 @@ export function useLibrary() {
   const [composerSaving, setComposerSaving] = useState(false)
   const composerSavingRef = useRef(false)
   const [title, setTitle] = useState('')
-  const [composerId, setComposerId] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [panel, setPanel] = useState<Panel>(null)
 
@@ -96,10 +96,20 @@ export function useLibrary() {
   const load = useCallback(async () => {
     const c = await supabase.from('sm_composers').select('*').order('name')
     const p = await supabase.from('sm_pieces').select('*').order('title')
-    if (c.error || p.error) notify((c.error ?? p.error)!.message)
+    const pc = await supabase.from('sm_piece_composers').select('piece_id, composer_id, position').order('position')
+    if (c.error || p.error || pc.error) notify((c.error ?? p.error ?? pc.error)!.message)
     setComposersLoaded(!c.error)
     setComposers(c.data ?? [])
-    setPieces(p.data ?? [])
+    const composerIdsByPiece = new Map<string, string[]>()
+    for (const link of pc.data ?? []) {
+      const ids = composerIdsByPiece.get(link.piece_id) ?? []
+      ids.push(link.composer_id)
+      composerIdsByPiece.set(link.piece_id, ids)
+    }
+    setPieces((p.data ?? []).map((piece) => {
+      const composerIds = composerIdsByPiece.get(piece.id) ?? []
+      return { ...piece, composer_ids: [piece.composer_id, ...composerIds.filter((id) => id !== piece.composer_id)] }
+    }))
     // Missing table (migration 0010 not run yet) just leaves the calendar empty.
     const l = await supabase.from('sm_practice_log').select('id, piece_id, practiced_on').order('practiced_on', { ascending: false }).limit(5000)
     setLogs(l.data ?? [])
@@ -118,6 +128,8 @@ export function useLibrary() {
 
   const duplicateComposer = (name: string, exceptId?: string) =>
     composers.some((c) => c.id !== exceptId && c.name.trim().toLowerCase() === name.trim().toLowerCase())
+
+  const composerIdsOf = (p: Piece) => p.composer_ids?.length ? p.composer_ids : [p.composer_id]
 
   const addComposer = async (e: FormEvent) => {
     e.preventDefault()
@@ -143,6 +155,7 @@ export function useLibrary() {
 
   const addPiece = async (e: FormEvent) => {
     e.preventDefault()
+    if (!newComposerIds.length) { notify('Select at least one composer.'); return }
     const { data: { user } } = await supabase.auth.getUser()
     let pdf_path: string | null = null
     let pdf_pages: number | null = null
@@ -152,18 +165,29 @@ export function useLibrary() {
       const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, file, { contentType: 'application/pdf' })
       if (up.error) { notify(`Upload failed: ${up.error.message}`); return }
     }
-    const ok = await run(supabase.from('sm_pieces').insert({
+    const { data, error } = await supabase.from('sm_pieces').insert({
       title: title.trim(),
       subtitle: newSubtitle.trim() || null,
       musical_key: newMusicalKey.trim() || null,
-      composer_id: composerId,
+      composer_id: newComposerIds[0],
       pdf_path,
       ...(pdf_pages ? { pdf_pages } : {}),
       instruments: newInstruments,
       ...(newTags.length ? { tags: newTags } : {}),
-    }))
-    if (!ok) return
-    setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setFile(null); setNewInstruments(['piano']); setNewTags([]); setPanel(null)
+    }).select('id').single()
+    if (error || !data) {
+      notify(error?.message ?? 'Could not add piece.')
+      return
+    }
+    const { error: linkError } = await supabase.from('sm_piece_composers').insert(
+      newComposerIds.map((composer_id, position) => ({ piece_id: data.id, composer_id, position })),
+    )
+    await load()
+    if (linkError) {
+      notify(`Piece saved, but its composer list could not be saved: ${linkError.message}`)
+      return
+    }
+    setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewInstruments(['piano']); setNewTags([]); setPanel(null)
   }
 
   const practicedToday = new Set(logs.filter((l) => l.practiced_on === todayISO()).map((l) => l.piece_id))
@@ -186,8 +210,43 @@ export function useLibrary() {
     await load()
   }
 
-  const update = (p: Piece, patch: Partial<Piece>) =>
+  const update = (p: Piece, patch: Partial<Piece>) => {
+    setPieces((current) => current.map((piece) => piece.id === p.id ? { ...piece, ...patch } : piece))
     void run(supabase.from('sm_pieces').update(patch).eq('id', p.id))
+  }
+
+  const setPieceComposers = async (p: Piece, selectedIds: string[]) => {
+    const nextIds = [...new Set(selectedIds)]
+    if (!nextIds.length) { notify('A piece must have at least one composer.'); return }
+    const previousIds = composerIdsOf(p)
+    if (nextIds.length === previousIds.length && nextIds.every((id) => previousIds.includes(id))) return
+
+    const primaryId = nextIds[0]
+    if (primaryId !== p.composer_id) {
+      const { error } = await supabase.from('sm_pieces').update({ composer_id: primaryId }).eq('id', p.id)
+      if (error) { notify(error.message); await load(); return }
+    }
+
+    const added = nextIds.filter((id) => !previousIds.includes(id))
+    const removed = previousIds.filter((id) => !nextIds.includes(id))
+    if (added.length) {
+      const { error } = await supabase.from('sm_piece_composers').insert(
+        added.map((composer_id) => ({ piece_id: p.id, composer_id, position: nextIds.indexOf(composer_id) })),
+      )
+      if (error) { notify(error.message); await load(); return }
+    }
+    for (const [position, composer_id] of nextIds.entries()) {
+      if (previousIds.includes(composer_id) && previousIds.indexOf(composer_id) !== position) {
+        const { error } = await supabase.from('sm_piece_composers').update({ position }).eq('piece_id', p.id).eq('composer_id', composer_id)
+        if (error) { notify(error.message); await load(); return }
+      }
+    }
+    if (removed.length) {
+      const { error } = await supabase.from('sm_piece_composers').delete().eq('piece_id', p.id).in('composer_id', removed)
+      if (error) { notify(error.message); await load(); return }
+    }
+    await load()
+  }
 
   // Hide the piece right away and only delete it for real once the undo window has passed.
   const remove = (p: Piece) => {
@@ -250,7 +309,8 @@ export function useLibrary() {
   // Hide the composer (and their pieces) right away and only delete once the undo window has passed.
   const removeComposer = (c: Composer) => {
     const key = `composer:${c.id}`
-    const count = pieces.filter((p) => p.composer_id === c.id).length
+    const related = pieces.filter((p) => composerIdsOf(p).includes(c.id))
+    const count = related.filter((p) => composerIdsOf(p).length === 1).length
     setHiddenIds((h) => new Set(h).add(key))
     const unhide = () => setHiddenIds((h) => { const n = new Set(h); n.delete(key); return n })
     const toastId = notify(`Deleted "${c.name}"${count ? ` and ${count} ${count === 1 ? 'piece' : 'pieces'}` : ''}`, 'info', () => {
@@ -259,12 +319,24 @@ export function useLibrary() {
       unhide()
       dismissToast(toastId)
     })
-    const paths = pieces.filter((p) => p.composer_id === c.id && p.pdf_path).map((p) => p.pdf_path!)
+    const paths = related.filter((p) => composerIdsOf(p).length === 1 && p.pdf_path).map((p) => p.pdf_path!)
     deleteTimers.current.set(key, window.setTimeout(() => {
       deleteTimers.current.delete(key)
       void (async () => {
+        for (const piece of related.filter((p) => composerIdsOf(p).length > 1 && p.composer_id === c.id)) {
+          const replacement = composerIdsOf(piece).find((id) => id !== c.id)!
+          const { error } = await supabase.from('sm_pieces').update({ composer_id: replacement }).eq('id', piece.id)
+          if (error) {
+            notify(error.message)
+            await load()
+            unhide()
+            return
+          }
+        }
         if (paths.length) await supabase.storage.from(PDF_STORAGE_BUCKET).remove(paths)
-        await run(supabase.from('sm_composers').delete().eq('id', c.id))
+        const { error } = await supabase.from('sm_composers').delete().eq('id', c.id)
+        if (error) notify(error.message)
+        await load()
         unhide()
       })()
     }, 6000))
@@ -312,13 +384,14 @@ export function useLibrary() {
     }
   }
 
+  const composerNameOf = (id: string) => composers.find((c) => c.id === id)?.name ?? ''
+  const composerNamesOf = (p: Piece) => composerIdsOf(p).map(composerNameOf).filter(Boolean).join(', ')
   const normalizeSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const terms = normalizeSearch(search).split(/\s+/).filter(Boolean)
   const visible = pieces.filter((p) => {
     if (hiddenIds.has(p.id)) return false
-    const cn = composers.find((c) => c.id === p.composer_id)?.name ?? ''
     if (terms.length) {
-      const haystack = normalizeSearch([p.title, p.subtitle, p.musical_key, cn, p.notes, ...p.instruments, ...(p.tags ?? [])].filter(Boolean).join(' '))
+      const haystack = normalizeSearch([p.title, p.subtitle, p.musical_key, composerNamesOf(p), p.notes, ...p.instruments, ...(p.tags ?? [])].filter(Boolean).join(' '))
       if (!terms.every((t) => haystack.includes(t))) return false
     }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
@@ -333,11 +406,10 @@ export function useLibrary() {
   })
   const allTags = [...new Set([...pieces.flatMap((p) => p.tags ?? []), ...(tagFilter ? [tagFilter] : [])])].sort()
   const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all' || Boolean(tagFilter)
-  const composerNameOf = (id: string) => composers.find((c) => c.id === id)?.name ?? ''
   const tableRows = [...visible].sort((a, b) => {
     const val = (p: Piece): string | number => {
       switch (tableSort.key) {
-        case 'composer': return composerNameOf(p.composer_id).toLowerCase()
+        case 'composer': return composerNamesOf(p).toLowerCase()
         case 'status': return statusOf(p)
         case 'difficulty': return p.difficulty ?? -1
         case 'rating': return p.rating ?? -1
@@ -364,11 +436,11 @@ export function useLibrary() {
     sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
     search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
-    filtering, noMatches, clearFilters, composerNameOf,
+    filtering, noMatches, clearFilters, composerNameOf, composerIdsOf, composerNamesOf,
     // new-item form state
-    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, composerId, setComposerId, setFile, newInstruments, setNewInstruments, newTags, setNewTags,
+    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, setFile, newInstruments, setNewInstruments, newTags, setNewTags,
     // actions
-    dismissToast, closePdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, remove, startEdit, commitEdit,
+    dismissToast, closePdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, attachPdf, removeComposer, startEditComposer, commitComposerEdit, openPdf,
   }
 }

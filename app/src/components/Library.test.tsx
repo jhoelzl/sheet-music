@@ -6,7 +6,15 @@ import { Library } from './Library'
 import { PdfPreview } from './PdfPreview'
 import { Toasts } from './Toasts'
 
-const mocks = vi.hoisted(() => ({ from: vi.fn(), signedUrl: vi.fn(), update: vi.fn(), insert: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  from: vi.fn(),
+  signedUrl: vi.fn(),
+  update: vi.fn(),
+  insert: vi.fn(),
+  delete: vi.fn(),
+  pieces: [] as Record<string, unknown>[],
+  composerLinks: [] as { piece_id: string; composer_id: string; position: number }[],
+}))
 vi.mock('../supabase', () => ({
   supabase: {
     from: mocks.from,
@@ -24,6 +32,27 @@ function TestLibrary() {
 describe('focused library', () => {
   beforeEach(() => {
     localStorage.clear()
+    mocks.pieces = [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', musical_key: 'C major', pdf_path: 'romance.pdf', pdf_pages: 2, instruments: ['piano'], tags: ['calm'], play_progress: 50, links: [] }]
+    mocks.composerLinks = [{ piece_id: 'p1', composer_id: 'c1', position: 0 }]
+    mocks.update.mockImplementation((table: string, patch: Record<string, unknown>, column: string, value: string) => {
+      if (table === 'sm_pieces') mocks.pieces = mocks.pieces.map((piece) => piece[column] === value ? { ...piece, ...patch } : piece)
+      if (table === 'sm_piece_composers') mocks.composerLinks = mocks.composerLinks.map((link) => link.piece_id === value ? { ...link, ...patch } : link)
+    })
+    mocks.insert.mockImplementation((table: string, values: Record<string, unknown> | Record<string, unknown>[]) => {
+      const rows = Array.isArray(values) ? values : [values]
+      if (table === 'sm_pieces') {
+        const id = 'p-new'
+        mocks.pieces.push({ ...rows[0], id })
+        return id
+      }
+      if (table === 'sm_piece_composers') mocks.composerLinks.push(...rows as { piece_id: string; composer_id: string; position: number }[])
+      return null
+    })
+    mocks.delete.mockImplementation((table: string, _column: string, value: string, ids?: string[]) => {
+      if (table === 'sm_piece_composers' && ids) {
+        mocks.composerLinks = mocks.composerLinks.filter((link) => link.piece_id !== value || !ids.includes(link.composer_id))
+      }
+    })
     mocks.signedUrl.mockResolvedValue({ data: { signedUrl: 'https://example.test/music.pdf' }, error: null })
     mocks.from.mockImplementation((table: string) => ({
       select: () => ({
@@ -31,21 +60,42 @@ describe('focused library', () => {
           const data = table === 'sm_composers'
             ? [{ id: 'c1', name: 'Clara Schumann' }, { id: 'c2', name: 'Fanny Mendelssohn' }]
             : table === 'sm_pieces'
-              ? [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', musical_key: 'C major', pdf_path: 'romance.pdf', pdf_pages: 2, instruments: ['piano'], tags: ['calm'], play_progress: 50, links: [] }]
+              ? mocks.pieces
+              : table === 'sm_piece_composers'
+                ? mocks.composerLinks
               : []
           const result = { data, error: null }
           return Object.assign(Promise.resolve(result), { limit: () => Promise.resolve(result) })
         },
       }),
-      update: (patch: unknown) => ({
-        eq: (column: string, value: string) => {
-          mocks.update(table, patch, column, value)
-          return Promise.resolve({ error: null })
-        },
+      update: (patch: unknown) => {
+        const filters: Record<string, string> = {}
+        const operation = {
+          eq: (column: string, value: string) => { filters[column] = value; return operation },
+          then: (resolve: (result: { error: null }) => unknown, reject: (error: unknown) => unknown) =>
+            Promise.resolve().then(() => {
+              const [column, value] = Object.entries(filters)[0]
+              mocks.update(table, patch, column, value)
+              return { error: null as null }
+            }).then(resolve, reject),
+        }
+        return operation
+      },
+      delete: () => ({
+        eq: (column: string, value: string) => ({
+          in: (inColumn: string, ids: string[]) => {
+            mocks.delete(table, column, value, inColumn === 'composer_id' ? ids : undefined)
+            return Promise.resolve({ error: null })
+          },
+        }),
       }),
       insert: (values: unknown) => {
         mocks.insert(table, values)
-        return Promise.resolve({ error: null })
+        const id = table === 'sm_pieces' ? 'p-new' : undefined
+        const result = Promise.resolve({ error: null })
+        return Object.assign(result, {
+          select: () => ({ single: () => Promise.resolve({ data: id ? { id } : null, error: null }) }),
+        })
       },
     }))
   })
@@ -100,7 +150,8 @@ describe('focused library', () => {
     render(<TestLibrary />)
     await screen.findByText('Romance', { selector: 'summary strong' })
     await user.click(screen.getByRole('button', { name: '+ Piece' }))
-    await user.selectOptions(screen.getByLabelText('Composer'), 'c1')
+    await user.click(screen.getByLabelText('Clara Schumann'))
+    await user.click(screen.getByLabelText('Fanny Mendelssohn'))
     await user.type(screen.getByLabelText('Title'), 'Nocturne')
     await user.type(screen.getByLabelText('Subtitle'), 'Op. 9 No. 2')
     await user.type(screen.getByLabelText('Key'), 'E-flat major')
@@ -112,6 +163,10 @@ describe('focused library', () => {
       musical_key: 'E-flat major',
       composer_id: 'c1',
     })))
+    expect(mocks.insert).toHaveBeenCalledWith('sm_piece_composers', [
+      { piece_id: 'p-new', composer_id: 'c1', position: 0 },
+      { piece_id: 'p-new', composer_id: 'c2', position: 1 },
+    ])
   })
 
   it('respects a previously selected view and allows switching to the focused list', async () => {
@@ -147,13 +202,33 @@ describe('focused library', () => {
     openWindow.mockRestore()
   })
 
-  it('changes a piece to another composer', async () => {
+  it('adds another composer to a piece', async () => {
     const user = userEvent.setup()
     render(<TestLibrary />)
     await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Composer for Romance' }), 'c2')
+    await user.click(screen.getByLabelText('Fanny Mendelssohn'))
 
-    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { composer_id: 'c2' }, 'id', 'p1'))
+    await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_piece_composers', [{ piece_id: 'p1', composer_id: 'c2', position: 1 }]))
+    await waitFor(() => expect((screen.getByLabelText('Fanny Mendelssohn') as HTMLInputElement).checked).toBe(true))
+    await user.click(screen.getByLabelText('Clara Schumann'))
+    await waitFor(() => {
+      expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { composer_id: 'c2' }, 'id', 'p1')
+      expect(mocks.delete).toHaveBeenCalledWith('sm_piece_composers', 'piece_id', 'p1', ['c1'])
+    })
+  })
+
+  it('updates titles with apostrophes in the piece list', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Romance' }))
+    const title = screen.getByRole('textbox', { name: 'Piece title' })
+    await user.clear(title)
+    await user.type(title, "Moanin'")
+    await user.keyboard('{Enter}')
+
+    expect(await screen.findByText("Moanin'", { selector: 'summary strong' })).toBeTruthy()
+    expect(mocks.update).toHaveBeenCalledWith('sm_pieces', { title: "Moanin'" }, 'id', 'p1')
   })
 
   it('displays and saves a piece subtitle and key', async () => {

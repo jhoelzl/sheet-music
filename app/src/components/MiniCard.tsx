@@ -10,7 +10,7 @@ export function MiniCard({ lib, p, board = false }: { lib: Library; p: Piece; bo
       <div className="piece-head">
         <div className="mini-title">
           <PieceTitle lib={lib} p={p} />
-          <span className="mini-composer">{lib.composerNameOf(p.composer_id)}</span>
+          <span className="mini-composer">{lib.composerNamesOf(p)}</span>
         </div>
         <PieceActions lib={lib} p={p} />
       </div>
