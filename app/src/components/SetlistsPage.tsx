@@ -3,7 +3,7 @@ import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { Library } from '../hooks/useLibrary'
 import { supabase } from '../supabase'
 import { dropIndex, moveItem } from '../lib/reorder'
-import { GripIcon } from './icons'
+import { GripIcon, PauseIcon } from './icons'
 
 type Setlist = { id: string; name: string; position: number }
 type SetlistEntry = { id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null }
@@ -304,6 +304,12 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   const entriesDisabled = busy || membersLoading || loadedId !== selectedId
   const tuneCount = members.filter((member) => member.piece_id && lib.pieces.some((piece) => piece.id === member.piece_id && !lib.hiddenIds.has(piece.id))).length
   const availablePieces = lib.pieces.filter((piece) => !lib.hiddenIds.has(piece.id))
+  // Placeholders are not tunes, so they do not take a number in the running tune count.
+  let tuneNumber = 0
+  const orderedRows = visibleRows.map(({ entry, index }) => {
+    const piece = entry.piece_id ? lib.pieces.find((item) => item.id === entry.piece_id) ?? null : null
+    return { entry, index, piece, number: piece ? ++tuneNumber : null }
+  })
 
   return (
     <>
@@ -355,8 +361,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
               </div>
               {membersLoading && <p className="muted">Loading entries…</p>}
               <ol className="setlist-order" aria-label="Tune order" ref={listRef}>
-                {visibleRows.map(({ entry, index }, row) => {
-                  const piece = entry.piece_id ? lib.pieces.find((item) => item.id === entry.piece_id) : null
+                {orderedRows.map(({ entry, index, piece, number }, row) => {
                   const title = piece?.title ?? entry.placeholder ?? ''
                   const dragging = drag?.fromRow === row
                   const transform = !drag ? undefined
@@ -364,14 +369,15 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                       : drag.fromRow < drag.toRow && row > drag.fromRow && row <= drag.toRow ? `translateY(${-drag.shift}px)`
                         : drag.fromRow > drag.toRow && row >= drag.toRow && row < drag.fromRow ? `translateY(${drag.shift}px)`
                           : undefined
+                  const classes = [dragging ? 'dragging' : '', piece ? '' : 'placeholder'].filter(Boolean).join(' ')
                   return (
-                    <li key={entry.id} className={dragging ? 'dragging' : undefined} style={transform ? { transform } : undefined}>
+                    <li key={entry.id} className={classes || undefined} style={transform ? { transform } : undefined}>
                       <button type="button" className="setlist-drag-handle" aria-label={`Reorder ${title}`} disabled={entriesDisabled || visibleRows.length < 2}
                         title="Drag to reorder" onPointerDown={(event) => startDrag(event, row)}
                         onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag}>
                         {GripIcon}
                       </button>
-                      <span className="setlist-number">{row + 1}</span>
+                      {piece ? <span className="setlist-number">{number}</span> : <span className="setlist-marker" aria-hidden="true">{PauseIcon}</span>}
                       <span className="setlist-piece-copy">
                         <strong>{title}</strong>
                         {piece ? <>
