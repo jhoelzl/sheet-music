@@ -26,6 +26,8 @@ export function Library({ lib, isIOS = false }: { lib: LibraryState; isIOS?: boo
         <div className="intro-actions">
           {!isIOS && <button className={`btn${panel === 'composer' ? ' active' : ''}`} onClick={() => setPanel(panel === 'composer' ? null : 'composer')}>+ Composer</button>}
           <button className="btn primary" onClick={() => setPanel(panel === 'piece' ? null : 'piece')} disabled={!composers.length} title={composers.length ? '' : 'Add a composer first'}>+ Piece</button>
+          <button type="button" className="btn" disabled={lib.backingUp} title="Download all your data and scores as a zip file"
+            onClick={() => void lib.backup()}>{lib.backingUp ? 'Preparing…' : 'Download backup'}</button>
         </div>
       </div>
 

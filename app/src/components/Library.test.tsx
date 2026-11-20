@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   signedUrl: vi.fn(),
   upload: vi.fn(),
   remove: vi.fn(),
+  download: vi.fn(),
   update: vi.fn(),
   insert: vi.fn(),
   delete: vi.fn(),
@@ -23,7 +24,7 @@ vi.mock('../supabase', () => ({
   supabase: {
     from: mocks.from,
     auth: { getUser: () => Promise.resolve({ data: { user: { id: 'u1' } } }) },
-    storage: { from: () => ({ createSignedUrl: mocks.signedUrl, upload: mocks.upload, remove: mocks.remove }) },
+    storage: { from: () => ({ createSignedUrl: mocks.signedUrl, upload: mocks.upload, remove: mocks.remove, download: mocks.download }) },
   },
 }))
 vi.mock('./PdfViewer', () => ({ PdfViewer: ({ url }: { url: string }) => <div>PDF content: {url}</div> }))
@@ -64,22 +65,23 @@ describe('focused library', () => {
     mocks.signedUrl.mockResolvedValue({ data: { signedUrl: 'https://example.test/music.pdf' }, error: null })
     mocks.upload.mockResolvedValue({ error: null })
     mocks.remove.mockResolvedValue({ error: null })
+    mocks.download.mockResolvedValue({ data: new Blob(['%PDF-1.4'], { type: 'application/pdf' }), error: null })
     mocks.from.mockImplementation((table: string) => ({
-      select: () => ({
-        order: () => {
-          const data = table === 'sm_composers'
-            ? [{ id: 'c1', name: 'Clara Schumann' }, { id: 'c2', name: 'Fanny Mendelssohn' }]
-            : table === 'sm_pieces'
-              ? mocks.pieces
-              : table === 'sm_piece_composers'
-                ? mocks.composerLinks
-                : table === 'sm_piece_scores'
-                  ? mocks.scores
-                  : []
-          const result = { data, error: null }
-          return Object.assign(Promise.resolve(result), { limit: () => Promise.resolve(result) })
-        },
-      }),
+      select: () => {
+        const data = table === 'sm_composers'
+          ? [{ id: 'c1', name: 'Clara Schumann' }, { id: 'c2', name: 'Fanny Mendelssohn' }]
+          : table === 'sm_pieces'
+            ? mocks.pieces
+            : table === 'sm_piece_composers'
+              ? mocks.composerLinks
+              : table === 'sm_piece_scores'
+                ? mocks.scores
+                : []
+        const result = { data, error: null }
+        const promise = Promise.resolve(result)
+        const withLimit = Object.assign(promise, { limit: () => promise })
+        return Object.assign(promise, { order: () => withLimit, limit: () => promise })
+      },
       update: (patch: unknown) => {
         const filters: Record<string, string> = {}
         const operation = {
@@ -375,6 +377,26 @@ describe('focused library', () => {
     await user.selectOptions(key, '')
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { musical_key: null }, 'id', 's1'))
     await waitFor(() => expect(key.value).toBe(''))
+  })
+
+  it('downloads a zip backup of the data and scores', async () => {
+    const createObjectURL = vi.fn((_blob: Blob) => 'blob:backup')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Download backup' }))
+
+    await waitFor(() => expect(mocks.download).toHaveBeenCalledWith('romance.pdf'))
+    expect(click).toHaveBeenCalled()
+    const blob = createObjectURL.mock.calls[0][0]
+    expect(blob.type).toBe('application/zip')
+    const text = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()))
+    expect(text).toContain('data.json')
+    expect(text).toContain('scores/Romance - Piano · C major (s1).pdf')
+    expect(await screen.findByText('Backup downloaded.')).toBeTruthy()
   })
 
   it('marks a score as a lead sheet and back to an instrument', async () => {

@@ -30,7 +30,7 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 - 🔴 **Practice sessions with duration.** Store minutes per practice entry, not only a date, and show weekly/monthly totals. (M)
 - 🟡 **Goals and reminders.** Weekly practice goal, plus an optional "not practised in N days" nudge. (M)
 - 🟡 **Setlists / playlists.** Group pieces for a concert or lesson independent of the composer. (L)
-- 🟡 **Import / export.** Export the library as JSON/CSV and import it back, so the data is never locked in. (M)
+- 🟡 **Restore a backup.** Import the zip produced by **Download backup** (JSON data plus the score PDFs) to move or recover a library. (M)
 - 🟡 **Metadata fields.** Key, tempo, opus number, year, and source (book / IMSLP). Add them to search. (M)
 - 🟢 **IMSLP lookup.** Search by title and composer to prefill metadata and link. (L)
 - 🟢 **PDF annotations / bookmarks** in the preview modal, or at least a "jump to page" bookmark. (L)

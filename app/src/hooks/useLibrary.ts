@@ -4,6 +4,9 @@ import { PDF_SIGNED_URL_TTL_SECONDS, PDF_STORAGE_BUCKET } from '../config'
 import { supabase } from '../supabase'
 import type { Composer, Instrument, Piece, PieceLink, PiecePatch, PieceScore, PracticeLog } from '../supabase'
 import { countPdfPages } from '../lib/pdf'
+import { backupFileName, buildBackup, downloadBlob, scoreFileName } from '../lib/backup'
+import { createZip } from '../lib/zip'
+import type { ZipEntry } from '../lib/zip'
 import { todayISO } from '../lib/dates'
 import { detectLinkType, safeUrl } from '../lib/links'
 import { VIEWS, sortPieces } from '../lib/sorting'
@@ -85,6 +88,8 @@ export function useLibrary() {
   const [draftComposer, setDraftComposer] = useState('')
   const [openLink, setOpenLink] = useState<string | null>(null)
   const [uploadingId, setUploadingId] = useState<string | null>(null)
+  const [backingUp, setBackingUp] = useState(false)
+  const backingUpRef = useRef(false)
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
   const toastSeq = useRef(0)
   const deleteTimers = useRef(new Map<string, number>())
@@ -469,6 +474,53 @@ export function useLibrary() {
     }
   }
 
+  /** Download every table plus every score PDF as a single zip. */
+  const backup = async () => {
+    if (backingUpRef.current) return
+    backingUpRef.current = true
+    setBackingUp(true)
+    notify('Preparing your backup…', 'info')
+    try {
+      const [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult] = await Promise.all([
+        supabase.from('sm_composers').select('*'),
+        supabase.from('sm_pieces').select('*'),
+        supabase.from('sm_piece_composers').select('*'),
+        supabase.from('sm_piece_scores').select('*'),
+        supabase.from('sm_setlists').select('*'),
+        supabase.from('sm_setlist_pieces').select('*'),
+        supabase.from('sm_practice_log').select('*'),
+      ])
+      const results = [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult]
+      const failed = results.find((result) => result.error)
+      if (failed) throw failed.error
+      const scores = (scoresResult.data ?? []) as PieceScore[]
+      const titles = new Map(((piecesResult.data ?? []) as { id: string; title: string }[]).map((piece) => [piece.id, piece.title]))
+      const payload = buildBackup({
+        composers: composersResult.data ?? [],
+        pieces: piecesResult.data ?? [],
+        piece_composers: linksResult.data ?? [],
+        scores,
+        setlists: setlistsResult.data ?? [],
+        setlist_pieces: entriesResult.data ?? [],
+        practice_log: logResult.data ?? [],
+      })
+      const files: ZipEntry[] = [{ name: 'data.json', data: new TextEncoder().encode(JSON.stringify(payload, null, 2)) }]
+      let missing = 0
+      for (const score of scores) {
+        const { data: blob, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).download(score.pdf_path)
+        if (error || !blob) { missing++; continue }
+        files.push({ name: scoreFileName(score, titles.get(score.piece_id)), data: new Uint8Array(await blob.arrayBuffer()) })
+      }
+      downloadBlob(createZip(files), backupFileName())
+      notify(missing ? `Backup downloaded, but ${missing} score${missing === 1 ? '' : 's'} could not be included.` : 'Backup downloaded.', 'info')
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Could not create the backup.')
+    } finally {
+      backingUpRef.current = false
+      setBackingUp(false)
+    }
+  }
+
   const composerNameOf = (id: string) => composers.find((c) => c.id === id)?.name ?? ''
   const composerNamesOf = (p: Piece) => composerIdsOf(p).map(composerNameOf).filter(Boolean).join(', ')
   const normalizeSearch = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -527,6 +579,6 @@ export function useLibrary() {
     // actions
     dismissToast, closePdf, pdfUrl, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, addScore, updateScore, removeScore, removeComposer, startEditComposer, commitComposerEdit, openPdf,
-    scoresOf, keysOf, primaryScore,
+    scoresOf, keysOf, primaryScore, backup, backingUp,
   }
 }
