@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { usePickerDismiss } from '../hooks/usePickerDismiss'
 import type { Composer } from '../supabase'
 import { CloseIcon } from './icons'
 
@@ -13,6 +14,7 @@ export function ComposerPicker({ composers, selectedIds, label, requireOne = fal
   const [query, setQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
+  const dismiss = usePickerDismiss(Boolean(query.trim()), () => setQuery(''))
   const search = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const matches = query.trim()
     ? composers.filter((composer) => !selectedIds.includes(composer.id) && search(composer.name).includes(search(query.trim())))
@@ -36,8 +38,7 @@ export function ComposerPicker({ composers, selectedIds, label, requireOne = fal
   }
 
   return (
-    <div className="composer-picker" role="group" aria-label={label}
-      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setQuery('') }}>
+    <div className="composer-picker" role="group" aria-label={label} {...dismiss}>
       <div className="composer-picker-chips">
         {selectedIds.map((id) => {
           const name = composers.find((composer) => composer.id === id)?.name ?? 'Unknown composer'
@@ -65,7 +66,7 @@ export function ComposerPicker({ composers, selectedIds, label, requireOne = fal
         {query.trim() && (
           <div className="composer-results" aria-live="polite">
             {matches.slice(0, 8).map((composer) => (
-              <button type="button" key={composer.id} disabled={busy} onPointerDown={(event) => event.preventDefault()}
+              <button type="button" key={composer.id} disabled={busy} onPointerDown={(event) => { if (event.pointerType === 'mouse') event.preventDefault() }}
                 onClick={() => add(composer.id)}>{composer.name}</button>
             ))}
             {matches.length === 0 && <span>No matching composers</span>}

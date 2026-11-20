@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { usePickerDismiss } from '../hooks/usePickerDismiss'
 import type { Piece } from '../supabase'
 import { CloseIcon } from './icons'
 
@@ -20,6 +21,7 @@ export function SetlistTunePicker({ pieces, selectedIds, setlistName, disabled =
 }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const dismiss = usePickerDismiss(open, () => { setQuery(''); setOpen(false) })
   const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const terms = normalize(query.trim()).split(/\s+/).filter(Boolean)
   const selected = selectedIds.map((id) => pieces.find((piece) => piece.id === id)).filter((piece): piece is Piece => piece !== undefined)
@@ -35,12 +37,12 @@ export function SetlistTunePicker({ pieces, selectedIds, setlistName, disabled =
 
   const add = (id: string) => {
     setQuery('')
+    if (!dismiss.ref.current?.contains(document.activeElement)) setOpen(false)
     onAdd(id)
   }
 
   return (
-    <div className="composer-picker" role="group" aria-label={`Tunes in ${setlistName}`}
-      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) { setQuery(''); setOpen(false) } }}>
+    <div className="composer-picker" role="group" aria-label={`Tunes in ${setlistName}`} {...dismiss}>
       <div className="composer-picker-chips">
         {selected.length === 0 && <span className="muted">No tunes yet.</span>}
         {selected.map((piece) => (
@@ -67,7 +69,7 @@ export function SetlistTunePicker({ pieces, selectedIds, setlistName, disabled =
             <div className="composer-results" aria-live="polite">
               {shown.map((piece) => (
                 <button type="button" key={piece.id} className="tune-result" disabled={disabled}
-                  aria-label={`Add ${piece.title} to ${setlistName}`} onPointerDown={(event) => event.preventDefault()}
+                  aria-label={`Add ${piece.title} to ${setlistName}`} onPointerDown={(event) => { if (event.pointerType === 'mouse') event.preventDefault() }}
                   onClick={() => add(piece.id)}>
                   <strong>{piece.title}</strong>
                   <small>{[composerNamesOf(piece), piece.musical_key, piece.subtitle].filter(Boolean).join(' · ')}</small>
