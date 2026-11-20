@@ -26,7 +26,10 @@ export type PieceScore = {
   pdf_path: string
   pdf_pages: number | null
   musical_key: string | null
-  instrument: Instrument
+  /** null for a lead sheet (chords only). */
+  instrument: Instrument | null
+  /** Chords only, for no particular instrument. */
+  lead_sheet: boolean
   position: number
 }
 

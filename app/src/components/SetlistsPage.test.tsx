@@ -28,13 +28,13 @@ vi.mock('./PdfViewer', () => ({
 
 const piece: Piece = {
   id: 'p1', composer_id: 'c1', composer_ids: ['c1'], title: 'Moanin’', subtitle: null,
-  scores: [{ id: 'sc-p1', piece_id: 'p1', pdf_path: 'u/moanin.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', position: 0 }],
+  scores: [{ id: 'sc-p1', piece_id: 'p1', pdf_path: 'u/moanin.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', lead_sheet: false, position: 0 }],
   instruments: ['piano'], musical_key: 'F minor', pdf_path: 'u/moanin.pdf', pdf_pages: 2,
   play_progress: 0, difficulty: null, rating: null, notes: null,
 }
 const waltz: Piece = {
   ...piece, id: 'p2', title: 'Waltz',
-  scores: [{ id: 'sc-p2', piece_id: 'p2', pdf_path: 'u/waltz.pdf', pdf_pages: 1, musical_key: null, instrument: 'piano', position: 0 }],
+  scores: [{ id: 'sc-p2', piece_id: 'p2', pdf_path: 'u/waltz.pdf', pdf_pages: 1, musical_key: null, instrument: 'piano', lead_sheet: false, position: 0 }],
   musical_key: null, pdf_path: 'u/waltz.pdf', pdf_pages: 1,
 }
 const lib = {
@@ -470,8 +470,8 @@ describe('setlists page', () => {
     const twoScores: Piece = {
       ...piece,
       scores: [
-        { id: 'sc-a', piece_id: 'p1', pdf_path: 'u/piano.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', position: 0 },
-        { id: 'sc-b', piece_id: 'p1', pdf_path: 'u/guitar.pdf', pdf_pages: 1, musical_key: 'C major', instrument: 'guitar', position: 1 },
+        { id: 'sc-a', piece_id: 'p1', pdf_path: 'u/piano.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', lead_sheet: false, position: 0 },
+        { id: 'sc-b', piece_id: 'p1', pdf_path: 'u/guitar.pdf', pdf_pages: 1, musical_key: 'C major', instrument: 'guitar', lead_sheet: false, position: 1 },
       ],
     }
     mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
@@ -490,8 +490,8 @@ describe('setlists page', () => {
     const twoScores: Piece = {
       ...piece,
       scores: [
-        { id: 'sc-a', piece_id: 'p1', pdf_path: 'u/piano.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', position: 0 },
-        { id: 'sc-b', piece_id: 'p1', pdf_path: 'u/guitar.pdf', pdf_pages: 1, musical_key: 'C major', instrument: 'guitar', position: 1 },
+        { id: 'sc-a', piece_id: 'p1', pdf_path: 'u/piano.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', lead_sheet: false, position: 0 },
+        { id: 'sc-b', piece_id: 'p1', pdf_path: 'u/guitar.pdf', pdf_pages: 1, musical_key: 'C major', instrument: 'guitar', lead_sheet: false, position: 1 },
       ],
     }
     mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
