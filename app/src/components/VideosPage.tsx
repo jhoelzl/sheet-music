@@ -8,6 +8,7 @@ import type { Video } from './VideoFeed'
 
 export function VideosPage() {
   const [videos, setVideos] = useState<Video[] | null>(null)
+  const [shuffledVideos, setShuffledVideos] = useState<Video[] | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -47,7 +48,23 @@ export function VideosPage() {
   return (
     <>
       <div className="library-intro video-intro"><div><span className="library-kicker">Your music</span><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'} from your library</p></div></div>
-      <VideoFeed videos={videos} />
+      {videos.length > 1 && <div className="video-order" aria-label="Video order">
+        <button type="button" className="btn" aria-pressed={shuffledVideos !== null}
+          onClick={() => setShuffledVideos(shuffledVideos ? null : shuffle(videos))}>Random order</button>
+        {shuffledVideos && <button type="button" className="btn" onClick={() => setShuffledVideos(shuffle(videos))}>Shuffle again</button>}
+      </div>}
+      <VideoFeed videos={shuffledVideos ?? videos} />
     </>
   )
+}
+
+function shuffle(videos: Video[]): Video[] {
+  const result = [...videos]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const current = result[i]
+    result[i] = result[j]
+    result[j] = current
+  }
+  return result
 }
