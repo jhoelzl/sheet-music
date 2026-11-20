@@ -316,6 +316,28 @@ describe('focused library', () => {
     expect(screen.getByRole('button', { name: 'Clara Schumann' })).toBeTruthy()
   })
 
+  it('selects a composer when an iOS tap blurs the search before click', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    const search = screen.getByRole('searchbox', { name: 'Search composers for new piece' })
+    await user.type(search, 'clara')
+    const result = screen.getByRole('button', { name: 'Clara Schumann' })
+    expect(fireEvent.pointerDown(result, { pointerType: 'touch' })).toBe(true)
+    fireEvent.blur(search, { relatedTarget: null })
+    fireEvent.click(result)
+    expect(await screen.findByRole('button', { name: 'Remove composer Clara Schumann' })).toBeTruthy()
+
+    await user.type(search, 'fanny')
+    fireEvent.pointerDown(document.body, { pointerType: 'touch' })
+    expect(screen.queryByRole('button', { name: 'Fanny Mendelssohn' })).toBeNull()
+
+    await user.type(search, 'fanny')
+    fireEvent.blur(search, { relatedTarget: screen.getByPlaceholderText('Piece title') })
+    expect(screen.queryByRole('button', { name: 'Fanny Mendelssohn' })).toBeNull()
+  })
+
   it('prevents overlapping composer edits while a save is pending', async () => {
     let finish!: () => void
     const save = vi.fn(() => new Promise<void>((resolve) => { finish = resolve }))

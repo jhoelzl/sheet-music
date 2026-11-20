@@ -160,6 +160,25 @@ describe('setlists page', () => {
     expect(await screen.findByRole('button', { name: 'Edit comment for Moanin’' })).toBeTruthy()
   })
 
+  it('adds a tune when an iOS tap blurs the search before click', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    const search = await tuneSearch()
+    await user.type(search, 'moanin')
+    const result = screen.getByRole('button', { name: 'Add Moanin’ to Gig' })
+    expect(fireEvent.pointerDown(result, { pointerType: 'touch' })).toBe(true)
+    fireEvent.blur(search, { relatedTarget: null })
+    fireEvent.click(result)
+    await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_setlist_pieces', {
+      setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null,
+    }))
+
+    await user.click(search)
+    fireEvent.pointerDown(document.body, { pointerType: 'touch' })
+    expect(screen.queryByRole('button', { name: 'Add Waltz to Gig' })).toBeNull()
+  })
+
   it('shows the chosen tunes as removable chips', async () => {
     mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
     mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null }]
