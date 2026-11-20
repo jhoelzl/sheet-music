@@ -10,7 +10,7 @@ const MAX_RESULTS = 8
  * search box with a results dropdown. Same interaction as the composer picker
  * on the tunes page, so picking tunes feels like picking composers.
  */
-export function SetlistTunePicker({ pieces, selectedIds, setlistName, context = 'setlist', disabled = false, composerNamesOf, onAdd, onRemove }: {
+export function SetlistTunePicker({ pieces, selectedIds, setlistName, context = 'setlist', disabled = false, composerNamesOf, onAdd, onRemove, onSelectPiece, openPieceId }: {
   pieces: Piece[]
   selectedIds: string[]
   setlistName: string
@@ -19,6 +19,8 @@ export function SetlistTunePicker({ pieces, selectedIds, setlistName, context = 
   composerNamesOf: (p: Piece) => string
   onAdd: (id: string) => void
   onRemove: (id: string) => void
+  onSelectPiece?: (piece: Piece) => void
+  openPieceId?: string | null
 }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -48,7 +50,8 @@ export function SetlistTunePicker({ pieces, selectedIds, setlistName, context = 
         {selected.length === 0 && <span className="muted">No tunes yet.</span>}
         {selected.map((piece) => (
           <span className="tag" key={piece.id}>
-            {piece.title}
+            {onSelectPiece ? <button type="button" className="picker-item-open" aria-label={`${openPieceId === piece.id ? 'Hide' : 'Show'} details for ${piece.title}`}
+              aria-expanded={openPieceId === piece.id} onClick={() => onSelectPiece(piece)}>{piece.title}</button> : piece.title}
             <button type="button" className="tag-remove" aria-label={`Remove ${piece.title} from ${setlistName}`}
               title={`Remove ${piece.title}`} disabled={disabled} onClick={() => onRemove(piece.id)}>{CloseIcon}</button>
           </span>

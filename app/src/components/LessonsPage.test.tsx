@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Piece } from '../supabase'
@@ -92,18 +92,45 @@ describe('lessons', () => {
     expect((screen.getByLabelText('PDF file') as HTMLInputElement).files?.length).toBe(1)
     expect(screen.getByLabelText('PDF file').closest('form')?.checkValidity()).toBe(true)
     await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
-    const checkbox = await screen.findByRole('checkbox', { name: 'Chord concepts' })
-    await user.click(checkbox)
+    const materialSearch = await screen.findByRole('searchbox', { name: 'Search materials for guitar' })
+    await user.type(materialSearch, 'chord{Enter}')
     await waitFor(() => expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l1', material_id: 'id-1' }]))
     expect(mocks.upload.mock.calls[0][0]).toMatch(/^u1\/materials\/.+\.pdf$/)
     rendered.unmount()
 
     render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
     expect((await screen.findByLabelText('Notes (Markdown)') as HTMLTextAreaElement).value).toBe('# Practice\n**Swing**')
-    expect((screen.getByRole('checkbox', { name: 'Chord concepts' }) as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByRole('button', { name: 'Remove material Chord concepts' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Remove Autumn Leaves from Guitar' })).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Chord concepts' }))
+    await user.click(screen.getByRole('button', { name: 'Open material Chord concepts' }))
     expect(mocks.openMaterialPdf).toHaveBeenCalledWith(expect.objectContaining({ title: 'Chord concepts' }))
+  })
+
+  it('opens the correct linked tune, including tunes without a score', async () => {
+    const first = { ...piece, pdf_path: 'u/a.pdf', scores: [{ id: 's1', piece_id: 'p1', pdf_path: 'u/a.pdf', pdf_pages: 1, musical_key: null, instrument: 'guitar' as const, lead_sheet: false, position: 0 }] }
+    const second = { ...piece, id: 'p2', title: 'Blue Bossa', pdf_path: 'u/b.pdf', scores: [{ ...first.scores[0], id: 's2', piece_id: 'p2', pdf_path: 'u/b.pdf' }] }
+    const third = { ...piece, id: 'p3', title: 'No score' }
+    const user = userEvent.setup()
+    const data = { ...lib, pieces: [first, second, third] }
+    const rendered = render(<LessonsPage lib={data} onDirtyChange={mocks.dirty} />)
+    const search = await screen.findByRole('searchbox', { name: 'Search tunes' })
+    for (const [query, title] of [['autumn', 'Autumn Leaves'], ['blue', 'Blue Bossa'], ['no score', 'No score']]) {
+      await user.type(search, `${query}{Enter}`)
+      await screen.findByRole('button', { name: `Show details for ${title}` })
+    }
+    expect(mocks.tables.sm_lesson_pieces).toHaveLength(3)
+    rendered.unmount()
+    render(<LessonsPage lib={data} onDirtyChange={mocks.dirty} />)
+    await user.click(await screen.findByRole('button', { name: 'Show details for Blue Bossa' }))
+    const secondDetails = screen.getByRole('region', { name: 'Details for Blue Bossa' })
+    await user.click(within(secondDetails).getByRole('button', { name: 'Open score' }))
+    expect(mocks.openPdf).toHaveBeenLastCalledWith(second)
+    await user.click(screen.getByRole('button', { name: 'Show details for Autumn Leaves' }))
+    expect(screen.queryByRole('region', { name: 'Details for Blue Bossa' })).toBeNull()
+    await user.click(within(screen.getByRole('region', { name: 'Details for Autumn Leaves' })).getByRole('button', { name: 'Open score' }))
+    expect(mocks.openPdf).toHaveBeenLastCalledWith(first)
+    await user.click(screen.getByRole('button', { name: 'Show details for No score' }))
+    expect(within(screen.getByRole('region', { name: 'Details for No score' })).getByText('No PDF attached')).toBeTruthy()
   })
 
   it('previews nested lesson notes as nested lists', async () => {
@@ -225,14 +252,54 @@ describe('lessons', () => {
     mocks.tables.sm_lesson_materials.push({ lesson_id: 'l1', material_id: 'm1' })
     const user = userEvent.setup()
     render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
-    expect((await screen.findByRole('checkbox', { name: 'Scales' }) as HTMLInputElement).checked).toBe(true)
+    expect(await screen.findByRole('button', { name: 'Remove material Scales' })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: /Previous/ }))
-    await user.click(screen.getByRole('checkbox', { name: 'Scales' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search materials for previous' }), 'scale{Enter}')
     await waitFor(() => expect(mocks.tables.sm_lesson_materials).toHaveLength(2))
     await user.click(screen.getByRole('button', { name: /Guitar/ }))
-    await user.click(screen.getByRole('checkbox', { name: 'Scales' }))
+    await user.click(screen.getByRole('button', { name: 'Remove material Scales' }))
     await waitFor(() => expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l2', material_id: 'm1' }]))
     expect(mocks.remove).not.toHaveBeenCalled()
+  })
+
+  it('searches and links multiple materials, opens each, and unlinks only the chosen one', async () => {
+    mocks.tables.sm_teaching_materials = [
+      { id: 'm1', title: 'Étude', pdf_path: 'u1/etude.pdf' },
+      { id: 'm2', title: 'Scales', pdf_path: 'u1/scales.pdf' },
+    ]
+    const user = userEvent.setup()
+    const rendered = render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const search = await screen.findByRole('searchbox', { name: 'Search materials for guitar' })
+    await user.type(search, 'etude')
+    const result = within(screen.getByRole('group', { name: 'Materials for Guitar' })).getByRole('button', { name: 'Étude' })
+    expect(fireEvent.pointerDown(result, { pointerType: 'touch' })).toBe(true)
+    fireEvent.blur(search, { relatedTarget: null })
+    fireEvent.click(result)
+    await screen.findByRole('button', { name: 'Open material Étude' })
+    await user.type(search, 'scales{Enter}')
+    await screen.findByRole('button', { name: 'Open material Scales' })
+    await user.click(screen.getByRole('button', { name: 'Open material Étude' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm1', pdf_path: 'u1/etude.pdf' }))
+    await user.click(screen.getByRole('button', { name: 'Open material Scales' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm2', pdf_path: 'u1/scales.pdf' }))
+    await user.click(screen.getByRole('button', { name: 'Remove material Étude' }))
+    await waitFor(() => expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l1', material_id: 'm2' }]))
+    expect(mocks.remove).not.toHaveBeenCalled()
+    rendered.unmount()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    expect(await screen.findByRole('button', { name: 'Open material Scales' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Open material Étude' })).toBeNull()
+  })
+
+  it('shows an error and preserves the linked material when unlinking fails', async () => {
+    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf' }]
+    mocks.tables.sm_lesson_materials = [{ lesson_id: 'l1', material_id: 'm1' }]
+    mocks.fail = 'sm_lesson_materials:delete'
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.click(await screen.findByRole('button', { name: 'Remove material Scales' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Database unavailable')
+    expect(screen.getByRole('button', { name: 'Open material Scales' })).toBeTruthy()
   })
 
   it('removes an uploaded PDF if its database record fails', async () => {
