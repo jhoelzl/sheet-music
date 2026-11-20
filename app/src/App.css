@@ -522,7 +522,12 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .setlist-placeholder { align-items: end; padding-bottom: 16px; }
 .setlist-placeholder label { flex: 1; min-width: 160px; }
 .setlist-order { display: grid; gap: 8px; padding: 14px 0 20px; margin: 0; list-style: none; }
-.setlist-order li { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; }
+.setlist-order li { --rail: 0px; display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.setlist-order li.dragging { position: relative; z-index: 2; transition: none; border-color: var(--accent-line); background: var(--surface); box-shadow: 0 10px 26px #0003; }
+.setlist-drag-handle { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 36px; margin: 0; padding: 0; color: var(--icon); background: none; border: 0; border-radius: 6px; cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.setlist-drag-handle:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
+.setlist-drag-handle:disabled { cursor: default; opacity: .5; }
+.setlist-order li.dragging .setlist-drag-handle { cursor: grabbing; color: var(--accent); }
 .setlist-number { display: grid; place-items: center; flex: 0 0 28px; height: 28px; color: var(--accent); background: var(--accent-soft); border-radius: 50%; font-size: 12px; font-weight: 700; }
 .setlist-piece-copy { display: grid; flex: 1; min-width: 0; gap: 2px; }
 .setlist-piece-copy strong { overflow-wrap: anywhere; }
@@ -540,9 +545,9 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
   .setlist-layout { grid-template-columns: 1fr; }
   .setlist-sidebar { display: grid; gap: 12px; }
   .setlist-create { margin: 0; }
-  .setlist-order li { flex-wrap: wrap; }
-  .setlist-piece-copy { flex-basis: calc(100% - 38px); }
-  .setlist-piece-actions { margin-left: 38px; }
+  .setlist-order li { --rail: 68px; flex-wrap: wrap; }
+  .setlist-piece-copy { flex-basis: calc(100% - var(--rail) - 10px); }
+  .setlist-piece-actions { margin-left: calc(var(--rail) + 10px); }
 }
 @media (max-width: 640px) {
   .toolbar .search-field { flex: 1 1 150px; }

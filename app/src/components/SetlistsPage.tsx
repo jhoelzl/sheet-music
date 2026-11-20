@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { Library } from '../hooks/useLibrary'
 import { supabase } from '../supabase'
+import { dropIndex, moveItem } from '../lib/reorder'
+import { GripIcon } from './icons'
 
 type Setlist = { id: string; name: string; position: number }
 type SetlistEntry = { id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null }
 type LibraryData = Pick<Library, 'pieces' | 'composerNamesOf' | 'hiddenIds'>
+type DragState = { pointerId: number; fromRow: number; startY: number; startScrollY: number; tops: number[]; heights: number[]; shift: number }
 
 export function SetlistsPage({ lib }: { lib: LibraryData }) {
   const [setlists, setSetlists] = useState<Setlist[]>([])
@@ -20,7 +23,20 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   const [loadedId, setLoadedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
+  const listRef = useRef<HTMLOListElement | null>(null)
+  const dragRef = useRef<DragState | null>(null)
+  const dragPointer = useRef<number | null>(null)
+  const dragRaf = useRef<number | null>(null)
+  const [drag, setDrag] = useState<{ fromRow: number; toRow: number; offsetY: number; shift: number } | null>(null)
   const members = selectedId ? membersBySetlist[selectedId] ?? [] : []
+  // Rows actually shown: hidden pieces (mid-delete) and stale ids are skipped, but we keep the
+  // original index so drag reordering still maps back onto the full member list.
+  const visibleRows = members
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => {
+      if (!entry.piece_id) return true
+      return lib.pieces.some((piece) => piece.id === entry.piece_id) && !lib.hiddenIds.has(entry.piece_id)
+    })
 
   const updateMembers = (setlistId: string, update: (current: SetlistEntry[]) => SetlistEntry[]) =>
     setMembersBySetlist((current) => ({ ...current, [setlistId]: update(current[setlistId] ?? []) }))
@@ -61,6 +77,8 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     })()
     return () => { active = false }
   }, [selectedId])
+
+  useEffect(() => () => { if (dragRaf.current !== null) cancelAnimationFrame(dragRaf.current) }, [])
 
   const perform = async (action: () => Promise<void>) => {
     if (busyRef.current) return
@@ -158,8 +176,10 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
 
   const moveEntry = (index: number, offset: -1 | 1) => {
     if (!selectedId) return
-    const other = index + offset
-    if (other < 0 || other >= members.length) return
+    const row = visibleRows.findIndex((item) => item.index === index)
+    const neighbor = visibleRows[row + offset]
+    if (!neighbor) return
+    const other = neighbor.index
     void perform(async () => {
       const first = members[index]
       const second = members[other]
@@ -168,6 +188,104 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       updateMembers(selectedId, (current) => current.map((item) => item.id === first.id ? { ...item, position: second.position }
         : item.id === second.id ? { ...item, position: first.position } : item).sort((a, b) => a.position - b.position))
     })
+  }
+
+  // Persist a drag: move the entry in the local list straight away, then send the whole
+  // ordered list to the server. Revert the optimistic change if the save fails.
+  const reorderEntries = (from: number, to: number) => {
+    if (!selectedId || from === to || busyRef.current) return
+    const previous = members
+    const next = moveItem(previous, from, to).map((entry, position) => ({ ...entry, position }))
+    updateMembers(selectedId, () => next)
+    void perform(async () => {
+      const { error: reorderError } = await supabase.rpc('sm_reorder_setlist_entries', { list_id: selectedId, entry_ids: next.map((entry) => entry.id) })
+      if (reorderError) { updateMembers(selectedId, () => previous); setError(reorderError.message) }
+    })
+  }
+
+  const startDrag = (event: ReactPointerEvent<HTMLButtonElement>, row: number) => {
+    if (entriesDisabled || (event.pointerType === 'mouse' && event.button !== 0)) return
+    const list = listRef.current
+    if (!list) return
+    const rows = Array.from(list.children).filter((child): child is HTMLLIElement => child instanceof HTMLLIElement)
+    if (rows.length < 2 || row >= rows.length) return
+    // Keep focus where it is so a focused comment is not saved (and the drag not blocked) mid-drag.
+    event.preventDefault()
+    const listTop = list.getBoundingClientRect().top
+    const rects = rows.map((element) => element.getBoundingClientRect())
+    const tops = rects.map((rect) => rect.top - listTop)
+    const heights = rects.map((rect) => rect.height)
+    const gap = tops.length > 1 ? Math.max(0, tops[1] - tops[0] - heights[0]) : 0
+    dragRef.current = { pointerId: event.pointerId, fromRow: row, startY: event.clientY, startScrollY: window.scrollY, tops, heights, shift: heights[row] + gap }
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+    setDrag({ fromRow: row, toRow: row, offsetY: 0, shift: heights[row] + gap })
+  }
+
+  // Keep the dragged row under the finger, then work out which slot it covers.
+  const dragOffsetY = (state: DragState, clientY: number) =>
+    clientY - state.startY + (window.scrollY - state.startScrollY)
+
+  const dragRowAt = (state: DragState, clientY: number) => {
+    const center = state.tops[state.fromRow] + state.heights[state.fromRow] / 2 + dragOffsetY(state, clientY)
+    return dropIndex(state.fromRow, state.tops, state.heights, center)
+  }
+
+  const applyDrag = () => {
+    const state = dragRef.current
+    const clientY = dragPointer.current
+    if (!state || clientY === null) return
+    setDrag({ fromRow: state.fromRow, toRow: dragRowAt(state, clientY), offsetY: dragOffsetY(state, clientY), shift: state.shift })
+  }
+
+  // Auto-scroll the page when the finger nears an edge so long setlists stay reachable.
+  const autoScroll = () => {
+    dragRaf.current = null
+    const clientY = dragPointer.current
+    if (clientY === null) return
+    const margin = 90
+    const max = 18
+    let speed = 0
+    if (clientY < margin) speed = -Math.ceil(((margin - clientY) / margin) * max)
+    else if (clientY > window.innerHeight - margin) speed = Math.ceil(((clientY - (window.innerHeight - margin)) / margin) * max)
+    if (!speed) return
+    const before = window.scrollY
+    window.scrollBy(0, speed)
+    if (window.scrollY === before) return
+    applyDrag()
+    dragRaf.current = requestAnimationFrame(autoScroll)
+  }
+
+  const moveDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const state = dragRef.current
+    if (!state || event.pointerId !== state.pointerId) return
+    dragPointer.current = event.clientY
+    applyDrag()
+    if (dragRaf.current === null) dragRaf.current = requestAnimationFrame(autoScroll)
+  }
+
+  const stopDrag = () => {
+    if (dragRaf.current !== null) { cancelAnimationFrame(dragRaf.current); dragRaf.current = null }
+    dragPointer.current = null
+  }
+
+  const endDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const state = dragRef.current
+    if (!state || event.pointerId !== state.pointerId) return
+    dragRef.current = null
+    setDrag(null)
+    stopDrag()
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
+    const from = visibleRows[state.fromRow]?.index
+    const to = visibleRows[dragRowAt(state, event.clientY)]?.index
+    if (from !== undefined && to !== undefined) reorderEntries(from, to)
+  }
+
+  const cancelDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const state = dragRef.current
+    if (!state || event.pointerId !== state.pointerId) return
+    dragRef.current = null
+    setDrag(null)
+    stopDrag()
   }
 
   const saveComment = (entry: SetlistEntry, input: HTMLInputElement) => {
@@ -236,14 +354,24 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                 </div>
               </div>
               {membersLoading && <p className="muted">Loading entries…</p>}
-              <ol className="setlist-order" aria-label="Tune order">
-                {members.map((entry, index) => {
+              <ol className="setlist-order" aria-label="Tune order" ref={listRef}>
+                {visibleRows.map(({ entry, index }, row) => {
                   const piece = entry.piece_id ? lib.pieces.find((item) => item.id === entry.piece_id) : null
-                  if (entry.piece_id && (!piece || lib.hiddenIds.has(entry.piece_id))) return null
                   const title = piece?.title ?? entry.placeholder ?? ''
+                  const dragging = drag?.fromRow === row
+                  const transform = !drag ? undefined
+                    : dragging ? `translateY(${drag.offsetY}px)`
+                      : drag.fromRow < drag.toRow && row > drag.fromRow && row <= drag.toRow ? `translateY(${-drag.shift}px)`
+                        : drag.fromRow > drag.toRow && row >= drag.toRow && row < drag.fromRow ? `translateY(${drag.shift}px)`
+                          : undefined
                   return (
-                    <li key={entry.id}>
-                      <span className="setlist-number">{index + 1}</span>
+                    <li key={entry.id} className={dragging ? 'dragging' : undefined} style={transform ? { transform } : undefined}>
+                      <button type="button" className="setlist-drag-handle" aria-label={`Reorder ${title}`} disabled={entriesDisabled || visibleRows.length < 2}
+                        title="Drag to reorder" onPointerDown={(event) => startDrag(event, row)}
+                        onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag}>
+                        {GripIcon}
+                      </button>
+                      <span className="setlist-number">{row + 1}</span>
                       <span className="setlist-piece-copy">
                         <strong>{title}</strong>
                         {piece ? <>
@@ -255,8 +383,8 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                         </> : <small>Placeholder</small>}
                       </span>
                       <div className="setlist-piece-actions">
-                        <button type="button" className="icon-btn" aria-label={`Move ${title} up`} disabled={entriesDisabled || index === 0} onClick={() => moveEntry(index, -1)}>↑</button>
-                        <button type="button" className="icon-btn" aria-label={`Move ${title} down`} disabled={entriesDisabled || index === members.length - 1} onClick={() => moveEntry(index, 1)}>↓</button>
+                        <button type="button" className="icon-btn" aria-label={`Move ${title} up`} disabled={entriesDisabled || row === 0} onClick={() => moveEntry(index, -1)}>↑</button>
+                        <button type="button" className="icon-btn" aria-label={`Move ${title} down`} disabled={entriesDisabled || row === visibleRows.length - 1} onClick={() => moveEntry(index, 1)}>↓</button>
                         <button type="button" className="link danger" aria-label={`Remove ${title} from ${selected.name}`} disabled={entriesDisabled} onClick={() => removeEntry(entry)}>Remove</button>
                       </div>
                     </li>

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Piece } from '../supabase'
@@ -40,8 +40,15 @@ describe('setlists page', () => {
       mocks.members.push(created)
       return created
     })
-    mocks.rpc.mockImplementation(async (name: string, args: Record<string, string>) => {
+    mocks.rpc.mockImplementation(async (name: string, args: Record<string, unknown>) => {
       if (mocks.fail === name) return { error: { message: 'Swap failed' } }
+      if (name === 'sm_reorder_setlist_entries') {
+        for (const [position, id] of (args.entry_ids as string[]).entries()) {
+          const entry = mocks.members.find((row) => row.id === id)
+          if (entry) entry.position = position
+        }
+        return { error: null }
+      }
       const rows = name === 'sm_swap_setlists' ? mocks.setlists : mocks.members.filter((entry) => entry.setlist_id === args.list_id)
       const first = rows.find((row) => row.id === args.first_id)!
       const second = rows.find((row) => row.id === args.second_id)!
@@ -147,6 +154,30 @@ describe('setlists page', () => {
     expect((screen.getByRole('textbox', { name: 'Comment for Moanin’' }) as HTMLInputElement).value).toBe('Piano solo')
     await user.click(screen.getAllByRole('button', { name: 'Remove Break from Gig' })[0])
     await waitFor(() => expect(mocks.members).toHaveLength(2))
+  })
+
+  it('reorders tunes by dragging the handle with touch', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0 }]
+    mocks.members = [
+      { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null },
+      { id: 'e2', setlist_id: 's1', piece_id: null, position: 1, placeholder: 'Break', comment: null },
+      { id: 'e3', setlist_id: 's1', piece_id: null, position: 2, placeholder: 'Encore', comment: null },
+    ]
+    render(<SetlistsPage lib={lib} />)
+    const list = await screen.findByRole('list', { name: 'Tune order' })
+    await waitFor(() => expect(list.children).toHaveLength(3))
+    const items = Array.from(list.children) as HTMLElement[]
+    expect(items).toHaveLength(3)
+    // Three 52px rows with an 8px gap so the drag has real geometry to work with.
+    list.getBoundingClientRect = () => ({ top: 0 } as DOMRect)
+    items.forEach((item, index) => { item.getBoundingClientRect = () => ({ top: index * 60, height: 52 } as DOMRect) })
+    const handle = within(items[0]).getByRole('button', { name: 'Reorder Moanin’' })
+    fireEvent.pointerDown(handle, { pointerId: 1, pointerType: 'touch', button: 0, clientY: 26 })
+    fireEvent.pointerMove(handle, { pointerId: 1, pointerType: 'touch', clientY: 160 })
+    fireEvent.pointerUp(handle, { pointerId: 1, pointerType: 'touch', clientY: 160 })
+    await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith('sm_reorder_setlist_entries', { list_id: 's1', entry_ids: ['e2', 'e3', 'e1'] }))
+    const updated = within(list).getAllByRole('listitem').map((item) => item.querySelector('strong')?.textContent)
+    expect(updated).toEqual(['Break', 'Encore', 'Moanin’'])
   })
 
   it('reports save errors and keeps the previous comment', async () => {
