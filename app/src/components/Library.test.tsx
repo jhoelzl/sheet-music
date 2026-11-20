@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLibrary } from '../hooks/useLibrary'
@@ -173,6 +173,37 @@ describe('focused library', () => {
       { piece_id: 'p-new', composer_id: 'c1', position: 0 },
       { piece_id: 'p-new', composer_id: 'c2', position: 1 },
     ])
+  })
+
+  it('saves a new piece only once while the save is pending', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search composers for new piece' }), 'clara{Enter}')
+
+    let resolveInsert!: (value: { data: { id: string }; error: null }) => void
+    mocks.from.mockImplementationOnce(() => ({
+      insert: (values: unknown) => {
+        mocks.insert('sm_pieces', values)
+        return { select: () => ({ single: () => new Promise((resolve) => { resolveInsert = resolve }) }) }
+      },
+    }))
+
+    const title = "Café´'s Waltz"
+    await user.type(screen.getByLabelText('Title'), title)
+    const add = screen.getByRole('button', { name: 'Add piece' })
+    await user.click(add)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy())
+    expect((screen.getByRole('button', { name: 'Saving…' }) as HTMLButtonElement).disabled).toBe(true)
+    // Even a programmatic resubmit must not create a second piece.
+    fireEvent.submit(add.closest('form')!)
+    const pieceInserts = mocks.insert.mock.calls.filter(([table]) => table === 'sm_pieces')
+    expect(pieceInserts).toHaveLength(1)
+    expect(pieceInserts[0][1]).toEqual(expect.objectContaining({ title }))
+
+    await act(async () => resolveInsert({ data: { id: 'p-new' }, error: null }))
+    await waitFor(() => expect(screen.queryByLabelText('Title')).toBeNull())
   })
 
   it('respects a previously selected view and allows switching to the focused list', async () => {
