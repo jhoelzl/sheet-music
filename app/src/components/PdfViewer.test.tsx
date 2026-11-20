@@ -1,4 +1,5 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PdfViewer } from './PdfViewer'
 
@@ -42,6 +43,39 @@ describe('PDF viewer', () => {
     act(() => updateWidth())
     await waitFor(() => expect((screen.getByLabelText('Page 1') as HTMLCanvasElement).width).toBe(1633))
     expect(screen.getByLabelText('Page 1').parentElement?.className).toBe('pdf-page')
+  })
+
+  it('zooms the pages in and out and resets to fit width', async () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 400)
+    vi.stubGlobal('devicePixelRatio', 1)
+    vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
+    vi.stubGlobal('IntersectionObserver', class {
+      callback: (entries: { isIntersecting: boolean }[]) => void
+      constructor(callback: (entries: { isIntersecting: boolean }[]) => void) { this.callback = callback }
+      observe() { this.callback([{ isIntersecting: true }]) }
+      disconnect() {}
+    })
+    const user = userEvent.setup()
+    render(<PdfViewer url="https://example.test/a.pdf" onLoad={vi.fn()} />)
+    await waitFor(() => expect(mocks.renderPage).toHaveBeenCalledTimes(2))
+    const page = () => screen.getByLabelText('Page 1') as HTMLCanvasElement
+    expect(page().width).toBe(400)
+    expect(page().parentElement?.style.width).toBe('100%')
+
+    await user.click(screen.getByRole('button', { name: 'Zoom in' }))
+    await waitFor(() => expect(page().parentElement?.style.width).toBe('125%'))
+    await waitFor(() => expect(page().width).toBe(500))
+
+    await user.click(screen.getByRole('button', { name: 'Zoom out' }))
+    await waitFor(() => expect(page().parentElement?.style.width).toBe('100%'))
+    await user.click(screen.getByRole('button', { name: 'Zoom out' }))
+    await waitFor(() => expect(page().parentElement?.style.width).toBe('75%'))
+    await user.click(screen.getByRole('button', { name: 'Zoom out' }))
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Zoom out' }) as HTMLButtonElement).disabled).toBe(true))
+
+    await user.click(screen.getByRole('button', { name: 'Reset zoom' }))
+    await waitFor(() => expect(page().parentElement?.style.width).toBe('100%'))
+    expect((screen.getByRole('button', { name: 'Zoom out' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('reports a PDF loading failure', async () => {
