@@ -9,6 +9,7 @@ import type { Lesson, TeachingMaterial } from '../supabase'
 import { SetlistTunePicker } from './SetlistTunePicker'
 import { SetlistTuneDetails } from './SetlistTuneDetails'
 import { SearchPicker } from './SearchPicker'
+import { TagInput } from './TagInput'
 import { ActivityCalendar } from './ActivityCalendar'
 
 type LessonPiece = { lesson_id: string; piece_id: string }
@@ -26,6 +27,8 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [newDate, setNewDate] = useState(todayISO)
   const [newTitle, setNewTitle] = useState('')
   const [materialTitle, setMaterialTitle] = useState('')
+  const [newMaterialTags, setNewMaterialTags] = useState<string[]>([])
+  const [materialTagFilter, setMaterialTagFilter] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [fileKey, setFileKey] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -45,7 +48,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       try {
         const [l, m, p, lm] = await Promise.all([
           supabase.from('sm_lessons').select('id, lesson_date, title, notes').order('lesson_date', { ascending: false }),
-          supabase.from('sm_teaching_materials').select('id, title, pdf_path').order('title'),
+          supabase.from('sm_teaching_materials').select('id, title, pdf_path, tags').order('title'),
           supabase.from('sm_lesson_pieces').select('lesson_id, piece_id'),
           supabase.from('sm_lesson_materials').select('lesson_id, material_id'),
         ])
@@ -174,8 +177,8 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       const upload = await storage.upload(path, file, { contentType: 'application/pdf' })
       if (upload.error) throw upload.error
       try {
-        const result = await supabase.from('sm_teaching_materials').insert({ title: materialTitle.trim(), pdf_path: path })
-          .select('id, title, pdf_path').single()
+        const result = await supabase.from('sm_teaching_materials').insert({ title: materialTitle.trim(), pdf_path: path, tags: newMaterialTags })
+          .select('id, title, pdf_path, tags').single()
         if (result.error) throw result.error
         if (!result.data) throw new Error('Could not save material.')
         setMaterials((current) => [...current, result.data as TeachingMaterial].sort((a, b) => a.title.localeCompare(b.title)))
@@ -185,8 +188,17 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
         throw reason
       }
       setMaterialTitle('')
+      setNewMaterialTags([])
       setFile(null)
       setFileKey((current) => current + 1)
+    })
+  }
+
+  const saveMaterialTags = (material: TeachingMaterial, tags: string[]) => {
+    void perform(async () => {
+      const { error: failure } = await supabase.from('sm_teaching_materials').update({ tags }).eq('id', material.id)
+      if (failure) throw failure
+      setMaterials((current) => current.map((item) => item.id === material.id ? { ...item, tags } : item))
     })
   }
 
@@ -209,6 +221,9 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const today = todayISO()
   const pastLessons = lessons.filter((lesson) => lesson.lesson_date <= today)
   const todayCount = pastLessons.filter((lesson) => lesson.lesson_date === today).length
+  const materialTags = [...new Set(materials.flatMap((material) => material.tags))].sort((a, b) => a.localeCompare(b))
+  const filterTags = materialTagFilter && !materialTags.includes(materialTagFilter) ? [...materialTags, materialTagFilter] : materialTags
+  const visibleMaterials = materialTagFilter ? materials.filter((material) => material.tags.includes(materialTagFilter)) : materials
   return (
     <div className="lessons-page">
       <div className="library-intro"><div><h2>Lessons</h2><p>Keep lesson notes, tunes and teaching materials together.</p></div></div>
@@ -260,7 +275,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               </section>
               <section className="lesson-section"><h3>Materials in this lesson</h3>
                 {!materials.length && <p className="muted">Upload teaching materials below to link them here.</p>}
-                <SearchPicker key={selected.id} items={materials.map((material) => ({ id: material.id, name: material.title }))}
+                <SearchPicker key={selected.id} items={materials.map((material) => ({ id: material.id, name: material.title, keywords: material.tags }))}
                   selectedIds={selectedMaterialIds} label={`Materials for ${selected.title}`} singular="material" plural="materials" disabled={busy}
                   onChange={(ids) => {
                     const added = ids.find((id) => !selectedMaterialIds.includes(id))
@@ -278,10 +293,22 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               <label className="grow">Material title<input required value={materialTitle} disabled={busy} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
               <label>PDF file<input key={fileKey} type="file" accept="application/pdf,.pdf" disabled={busy}
                 onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
+              <div className="field-group"><span>Tags</span>
+                <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy} onChange={setNewMaterialTags} />
+              </div>
               <button type="submit" className="btn" disabled={busy || !file || !materialTitle.trim()}>Upload PDF</button>
             </form>
-            {materials.map((material) => <div className="material-row" key={material.id}>
-              <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>
+            {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
+              <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} onClick={() => setMaterialTagFilter(null)}>All tags</button>
+              {filterTags.map((tag) => <button key={tag} type="button" className={`filter-pill${materialTagFilter === tag ? ' active' : ''}`}
+                aria-pressed={materialTagFilter === tag} onClick={() => setMaterialTagFilter(materialTagFilter === tag ? null : tag)}>#{tag}</button>)}
+            </div>}
+            {materialTagFilter && visibleMaterials.length === 0 && <p className="muted">No materials with this tag.</p>}
+            {visibleMaterials.map((material) => <div className="material-row" key={material.id}>
+              <div className="material-info">
+                <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>
+                <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy} onChange={(tags) => saveMaterialTags(material, tags)} />
+              </div>
               <button type="button" className="link danger" disabled={busy} onClick={() => deleteMaterial(material)}>Delete</button>
             </div>)}
           </section>

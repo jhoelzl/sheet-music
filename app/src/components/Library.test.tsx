@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
   pieces: [] as Record<string, unknown>[],
   scores: [] as Record<string, unknown>[],
   composerLinks: [] as { piece_id: string; composer_id: string; position: number }[],
-  materials: [] as { id: string; title: string; pdf_path: string }[],
+  materials: [] as { id: string; title: string; pdf_path: string; tags: string[] }[],
   lessons: [] as { id: string; title: string; lesson_date: string; notes: string }[],
 }))
 vi.mock('../supabase', () => ({
@@ -410,7 +410,7 @@ describe('focused library', () => {
   })
 
   it('downloads a zip backup of the data and scores', async () => {
-    mocks.materials = [{ id: 'm1', title: 'Chord theory', pdf_path: 'u1/materials/chords.pdf' }]
+    mocks.materials = [{ id: 'm1', title: 'Chord theory', pdf_path: 'u1/materials/chords.pdf', tags: ['harmony'] }]
     mocks.lessons = [{ id: 'l1', title: 'Guitar lesson', lesson_date: '2026-11-18', notes: '# Practice' }]
     const createObjectURL = vi.fn((_blob: Blob) => 'blob:backup')
     const revokeObjectURL = vi.fn()
@@ -430,6 +430,7 @@ describe('focused library', () => {
     expect(text).toContain('data.json')
     expect(text).toContain('scores/Romance - Piano · C major (s1).pdf')
     expect(text).toContain('teaching-materials/Chord theory (m1).pdf')
+    expect(text).toContain('"harmony"')
     expect(text).toContain('Guitar lesson')
     expect(await screen.findByText('Backup downloaded.')).toBeTruthy()
   })

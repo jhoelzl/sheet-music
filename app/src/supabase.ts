@@ -63,4 +63,4 @@ export type PiecePatch = Partial<Pick<Piece,
 export type PracticeLog = { id: string; piece_id: string; practiced_on: string }
 
 export type Lesson = { id: string; lesson_date: string; title: string; notes: string }
-export type TeachingMaterial = { id: string; title: string; pdf_path: string }
+export type TeachingMaterial = { id: string; title: string; pdf_path: string; tags: string[] }

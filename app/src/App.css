@@ -482,6 +482,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .teaching-materials { margin-top: 20px; }
 .teaching-materials .panel { margin: 12px 0; padding: 0; border: 0; flex-wrap: wrap; }
 .material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }
+.material-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 @media (max-width: 640px) {
   .lessons-layout { grid-template-columns: 1fr; }
   .page-nav button { min-width: 0; padding: 6px 3px; font-size: 11px; }
