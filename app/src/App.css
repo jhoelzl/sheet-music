@@ -560,7 +560,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .setlist-placeholder { align-items: end; padding-bottom: 16px; }
 .setlist-placeholder label { flex: 1; min-width: 160px; }
 .setlist-order { display: grid; gap: 8px; padding: 14px 0 20px; margin: 0; list-style: none; }
-.setlist-order li { --rail: 0px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; padding: 10px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
+.setlist-order > li { --rail: 0px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; padding: 10px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; transition: transform .16s ease, box-shadow .16s ease, border-color .16s ease; }
 .setlist-order li.placeholder { background: var(--accent-soft); border: 1px dashed var(--accent-line); }
 .setlist-order li.dragging { position: relative; z-index: 2; transition: none; border-color: var(--accent-line); background: var(--surface); box-shadow: 0 10px 26px #0003; }
 .setlist-order li.placeholder.dragging { border-style: dashed; background: var(--surface); }
@@ -659,7 +659,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
   .setlist-layout { grid-template-columns: 1fr; }
   .setlist-sidebar { display: grid; gap: 12px; }
   .setlist-create { margin: 0; }
-  .setlist-order li { --rail: 68px; flex-wrap: wrap; }
+  .setlist-order > li { --rail: 68px; flex-wrap: wrap; }
   .setlist-piece-copy { flex-basis: calc(100% - var(--rail) - 10px); }
   .setlist-piece-actions { margin-left: calc(var(--rail) + 10px); }
 }
