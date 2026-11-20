@@ -1,6 +1,7 @@
 import type { Piece } from '../supabase'
 import { practicedText } from '../lib/dates'
 import { INSTRUMENTS } from '../lib/instruments'
+import { keysOf, scoresOf } from '../hooks/useLibrary'
 import { LINK_TYPES, linkLabel, safeUrl } from '../lib/links'
 import { STATUSES, statusOf } from '../lib/status'
 import { PdfIcon } from './icons'
@@ -13,6 +14,8 @@ export function SetlistTuneDetails({ piece, composerNamesOf, onOpenPdf }: {
 }) {
   const status = STATUSES.find((item) => item.value === statusOf(piece))
   const instruments = INSTRUMENTS.filter((item) => piece.instruments.includes(item.value)).map((item) => item.label)
+  const keys = keysOf(piece)
+  const scores = scoresOf(piece)
   const links = (piece.links ?? []).flatMap((link) => {
     const href = safeUrl(link.url)
     return href ? [{ href, label: linkLabel(link, piece.links ?? []), type: link.type }] : []
@@ -21,12 +24,12 @@ export function SetlistTuneDetails({ piece, composerNamesOf, onOpenPdf }: {
     <div className="setlist-details">
       <dl className="setlist-facts">
         <div><dt>Composers</dt><dd>{composerNamesOf(piece) || 'Unknown'}</dd></div>
-        <div><dt>Key</dt><dd>{piece.musical_key || '—'}</dd></div>
+        <div><dt>Key</dt><dd>{keys.join(', ') || '—'}</dd></div>
         <div><dt>Instruments</dt><dd>{instruments.join(', ') || '—'}</dd></div>
         <div><dt>Progress</dt><dd>{status?.label ?? '—'}</dd></div>
         <div><dt>Difficulty</dt><dd>{piece.difficulty ? `${piece.difficulty} / 5` : '—'}</dd></div>
         <div><dt>Rating</dt><dd>{piece.rating ? `${piece.rating} / 5` : '—'}</dd></div>
-        <div><dt>Score</dt><dd>{piece.pdf_path ? `${piece.pdf_pages ?? '?'} ${piece.pdf_pages === 1 ? 'page' : 'pages'}` : 'No PDF attached'}</dd></div>
+        <div><dt>Score</dt><dd>{scores.length ? `${scores.length} ${scores.length === 1 ? 'PDF' : 'PDFs'} · ${piece.pdf_pages ?? '?'} ${piece.pdf_pages === 1 ? 'page' : 'pages'}` : 'No PDF attached'}</dd></div>
         <div><dt>Practice</dt><dd>{piece.last_practiced ? practicedText(piece.last_practiced) : 'Not practised yet'}</dd></div>
       </dl>
       {(piece.tags ?? []).length > 0 && (

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Piece } from '../supabase'
+import type { Piece, PieceScore } from '../supabase'
+import { INSTRUMENTS } from '../lib/instruments'
 import { Markdown } from '../lib/markdown'
 import { PdfViewer } from './PdfViewer'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon } from './icons'
@@ -14,6 +15,11 @@ export type PlayerEntry = {
   piece: Piece | null
 }
 
+const scoreLabel = (score: PieceScore) => {
+  const instrument = INSTRUMENTS.find((item) => item.value === score.instrument)
+  return [instrument?.label ?? score.instrument, score.musical_key].filter(Boolean).join(' · ')
+}
+
 /**
  * Live mode: one score at a time, full screen, with the next tune one tap away.
  * Placeholders (breaks, announcements) show as cue cards so the running order
@@ -22,13 +28,16 @@ export type PlayerEntry = {
 export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
   name: string
   entries: PlayerEntry[]
-  pdfUrl: (p: Piece) => Promise<string | null>
+  pdfUrl: (score: PieceScore) => Promise<string | null>
   onClose: () => void
-  onPages?: (p: Piece, pages: number) => void
+  onPages?: (p: Piece, score: PieceScore, pages: number) => void
 }) {
   const [index, setIndex] = useState(0)
-  // The signed URL and any failure belong to a specific tune, so a stale result
-  // for the previous tune is ignored instead of cleared when the tune changes.
+  // Which score of the current tune is on stage. Switching tunes resets it to the
+  // first score, because the chosen id no longer matches the new tune's scores.
+  const [chosenScoreId, setChosenScoreId] = useState<string | null>(null)
+  // The signed URL and any failure belong to a specific score, so a stale result
+  // for a previous score is ignored instead of cleared when the score changes.
   const [signed, setSigned] = useState<{ id: string; url: string } | null>(null)
   const [failure, setFailure] = useState<{ id: string; message: string } | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -36,33 +45,35 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
   useEffect(() => { closeRef.current = onClose }, [onClose])
   const current = entries[index] ?? null
   const piece = current?.piece ?? null
-  const pieceId = piece?.id ?? null
-  const pdfPath = piece?.pdf_path ?? null
-  const pieceRef = useRef<Piece | null>(piece)
-  useEffect(() => { pieceRef.current = piece }, [piece])
+  const scores = piece?.scores ?? []
+  const score = scores.find((item) => item.id === chosenScoreId) ?? scores[0] ?? null
+  const scoreId = score?.id ?? null
+  const pdfPath = score?.pdf_path ?? null
+  const scoreRef = useRef<PieceScore | null>(score)
+  useEffect(() => { scoreRef.current = score }, [score])
   const pdfUrlRef = useRef(pdfUrl)
   useEffect(() => { pdfUrlRef.current = pdfUrl }, [pdfUrl])
   const last = entries.length - 1
   const go = (next: number) => setIndex(Math.max(0, Math.min(next, last)))
-  const url = signed && signed.id === pieceId ? signed.url : null
-  const error = failure && failure.id === pieceId ? failure.message : ''
+  const url = signed && signed.id === scoreId ? signed.url : null
+  const error = failure && failure.id === scoreId ? failure.message : ''
 
-  // Sign the score of the tune on stage; reload it whenever the tune changes.
+  // Sign the score on stage; reload it whenever the score or tune changes.
   useEffect(() => {
-    if (!pieceId || !pdfPath) return
+    if (!scoreId || !pdfPath) return
     let active = true
     void (async () => {
       try {
-        const next = await pdfUrlRef.current(pieceRef.current!)
+        const next = await pdfUrlRef.current(scoreRef.current!)
         if (!active) return
         if (!next) throw new Error('This tune has no score attached.')
-        setSigned({ id: pieceId, url: next })
+        setSigned({ id: scoreId, url: next })
       } catch (reason) {
-        if (active) setFailure({ id: pieceId, message: reason instanceof Error ? reason.message : 'Could not open this score.' })
+        if (active) setFailure({ id: scoreId, message: reason instanceof Error ? reason.message : 'Could not open this score.' })
       }
     })()
     return () => { active = false }
-  }, [pieceId, pdfPath])
+  }, [scoreId, pdfPath])
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
@@ -101,18 +112,25 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
             ))}
           </select>
         </label>
+        {scores.length > 1 && (
+          <label className="player-jump player-score">Score
+            <select aria-label="Choose score" value={score?.id ?? ''} onChange={(event) => setChosenScoreId(event.target.value)}>
+              {scores.map((item) => <option key={item.id} value={item.id}>{scoreLabel(item)}</option>)}
+            </select>
+          </label>
+        )}
       </header>
       <div className="player-body">
         {error ? (
           <p className="player-message" role="alert">{error}</p>
-        ) : piece && !pdfPath ? (
+        ) : piece && !score ? (
           <div className="player-cue">
             <span className="setlist-marker" aria-hidden="true">{PauseIcon}</span>
             <h3>{current.title}</h3>
             <p>No score attached to this tune. Attach a PDF in the library to see it on stage.</p>
           </div>
-        ) : piece ? (
-          url ? <PdfViewer key={url} url={url} onLoad={(pages) => onPages?.(piece, pages)} />
+        ) : piece && score ? (
+          url ? <PdfViewer key={url} url={url} onLoad={(pages) => onPages?.(piece, score, pages)} />
             : <p className="player-message" role="status">Opening score…</p>
         ) : (
           <div className="player-cue">

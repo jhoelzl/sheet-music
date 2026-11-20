@@ -14,7 +14,7 @@ export function statusOf(p: Piece): Status {
   return (STATUSES.find((s) => s.value === p.play_progress)?.value ?? 0) as Status
 }
 
-export function statusPatch(s: Status): Partial<Piece> {
+export function statusPatch(s: Status): { play_progress: Status } {
   return { play_progress: s }
 }
 

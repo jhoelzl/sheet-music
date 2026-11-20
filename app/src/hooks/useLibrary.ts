@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { PDF_SIGNED_URL_TTL_SECONDS, PDF_STORAGE_BUCKET } from '../config'
 import { supabase } from '../supabase'
-import type { Composer, Instrument, Piece, PieceLink, PracticeLog } from '../supabase'
+import type { Composer, Instrument, Piece, PieceLink, PiecePatch, PieceScore, PracticeLog } from '../supabase'
 import { countPdfPages } from '../lib/pdf'
 import { todayISO } from '../lib/dates'
 import { detectLinkType, safeUrl } from '../lib/links'
@@ -16,6 +16,26 @@ export type Preview = { id: string; title: string; url: string | null; pages: nu
 export const TABLE_COLUMNS = ['composer', 'instruments', 'tags', 'status', 'difficulty', 'rating', 'pages', 'practiced'] as const
 export type TableColumnId = (typeof TABLE_COLUMNS)[number]
 export type Library = ReturnType<typeof useLibrary>
+
+/** Scores (PDFs) of a piece, in order. */
+export const scoresOf = (p: Piece): PieceScore[] => p.scores ?? []
+
+/** Distinct keys across a piece's scores. */
+export const keysOf = (p: Piece): string[] =>
+  [...new Set(scoresOf(p).map((s) => s.musical_key).filter((k): k is string => Boolean(k)))]
+
+/** The score opened by default (the first one). */
+export const primaryScore = (p: Piece): PieceScore | null => scoresOf(p)[0] ?? null
+
+/** Recompute the read-only piece fields that are derived from its scores. */
+const withScores = (p: Piece, scores: PieceScore[]): Piece => ({
+  ...p,
+  scores,
+  instruments: [...new Set(scores.map((s) => s.instrument))],
+  musical_key: scores.find((s) => s.musical_key)?.musical_key ?? null,
+  pdf_path: scores[0]?.pdf_path ?? null,
+  pdf_pages: scores.reduce((total, s) => total + (s.pdf_pages ?? 0), 0) || null,
+})
 
 /** All library state, data loading, mutations and derived data. */
 export function useLibrary() {
@@ -71,7 +91,7 @@ export function useLibrary() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>('all')
-  const [newInstruments, setNewInstruments] = useState<Instrument[]>(['piano'])
+  const [newScoreInstrument, setNewScoreInstrument] = useState<Instrument>('piano')
   const [newComposerIds, setNewComposerIds] = useState<string[]>([])
   const [newTags, setNewTags] = useState<string[]>([])
   const [newSubtitle, setNewSubtitle] = useState('')
@@ -99,7 +119,8 @@ export function useLibrary() {
     const c = await supabase.from('sm_composers').select('*').order('name')
     const p = await supabase.from('sm_pieces').select('*').order('title')
     const pc = await supabase.from('sm_piece_composers').select('piece_id, composer_id, position').order('position')
-    if (c.error || p.error || pc.error) notify((c.error ?? p.error ?? pc.error)!.message)
+    const sc = await supabase.from('sm_piece_scores').select('id, piece_id, pdf_path, pdf_pages, musical_key, instrument, position').order('position')
+    if (c.error || p.error || pc.error || sc.error) notify((c.error ?? p.error ?? pc.error ?? sc.error)!.message)
     setComposersLoaded(!c.error)
     setComposers(c.data ?? [])
     const composerIdsByPiece = new Map<string, string[]>()
@@ -108,9 +129,15 @@ export function useLibrary() {
       ids.push(link.composer_id)
       composerIdsByPiece.set(link.piece_id, ids)
     }
+    const scoresByPiece = new Map<string, PieceScore[]>()
+    for (const score of (sc.data ?? []) as PieceScore[]) {
+      const list = scoresByPiece.get(score.piece_id) ?? []
+      list.push(score)
+      scoresByPiece.set(score.piece_id, list)
+    }
     setPieces((p.data ?? []).map((piece) => {
       const composerIds = composerIdsByPiece.get(piece.id) ?? []
-      return { ...piece, composer_ids: [piece.composer_id, ...composerIds.filter((id) => id !== piece.composer_id)] }
+      return withScores({ ...piece, composer_ids: [piece.composer_id, ...composerIds.filter((id) => id !== piece.composer_id)] }, scoresByPiece.get(piece.id) ?? [])
     }))
     // Missing table (migration 0010 not run yet) just leaves the calendar empty.
     const l = await supabase.from('sm_practice_log').select('id, piece_id, practiced_on').order('practiced_on', { ascending: false }).limit(5000)
@@ -155,6 +182,30 @@ export function useLibrary() {
     }
   }
 
+  /** Upload the add-form's optional PDF and store it as the piece's first score. */
+  const saveNewScore = async (pieceId: string): Promise<{ error: string | null }> => {
+    if (!file) return { error: null }
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { error: 'You must be signed in to upload a score.' }
+    const pdf_pages = await countPdfPages(file)
+    const pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
+    const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, file, { contentType: 'application/pdf' })
+    if (up.error) return { error: up.error.message }
+    const { error } = await supabase.from('sm_piece_scores').insert({
+      piece_id: pieceId,
+      pdf_path,
+      pdf_pages,
+      musical_key: newMusicalKey.trim() || null,
+      instrument: newScoreInstrument,
+      position: 0,
+    })
+    if (error) {
+      await supabase.storage.from(PDF_STORAGE_BUCKET).remove([pdf_path])
+      return { error: error.message }
+    }
+    return { error: null }
+  }
+
   const addPiece = async (e: FormEvent) => {
     e.preventDefault()
     if (!newComposerIds.length) { notify('Select at least one composer.'); return }
@@ -162,23 +213,10 @@ export function useLibrary() {
     pieceSavingRef.current = true
     setPieceSaving(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      let pdf_path: string | null = null
-      let pdf_pages: number | null = null
-      if (file && user) {
-        pdf_pages = await countPdfPages(file)
-        pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
-        const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, file, { contentType: 'application/pdf' })
-        if (up.error) { notify(`Upload failed: ${up.error.message}`); return }
-      }
       const { data, error } = await supabase.from('sm_pieces').insert({
         title: title.trim(),
         subtitle: newSubtitle.trim() || null,
-        musical_key: newMusicalKey.trim() || null,
         composer_id: newComposerIds[0],
-        pdf_path,
-        ...(pdf_pages ? { pdf_pages } : {}),
-        instruments: newInstruments,
         ...(newTags.length ? { tags: newTags } : {}),
       }).select('id').single()
       if (error || !data) {
@@ -188,11 +226,13 @@ export function useLibrary() {
       const { error: linkError } = await supabase.from('sm_piece_composers').insert(
         newComposerIds.map((composer_id, position) => ({ piece_id: data.id, composer_id, position })),
       )
+      const { error: scoreError } = await saveNewScore(data.id)
       await load()
-      // The piece exists now, so always reset the form even if the composer links failed;
+      // The piece exists now, so always reset the form even if a child insert failed;
       // otherwise a second submit would create a duplicate.
-      setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewInstruments(['piano']); setNewTags([]); setPanel(null)
+      setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewScoreInstrument('piano'); setNewTags([]); setPanel(null)
       if (linkError) notify(`Piece saved, but its composer list could not be saved: ${linkError.message}`)
+      else if (scoreError) notify(`Piece saved, but its score could not be saved: ${scoreError}`)
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Could not add piece.')
     } finally {
@@ -228,7 +268,7 @@ export function useLibrary() {
     }
   }
 
-  const update = (p: Piece, patch: Partial<Piece>) => {
+  const update = (p: Piece, patch: PiecePatch) => {
     setPieces((current) => current.map((piece) => piece.id === p.id ? { ...piece, ...patch } : piece))
     void run(supabase.from('sm_pieces').update(patch).eq('id', p.id))
   }
@@ -279,7 +319,8 @@ export function useLibrary() {
     deleteTimers.current.set(p.id, window.setTimeout(() => {
       deleteTimers.current.delete(p.id)
       void (async () => {
-        if (p.pdf_path) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([p.pdf_path])
+        const paths = scoresOf(p).map((score) => score.pdf_path)
+        if (paths.length) await supabase.storage.from(PDF_STORAGE_BUCKET).remove(paths)
         await run(supabase.from('sm_pieces').delete().eq('id', p.id))
         unhide()
       })()
@@ -308,7 +349,8 @@ export function useLibrary() {
   const removeLink = (p: Piece, link: PieceLink) =>
     update(p, { links: (p.links ?? []).filter((l) => l.url !== link.url) })
 
-  const attachPdf = async (p: Piece, f: File) => {
+  /** Upload a PDF and add it as a new score of the piece. */
+  const addScore = async (p: Piece, f: File, musical_key: string | null, instrument: Instrument) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setUploadingId(p.id)
@@ -318,10 +360,26 @@ export function useLibrary() {
     if (up.error) {
       notify(`Upload failed: ${up.error.message}`)
     } else {
-      const ok = await run(supabase.from('sm_pieces').update({ pdf_path, ...(pdf_pages ? { pdf_pages } : {}) }).eq('id', p.id))
+      const position = scoresOf(p).reduce((max, score) => Math.max(max, score.position), -1) + 1
+      const ok = await run(supabase.from('sm_piece_scores').insert({ piece_id: p.id, pdf_path, pdf_pages, musical_key, instrument, position }))
       if (!ok) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([pdf_path])
     }
     setUploadingId(null)
+  }
+
+  /** Change a score's key or instrument. */
+  const updateScore = (p: Piece, score: PieceScore, patch: Partial<Pick<PieceScore, 'musical_key' | 'instrument'>>) => {
+    setPieces((current) => current.map((piece) => piece.id === p.id
+      ? withScores(piece, scoresOf(piece).map((s) => s.id === score.id ? { ...s, ...patch } : s))
+      : piece))
+    void run(supabase.from('sm_piece_scores').update(patch).eq('id', score.id))
+  }
+
+  const removeScore = (_p: Piece, score: PieceScore) => {
+    void (async () => {
+      const ok = await run(supabase.from('sm_piece_scores').delete().eq('id', score.id))
+      if (ok) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([score.pdf_path])
+    })()
   }
 
   // Hide the composer (and their pieces) right away and only delete once the undo window has passed.
@@ -337,7 +395,7 @@ export function useLibrary() {
       unhide()
       dismissToast(toastId)
     })
-    const paths = related.filter((p) => composerIdsOf(p).length === 1 && p.pdf_path).map((p) => p.pdf_path!)
+    const paths = related.filter((p) => composerIdsOf(p).length === 1).flatMap((p) => scoresOf(p).map((score) => score.pdf_path))
     deleteTimers.current.set(key, window.setTimeout(() => {
       deleteTimers.current.delete(key)
       void (async () => {
@@ -370,12 +428,12 @@ export function useLibrary() {
     if (next !== c.name) void run(supabase.from('sm_composers').update({ name: next }).eq('id', c.id))
   }
 
-  const openPdf = async (p: Piece) => {
-    if (!p.pdf_path) return
+  const openPdf = async (p: Piece, score: PieceScore | null = primaryScore(p)) => {
+    if (!score) return
     const request = ++previewRequest.current
-    setPreview({ id: p.id, title: p.title, url: null, pages: p.pdf_pages ?? null, error: null })
+    setPreview({ id: score.id, title: p.title, url: null, pages: score.pdf_pages ?? null, error: null })
     try {
-      const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
+      const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(score.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
       if (request !== previewRequest.current) return
       if (error) throw error
       setPreview((current) => current && { ...current, url: data.signedUrl })
@@ -390,21 +448,21 @@ export function useLibrary() {
     setPreview(null)
   }
 
-  /** Signed URL for a piece's score, for views that host the PDF themselves (live mode). */
-  const pdfUrl = useCallback(async (p: Piece) => {
-    if (!p.pdf_path) return null
-    const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
+  /** Signed URL for one score, for views that host the PDF themselves (live mode). */
+  const pdfUrl = useCallback(async (score: PieceScore) => {
+    const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(score.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
     if (error) throw error
     return data.signedUrl
   }, [])
 
-  const recordPdfPages = async (id: string, pages: number) => {
-    setPreview((current) => current?.id === id ? { ...current, pages } : current)
-    if (pieces.find((piece) => piece.id === id)?.pdf_pages === pages) return
+  const recordPdfPages = async (scoreId: string, pages: number) => {
+    setPreview((current) => current?.id === scoreId ? { ...current, pages } : current)
+    const score = pieces.flatMap((piece) => scoresOf(piece)).find((item) => item.id === scoreId)
+    if (!score || score.pdf_pages === pages) return
     try {
-      const { error } = await supabase.from('sm_pieces').update({ pdf_pages: pages }).eq('id', id)
+      const { error } = await supabase.from('sm_piece_scores').update({ pdf_pages: pages }).eq('id', scoreId)
       if (error) throw error
-      setPieces((current) => current.map((piece) => piece.id === id ? { ...piece, pdf_pages: pages } : piece))
+      setPieces((current) => current.map((piece) => withScores(piece, scoresOf(piece).map((s) => s.id === scoreId ? { ...s, pdf_pages: pages } : s))))
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Could not save the PDF page count.')
     }
@@ -417,7 +475,7 @@ export function useLibrary() {
   const visible = pieces.filter((p) => {
     if (hiddenIds.has(p.id)) return false
     if (terms.length) {
-      const haystack = normalizeSearch([p.title, p.subtitle, p.musical_key, composerNamesOf(p), p.notes, ...p.instruments, ...(p.tags ?? [])].filter(Boolean).join(' '))
+      const haystack = normalizeSearch([p.title, p.subtitle, ...keysOf(p), composerNamesOf(p), p.notes, ...p.instruments, ...(p.tags ?? [])].filter(Boolean).join(' '))
       if (!terms.every((t) => haystack.includes(t))) return false
     }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
@@ -464,9 +522,10 @@ export function useLibrary() {
     search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, composerNameOf, composerIdsOf, composerNamesOf,
     // new-item form state
-    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, setFile, newInstruments, setNewInstruments, newTags, setNewTags, pieceSaving,
+    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreInstrument, setNewScoreInstrument, newTags, setNewTags, pieceSaving,
     // actions
     dismissToast, closePdf, pdfUrl, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
-    addLink, removeLink, attachPdf, removeComposer, startEditComposer, commitComposerEdit, openPdf,
+    addLink, removeLink, addScore, updateScore, removeScore, removeComposer, startEditComposer, commitComposerEdit, openPdf,
+    scoresOf, keysOf, primaryScore,
   }
 }

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Piece } from '../supabase'
+import type { Piece, PieceScore } from '../supabase'
 import { SetlistsPage } from './SetlistsPage'
 
 type Setlist = { id: string; name: string; position: number; archived_at: string | null }
@@ -27,10 +27,16 @@ vi.mock('./PdfViewer', () => ({
 }))
 
 const piece: Piece = {
-  id: 'p1', composer_id: 'c1', composer_ids: ['c1'], title: 'Moanin’', subtitle: null, musical_key: 'F minor',
-  pdf_path: 'u/moanin.pdf', pdf_pages: 2, play_progress: 0, difficulty: null, rating: null, notes: null, instruments: ['piano'],
+  id: 'p1', composer_id: 'c1', composer_ids: ['c1'], title: 'Moanin’', subtitle: null,
+  scores: [{ id: 'sc-p1', piece_id: 'p1', pdf_path: 'u/moanin.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', position: 0 }],
+  instruments: ['piano'], musical_key: 'F minor', pdf_path: 'u/moanin.pdf', pdf_pages: 2,
+  play_progress: 0, difficulty: null, rating: null, notes: null,
 }
-const waltz: Piece = { ...piece, id: 'p2', title: 'Waltz', pdf_path: 'u/waltz.pdf' }
+const waltz: Piece = {
+  ...piece, id: 'p2', title: 'Waltz',
+  scores: [{ id: 'sc-p2', piece_id: 'p2', pdf_path: 'u/waltz.pdf', pdf_pages: 1, musical_key: null, instrument: 'piano', position: 0 }],
+  musical_key: null, pdf_path: 'u/waltz.pdf', pdf_pages: 1,
+}
 const lib = {
   pieces: [piece, waltz],
   composerNamesOf: () => 'Bobby Timmons',
@@ -100,7 +106,7 @@ describe('setlists page', () => {
     })
     mocks.openPdf.mockReset()
     mocks.pdfUrl.mockReset()
-    mocks.pdfUrl.mockImplementation(async (p: Piece) => `https://signed.test/${p.pdf_path}`)
+    mocks.pdfUrl.mockImplementation(async (score: PieceScore) => `https://signed.test/${score.pdf_path}`)
     mocks.recordPdfPages.mockReset()
     mocks.from.mockImplementation((table: string) => {
       const filters: Record<string, string> = {}
@@ -379,7 +385,7 @@ describe('setlists page', () => {
     const details = screen.getByRole('button', { name: 'Hide details for Moanin’' }).closest('li')!
     expect(within(details).getByText('F minor')).toBeTruthy()
     expect(within(details).getByText('Bobby Timmons')).toBeTruthy()
-    expect(within(details).getByText('2 pages')).toBeTruthy()
+    expect(within(details).getByText(/2 pages/)).toBeTruthy()
     expect(within(details).getByText("Can't play yet (0%)")).toBeTruthy()
     await user.click(within(details).getByRole('button', { name: 'Open score' }))
     expect(mocks.openPdf).toHaveBeenCalledTimes(2)
@@ -388,7 +394,7 @@ describe('setlists page', () => {
   it('tells the player when a tune has no score attached', async () => {
     mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
     mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p3', position: 0, placeholder: null, comment: null }]
-    const noScore = { ...lib, pieces: [{ ...piece, id: 'p3', title: 'Unfinished Sketch', pdf_path: null }] }
+    const noScore = { ...lib, pieces: [{ ...piece, id: 'p3', title: 'Unfinished Sketch', scores: [], pdf_path: null, pdf_pages: null }] }
     const user = userEvent.setup()
     render(<SetlistsPage lib={noScore} />)
     await screen.findByRole('heading', { name: 'Gig' })
@@ -422,7 +428,7 @@ describe('setlists page', () => {
     expect((within(player).getByRole('button', { name: 'Next tune' }) as HTMLButtonElement).disabled).toBe(true)
     // Page counts are recorded from the player too.
     await user.click(within(player).getByRole('button', { name: 'score' }))
-    expect(mocks.recordPdfPages).toHaveBeenCalledWith('p2', 3)
+    expect(mocks.recordPdfPages).toHaveBeenCalledWith('sc-p2', 3)
     // Arrow keys and the jump list switch tunes; Escape leaves live mode.
     await user.keyboard('{ArrowLeft}')
     await waitFor(() => expect(within(player).getByRole('heading', { name: 'Break' })).toBeTruthy())
@@ -458,5 +464,25 @@ describe('setlists page', () => {
     await user.click(screen.getByRole('button', { name: 'Play' }))
     const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
     expect(within(player).getByText('Count in').tagName).toBe('STRONG')
+  })
+
+  it('lets the player choose between a tune’s scores', async () => {
+    const twoScores: Piece = {
+      ...piece,
+      scores: [
+        { id: 'sc-a', piece_id: 'p1', pdf_path: 'u/piano.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', position: 0 },
+        { id: 'sc-b', piece_id: 'p1', pdf_path: 'u/guitar.pdf', pdf_pages: 1, musical_key: 'C major', instrument: 'guitar', position: 1 },
+      ],
+    }
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={{ ...lib, pieces: [twoScores, waltz] }} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await user.click(screen.getByRole('button', { name: 'Play' }))
+    const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
+    await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/piano.pdf'))
+    await user.selectOptions(within(player).getByRole('combobox', { name: 'Choose score' }), 'sc-b')
+    await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/guitar.pdf'))
   })
 })

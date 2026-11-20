@@ -6,6 +6,7 @@ import { PieceCard } from './PieceCard'
 
 export function CompactPiece({ lib, p }: { lib: Library; p: Piece }) {
   const [open, setOpen] = useState(false)
+  const keys = lib.keysOf(p)
   return (
     <details className="compact-piece" onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary className="compact-piece-summary">
@@ -15,7 +16,7 @@ export function CompactPiece({ lib, p }: { lib: Library; p: Piece }) {
             <strong>{p.title}</strong>
             {p.subtitle && <span className="compact-piece-subtitle">{p.subtitle}</span>}
           </span>
-          <span>{lib.composerNamesOf(p)}{p.instruments.length > 0 ? ` · ${p.instruments.join(', ')}` : ''}{p.musical_key ? ` · ${p.musical_key}` : ''}</span>
+          <span>{lib.composerNamesOf(p)}{p.instruments.length > 0 ? ` · ${p.instruments.join(', ')}` : ''}{keys.length > 0 ? ` · ${keys.join(', ')}` : ''}</span>
         </span>
         <span className="compact-piece-progress">{statusOf(p)}%</span>
         <span className="compact-piece-chevron" aria-hidden="true">⌄</span>

@@ -237,9 +237,16 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .open-pdf-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; margin-right: 6px; padding: 0 14px; color: #fff; background: var(--accent); border: 0; border-radius: 99px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .open-pdf-btn:hover { filter: brightness(1.1); }
 .open-pdf-btn svg { width: 16px; height: 16px; }
-.attach-btn { display: inline-flex; align-items: center; height: 28px; margin-right: 6px; padding: 0 12px; color: var(--accent); background: var(--accent-soft); border: 1px dashed var(--accent-line); border-radius: 99px; font-size: 12px; font-weight: 500; cursor: pointer; }
-.attach-btn:hover { border-style: solid; }
-.attach-btn.busy { opacity: .6; cursor: progress; }
+.piece-scores { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.piece-scores-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.piece-scores .muted { font-size: 12px; }
+.score-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.score-row, .score-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.score-row select, .score-add select { width: 130px; height: 28px; padding: 0 8px; font-size: 12px; }
+.score-instrument { display: grid; place-items: center; flex: 0 0 24px; height: 24px; background: var(--sunken); border-radius: 6px; }
+.score-instruments { display: flex; gap: 4px; }
+.score-instruments .chip { height: 26px; padding: 0 8px; }
+.score-add input[type="file"] { width: auto; height: auto; padding: 6px 10px; font-size: 12px; }
 .skeleton { display: inline-block; width: 52px; height: 20px; border-radius: 99px; background: linear-gradient(90deg, var(--hover) 25%, var(--track) 50%, var(--hover) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .progress { --c: #a8a29a; --pct: 0%; width: 240px; max-width: 100%; }
