@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Piece } from '../supabase'
+import { isoOf, todayISO } from '../lib/dates'
 import { LessonsPage } from './LessonsPage'
 
 type Row = Record<string, unknown>
@@ -113,6 +114,96 @@ describe('lessons', () => {
     expect(items).toHaveLength(2)
     expect(items[0].querySelector('ul > li')?.textContent).toBe('Auf 9. Bund beginnen')
     expect(items[1].querySelector('ul > li')?.textContent).toBe('Melodie weiterüben')
+  })
+
+  it('shows lesson activity by date and opens a lesson from the heatmap', async () => {
+    const today = todayISO()
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const previousDate = isoOf(yesterday)
+    mocks.tables.sm_lessons = [
+      { id: 'l1', lesson_date: today, title: 'Today lesson', notes: '' },
+      { id: 'l2', lesson_date: previousDate, title: 'Previous lesson', notes: '' },
+      { id: 'l3', lesson_date: previousDate, title: 'Another lesson', notes: '' },
+    ]
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    expect(screen.getByText('1 lesson today')).toBeTruthy()
+    expect(screen.queryByLabelText('Lesson calendar')).toBeNull()
+    await user.click(screen.getByRole('button', { name: /view activity/i }))
+    const calendar = screen.getByRole('region', { name: 'Lesson calendar' })
+    expect(within(calendar).getByText('lesson today')).toBeTruthy()
+    await user.click(within(calendar).getByRole('button', { name: /2 lessons$/ }))
+    const detail = within(calendar).getByRole('button', { name: 'Previous lesson' })
+    await user.click(detail)
+    expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Previous lesson')
+    await user.click(screen.getByRole('button', { name: /hide activity/i }))
+    expect(screen.queryByLabelText('Lesson calendar')).toBeNull()
+  })
+
+  it('updates activity only after saving a date change and after deletion', async () => {
+    const today = todayISO()
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    mocks.tables.sm_lessons[0].lesson_date = isoOf(yesterday)
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    await user.click(screen.getByRole('button', { name: /view activity/i }))
+    expect(screen.getByText('0 lessons today')).toBeTruthy()
+    const date = screen.getByLabelText('Lesson date')
+    await user.clear(date)
+    await user.type(date, today)
+    expect(screen.getByText('0 lessons today')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Save lesson' }))
+    await screen.findByText('1 lesson today')
+    await user.click(screen.getByRole('button', { name: 'Delete lesson' }))
+    await screen.findByText('0 lessons today')
+  })
+
+  it('adds newly created lessons to the heatmap', async () => {
+    mocks.tables.sm_lessons = []
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByText('No lessons yet.')
+    await user.click(screen.getByRole('button', { name: /view activity/i }))
+    await user.type(screen.getByLabelText('Lesson title'), 'New lesson')
+    await user.click(screen.getByRole('button', { name: 'Add lesson' }))
+    await screen.findByText('1 lesson today')
+    const calendar = screen.getByRole('region', { name: 'Lesson calendar' })
+    await user.click(within(calendar).getByRole('button', { name: /1 lesson$/ }))
+    expect(within(calendar).getByRole('button', { name: 'New lesson' })).toBeTruthy()
+  })
+
+  it('protects unsaved notes when opening a lesson from the calendar', async () => {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    mocks.tables.sm_lessons[0].lesson_date = todayISO()
+    mocks.tables.sm_lessons.push({ id: 'l2', lesson_date: isoOf(yesterday), title: 'Previous', notes: '' })
+    vi.mocked(window.confirm).mockReturnValue(false)
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.type(await screen.findByLabelText('Notes (Markdown)'), 'Unsaved notes')
+    await user.click(screen.getByRole('button', { name: /view activity/i }))
+    const calendar = screen.getByRole('region', { name: 'Lesson calendar' })
+    await user.click(within(calendar).getAllByRole('button', { name: /1 lesson$/ })[0])
+    await user.click(within(calendar).getByRole('button', { name: 'Previous' }))
+    expect(window.confirm).toHaveBeenCalledWith('Discard unsaved lesson changes?')
+    expect((screen.getByLabelText('Notes (Markdown)') as HTMLTextAreaElement).value).toBe('Unsaved notes')
+  })
+
+  it('does not count upcoming lessons as past activity', async () => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    mocks.tables.sm_lessons[0].lesson_date = isoOf(tomorrow)
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    await user.click(screen.getByRole('button', { name: /view activity/i }))
+    const calendar = screen.getByRole('region', { name: 'Lesson calendar' })
+    expect(within(calendar).getByText(/lessons this week/).textContent).toContain('lessons this week · 0/7 days')
+    expect(screen.getByText('0 lessons today')).toBeTruthy()
   })
 
   it('creates a lesson and keeps materials when deleting it', async () => {
