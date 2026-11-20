@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Piece } from '../supabase'
+import { Markdown } from '../lib/markdown'
 import { PdfViewer } from './PdfViewer'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon } from './icons'
 
@@ -117,7 +118,9 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
           <div className="player-cue">
             <span className="setlist-marker" aria-hidden="true">{PauseIcon}</span>
             <h3>{current.title}</h3>
-            <p>{current.comment ?? 'No notes for this slot.'}</p>
+            {current.comment
+              ? <Markdown className="player-note" text={current.comment} />
+              : <p>No notes for this slot.</p>}
           </div>
         )}
       </div>
@@ -126,7 +129,7 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
         <div className="player-current">
           <strong>{current.title}</strong>
           {current.composers && <span>{current.composers}{current.subtitle ? ` · ${current.subtitle}` : ''}</span>}
-          {current.comment && <em>{current.comment}</em>}
+          {current.comment && <Markdown className="player-comment" text={current.comment} />}
         </div>
         <button type="button" className="btn primary player-step" aria-label="Next tune" title="Next tune (→)" disabled={index === last} onClick={() => go(index + 1)}>Next {ChevronRightIcon}</button>
       </footer>

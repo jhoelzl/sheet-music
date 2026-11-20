@@ -53,6 +53,12 @@ async function addTune(user: ReturnType<typeof userEvent.setup>, title: string, 
   await user.click(await screen.findByRole('button', { name: `Add ${title} to ${setlistName}` }))
 }
 
+/** Click a rendered comment to open its inline editor and return the textarea. */
+async function openComment(user: ReturnType<typeof userEvent.setup>, title: string) {
+  await user.click(await screen.findByRole('button', { name: `Edit comment for ${title}` }))
+  return await screen.findByRole('textbox', { name: `Comment for ${title}` }) as HTMLTextAreaElement
+}
+
 describe('setlists page', () => {
   beforeEach(() => {
     mocks.setlists = []
@@ -145,7 +151,7 @@ describe('setlists page', () => {
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_setlist_pieces', {
       setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null,
     }))
-    expect(await screen.findByRole('textbox', { name: 'Comment for Moanin’' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Edit comment for Moanin’' })).toBeTruthy()
   })
 
   it('shows the chosen tunes as removable chips', async () => {
@@ -203,8 +209,9 @@ describe('setlists page', () => {
     mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null }]
     const user = userEvent.setup()
     const rendered = render(<SetlistsPage lib={lib} />)
-    const comment = await screen.findByRole('textbox', { name: 'Comment for Moanin’' })
-    await user.type(comment, 'Piano solo{Enter}')
+    const comment = await openComment(user, 'Moanin’')
+    await user.type(comment, 'Piano solo')
+    fireEvent.blur(comment)
     await waitFor(() => expect(mocks.members[0].comment).toBe('Piano solo'))
     const placeholder = screen.getByRole('textbox', { name: 'Placeholder' })
     await user.type(placeholder, 'Break')
@@ -221,7 +228,7 @@ describe('setlists page', () => {
     const list = await screen.findByRole('list', { name: 'Tune order' })
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(3))
     expect(within(list).getAllByRole('listitem').map((item) => item.querySelector('strong')?.textContent)).toEqual(['Break', 'Moanin’', 'Break'])
-    expect((screen.getByRole('textbox', { name: 'Comment for Moanin’' }) as HTMLInputElement).value).toBe('Piano solo')
+    expect((await openComment(user, 'Moanin’')).value).toBe('Piano solo')
     await user.click(screen.getAllByRole('button', { name: 'Remove Break from Gig' })[0])
     await waitFor(() => expect(mocks.members).toHaveLength(2))
   })
@@ -272,12 +279,13 @@ describe('setlists page', () => {
     mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Sax solo' }]
     const user = userEvent.setup()
     render(<SetlistsPage lib={lib} />)
-    const comment = await screen.findByRole('textbox', { name: 'Comment for Moanin’' }) as HTMLInputElement
+    const comment = await openComment(user, 'Moanin’')
     mocks.fail = 'update'
     await user.clear(comment)
-    await user.type(comment, 'Piano solo{Enter}')
+    await user.type(comment, 'Piano solo')
+    fireEvent.blur(comment)
     expect((await screen.findByRole('alert')).textContent).toContain('update failed')
-    expect(comment.value).toBe('Sax solo')
+    expect(screen.getByText('Sax solo')).toBeTruthy()
   })
 
   it('keeps comments specific to each setlist and allows clearing them', async () => {
@@ -291,13 +299,15 @@ describe('setlists page', () => {
     ]
     const user = userEvent.setup()
     render(<SetlistsPage lib={lib} />)
-    const first = await screen.findByRole('textbox', { name: 'Comment for Moanin’' }) as HTMLInputElement
+    const first = await openComment(user, 'Moanin’')
     expect(first.value).toBe('Piano solo')
+    fireEvent.blur(first)
     await user.click(screen.getByRole('button', { name: 'Jam' }))
-    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Comment for Moanin’' }) as HTMLInputElement).value).toBe('Sax solo'))
-    const second = screen.getByRole('textbox', { name: 'Comment for Moanin’' })
+    await screen.findByText('Sax solo')
+    const second = await openComment(user, 'Moanin’')
+    expect(second.value).toBe('Sax solo')
     await user.clear(second)
-    await user.keyboard('{Enter}')
+    fireEvent.blur(second)
     await waitFor(() => expect(mocks.members.find((item) => item.id === 'e2')?.comment).toBeNull())
     expect(mocks.members.find((item) => item.id === 'e1')?.comment).toBe('Piano solo')
   })
@@ -317,7 +327,7 @@ describe('setlists page', () => {
     const list = await screen.findByRole('list', { name: 'Tune order' })
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(2))
     expect(within(list).getAllByRole('listitem').map((item) => item.querySelector('strong')?.textContent)).toEqual(['Moanin’', 'Break'])
-    expect((screen.getByRole('textbox', { name: 'Comment for Moanin’' }) as HTMLInputElement).value).toBe('Piano solo')
+    expect((await openComment(user, 'Moanin’')).value).toBe('Piano solo')
     // The copy is a new setlist; the original is untouched.
     expect(mocks.setlists.map((item) => item.name)).toEqual(['Gig', 'Gig (copy)'])
   })
@@ -420,5 +430,33 @@ describe('setlists page', () => {
     await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/waltz.pdf'))
     await user.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Live mode: Gig' })).toBeNull())
+  })
+
+  it('edits multi-line comments and keeps the line breaks', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    const field = await openComment(user, 'Moanin’')
+    await user.type(field, 'Solo 1{enter}Solo 2')
+    fireEvent.blur(field)
+    await waitFor(() => expect(mocks.members[0].comment).toBe('Solo 1\nSolo 2'))
+    const view = screen.getByRole('button', { name: 'Edit comment for Moanin’' }).closest('.setlist-comment-view')
+    expect(view?.querySelector('br')).toBeTruthy()
+  })
+
+  it('renders markdown comments in the editor and in live mode', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: '**Count in** with *bass*' }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await screen.findByRole('button', { name: 'Edit comment for Moanin’' })
+    expect(screen.getByText('Count in').tagName).toBe('STRONG')
+    expect(screen.getByText('bass').tagName).toBe('EM')
+    await user.click(screen.getByRole('button', { name: 'Play' }))
+    const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
+    expect(within(player).getByText('Count in').tagName).toBe('STRONG')
   })
 })

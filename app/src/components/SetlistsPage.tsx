@@ -3,6 +3,7 @@ import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { Library } from '../hooks/useLibrary'
 import { supabase } from '../supabase'
 import { dropIndex, moveItem } from '../lib/reorder'
+import { SetlistComment } from './SetlistComment'
 import { SetlistPlayer } from './SetlistPlayer'
 import type { PlayerEntry } from './SetlistPlayer'
 import { SetlistTuneDetails } from './SetlistTuneDetails'
@@ -345,14 +346,13 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     stopDrag()
   }
 
-  const saveComment = (entry: SetlistEntry, input: HTMLInputElement) => {
+  const saveComment = (entry: SetlistEntry, comment: string | null) => {
     if (!selectedId) return
-    const comment = input.value.trim() || null
     if (comment === entry.comment) return
-    if (busyRef.current) { input.value = entry.comment ?? ''; setError('Wait for the current change before editing a comment.'); return }
+    if (busyRef.current) { setError('Wait for the current change before editing a comment.'); return }
     void perform(async () => {
       const { error: saveError } = await supabase.from('sm_setlist_pieces').update({ comment }).eq('setlist_id', selectedId).eq('id', entry.id)
-      if (saveError) { input.value = entry.comment ?? ''; setError(saveError.message); return }
+      if (saveError) { setError(saveError.message); return }
       updateMembers(selectedId, (current) => current.map((item) => item.id === entry.id ? { ...item, comment } : item))
     })
   }
@@ -472,9 +472,8 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                         {piece ? <>
                           {piece.subtitle && <span>{piece.subtitle}</span>}
                           <small>{lib.composerNamesOf(piece)}{piece.musical_key ? ` · ${piece.musical_key}` : ''}</small>
-                          <input className="setlist-comment" aria-label={`Comment for ${title}`} placeholder="Add a comment (e.g. soloist)" defaultValue={entry.comment ?? ''}
-                            disabled={entriesDisabled} onBlur={(event) => saveComment(entry, event.currentTarget)}
-                            onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { event.currentTarget.value = entry.comment ?? ''; event.currentTarget.blur() } }} />
+                          <SetlistComment comment={entry.comment} title={title} disabled={entriesDisabled}
+                            onSave={(value) => saveComment(entry, value)} />
                         </> : <small>Placeholder</small>}
                       </span>
                       <div className="setlist-piece-actions">
