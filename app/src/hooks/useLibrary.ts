@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { PDF_SIGNED_URL_TTL_SECONDS, PDF_STORAGE_BUCKET } from '../config'
 import { supabase } from '../supabase'
-import type { Composer, Instrument, Piece, PieceLink, PiecePatch, PieceScore, PracticeLog } from '../supabase'
+import type { Composer, Instrument, Piece, PieceLink, PiecePatch, PieceScore, PracticeLog, TeachingMaterial } from '../supabase'
 import { countPdfPages } from '../lib/pdf'
-import { backupFileName, buildBackup, downloadBlob, scoreFileName } from '../lib/backup'
+import { backupFileName, buildBackup, downloadBlob, materialFileName, scoreFileName } from '../lib/backup'
 import { createZip } from '../lib/zip'
 import type { ZipEntry } from '../lib/zip'
 import { todayISO } from '../lib/dates'
@@ -15,7 +15,7 @@ import { statusOf } from '../lib/status'
 
 export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
 export type Panel = 'composer' | 'piece' | null
-export type Preview = { id: string; pieceId: string; title: string; url: string | null; pages: number | null; error: string | null }
+export type Preview = { id: string; pieceId: string | null; title: string; url: string | null; pages: number | null; error: string | null }
 export const TABLE_COLUMNS = ['composer', 'instruments', 'tags', 'status', 'difficulty', 'rating', 'pages', 'practiced'] as const
 export type TableColumnId = (typeof TABLE_COLUMNS)[number]
 export type Library = ReturnType<typeof useLibrary>
@@ -434,12 +434,11 @@ export function useLibrary() {
     if (next !== c.name) void run(supabase.from('sm_composers').update({ name: next }).eq('id', c.id))
   }
 
-  const openPdf = async (p: Piece, score: PieceScore | null = primaryScore(p)) => {
-    if (!score) return
+  const openStoredPdf = async (id: string, pieceId: string | null, title: string, path: string, pages: number | null) => {
     const request = ++previewRequest.current
-    setPreview({ id: score.id, pieceId: p.id, title: p.title, url: null, pages: score.pdf_pages ?? null, error: null })
+    setPreview({ id, pieceId, title, url: null, pages, error: null })
     try {
-      const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(score.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
+      const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(path, PDF_SIGNED_URL_TTL_SECONDS)
       if (request !== previewRequest.current) return
       if (error) throw error
       setPreview((current) => current && { ...current, url: data.signedUrl })
@@ -448,6 +447,12 @@ export function useLibrary() {
       setPreview((current) => current && { ...current, error: error instanceof Error ? error.message : 'Could not open this PDF.' })
     }
   }
+
+  const openPdf = async (p: Piece, score: PieceScore | null = primaryScore(p)) => {
+    if (score) await openStoredPdf(score.id, p.id, p.title, score.pdf_path, score.pdf_pages ?? null)
+  }
+  const openMaterialPdf = (material: TeachingMaterial) =>
+    openStoredPdf(material.id, null, material.title, material.pdf_path, null)
 
   const closePdf = () => {
     previewRequest.current++
@@ -481,7 +486,7 @@ export function useLibrary() {
     setBackingUp(true)
     notify('Preparing your backup…', 'info')
     try {
-      const [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult] = await Promise.all([
+      const [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult] = await Promise.all([
         supabase.from('sm_composers').select('*'),
         supabase.from('sm_pieces').select('*'),
         supabase.from('sm_piece_composers').select('*'),
@@ -489,11 +494,16 @@ export function useLibrary() {
         supabase.from('sm_setlists').select('*'),
         supabase.from('sm_setlist_pieces').select('*'),
         supabase.from('sm_practice_log').select('*'),
+        supabase.from('sm_lessons').select('*'),
+        supabase.from('sm_teaching_materials').select('*'),
+        supabase.from('sm_lesson_pieces').select('*'),
+        supabase.from('sm_lesson_materials').select('*'),
       ])
-      const results = [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult]
+      const results = [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult]
       const failed = results.find((result) => result.error)
       if (failed) throw failed.error
       const scores = (scoresResult.data ?? []) as PieceScore[]
+      const materials = (materialsResult.data ?? []) as TeachingMaterial[]
       const titles = new Map(((piecesResult.data ?? []) as { id: string; title: string }[]).map((piece) => [piece.id, piece.title]))
       const payload = buildBackup({
         composers: composersResult.data ?? [],
@@ -503,6 +513,10 @@ export function useLibrary() {
         setlists: setlistsResult.data ?? [],
         setlist_pieces: entriesResult.data ?? [],
         practice_log: logResult.data ?? [],
+        lessons: lessonsResult.data ?? [],
+        teaching_materials: materials,
+        lesson_pieces: lessonPiecesResult.data ?? [],
+        lesson_materials: lessonMaterialsResult.data ?? [],
       })
       const files: ZipEntry[] = [{ name: 'data.json', data: new TextEncoder().encode(JSON.stringify(payload, null, 2)) }]
       let missing = 0
@@ -511,8 +525,13 @@ export function useLibrary() {
         if (error || !blob) { missing++; continue }
         files.push({ name: scoreFileName(score, titles.get(score.piece_id)), data: new Uint8Array(await blob.arrayBuffer()) })
       }
+      for (const material of materials) {
+        const { data: blob, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).download(material.pdf_path)
+        if (error || !blob) { missing++; continue }
+        files.push({ name: materialFileName(material), data: new Uint8Array(await blob.arrayBuffer()) })
+      }
       downloadBlob(createZip(files), backupFileName())
-      notify(missing ? `Backup downloaded, but ${missing} score${missing === 1 ? '' : 's'} could not be included.` : 'Backup downloaded.', 'info')
+      notify(missing ? `Backup downloaded, but ${missing} PDF${missing === 1 ? '' : 's'} could not be included.` : 'Backup downloaded.', 'info')
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Could not create the backup.')
     } finally {
@@ -577,7 +596,7 @@ export function useLibrary() {
     // new-item form state
     composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreInstrument, setNewScoreInstrument, newTags, setNewTags, pieceSaving,
     // actions
-    dismissToast, closePdf, pdfUrl, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
+    dismissToast, closePdf, pdfUrl, openMaterialPdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, addScore, updateScore, removeScore, removeComposer, startEditComposer, commitComposerEdit, openPdf,
     scoresOf, keysOf, primaryScore, backup, backingUp,
   }

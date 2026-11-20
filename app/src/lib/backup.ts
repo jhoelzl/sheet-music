@@ -1,4 +1,4 @@
-import type { PieceScore } from '../supabase'
+import type { PieceScore, TeachingMaterial } from '../supabase'
 import { scoreLabel } from './scores'
 
 /** A full, self-contained dump of one user's library. */
@@ -13,6 +13,10 @@ export type BackupPayload = {
   setlists: unknown[]
   setlist_pieces: unknown[]
   practice_log: unknown[]
+  lessons: unknown[]
+  teaching_materials: unknown[]
+  lesson_pieces: unknown[]
+  lesson_materials: unknown[]
 }
 
 export type BackupTables = Omit<BackupPayload, 'app' | 'version' | 'exported_at'>
@@ -29,6 +33,10 @@ export function backupFileName(date = new Date()): string {
 export function scoreFileName(score: PieceScore, pieceTitle?: string): string {
   const base = sanitize([pieceTitle, scoreLabel(score)].filter(Boolean).join(' - ')) || 'score'
   return `scores/${base} (${score.id}).pdf`
+}
+
+export function materialFileName(material: TeachingMaterial): string {
+  return `teaching-materials/${sanitize(material.title) || 'material'} (${material.id}).pdf`
 }
 
 function sanitize(value: string): string {

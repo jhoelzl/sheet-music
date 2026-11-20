@@ -49,7 +49,7 @@ export function PdfPreview({ lib }: { lib: Library }) {
     <div className="modal-backdrop">
       <div ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-label={`PDF: ${preview.title}`}>
         <div className="modal-head">
-          <button type="button" className="btn pdf-close" onClick={closePdf}>← Library</button>
+          <button type="button" className="btn pdf-close" onClick={closePdf}>{piece ? '← Library' : '← Close'}</button>
           <div className="modal-title">
             <strong>{preview.title}</strong>
             {preview.pages ? <span className="page-count">{preview.pages} {preview.pages === 1 ? 'page' : 'pages'}</span> : null}

@@ -465,6 +465,27 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .ios-native .page-nav button.on { color: var(--accent); background: var(--accent-soft); }
 .page-nav-icon { display: flex; align-items: center; justify-content: center; }
 .page-nav-icon svg { width: 22px; height: 22px; }
+.lessons-page { max-width: 960px; margin: 0 auto; }
+.lessons-error { color: var(--danger); margin-bottom: 12px; }
+.lessons-layout { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 20px; }
+.lessons-list, .lesson-detail, .teaching-materials { padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.lessons-list h3, .lesson-section h3, .lesson-preview h3, .teaching-materials h3 { margin-bottom: 10px; font-size: 15px; }
+.lesson-choice { display: flex; width: 100%; flex-direction: column; gap: 3px; padding: 10px; text-align: left; color: var(--text); background: transparent; border: 0; border-radius: 8px; }
+.lesson-choice span { color: var(--muted); font-size: 12px; }
+.lesson-choice.on { background: var(--accent-soft); }
+.lesson-editor { display: grid; gap: 12px; }
+.lesson-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.lesson-preview, .lesson-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.lesson-material-link { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 14px; color: var(--text); }
+.lesson-material-link input { width: 18px; height: 18px; }
+.teaching-materials { margin-top: 20px; }
+.teaching-materials .panel { margin: 12px 0; padding: 0; border: 0; flex-wrap: wrap; }
+.material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }
+@media (max-width: 640px) {
+  .lessons-layout { grid-template-columns: 1fr; }
+  .page-nav button { min-width: 0; padding: 6px 3px; font-size: 11px; }
+  .ios-native .page-nav button { font-size: 10px; }
+}
 .video-intro, .video-feed { max-width: 680px; margin-left: auto; margin-right: auto; }
 .video-feed { display: grid; gap: 36px; }
 .video-card { min-width: 0; }

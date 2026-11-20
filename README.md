@@ -4,6 +4,8 @@ Web app (React + Vite + Supabase) to organise piano sheet music PDFs by composer
 
 Setlists can be renamed, reordered, duplicated (with their tunes, placeholders, comments and order), archived when a gig is over, and searched for tunes with the same picker used for composers. Each entry links to the tune's score and can expand its details, and **Play** opens live mode: the score of the current tune full screen, with Previous/Next, a jump list and the `←` / `→` keys to move through the set. A tune's comment opens into a multi-line editor and is rendered as markdown, in the setlist and on stage — where it can sit above the score, in a left or right panel, in the footer, or be hidden. Zoom in/out is available in live mode and in the library's PDF viewer, which also lets you switch between a piece's scores; on stage a tune with several scores offers a picker to choose which one is shown, and a setlist entry can pre-select the score it plays.
 
+The **Lessons** page keeps dated lesson notes with a Markdown preview, links to library tunes, and reusable teaching-material PDFs. Save note edits explicitly. Teaching materials are stored separately from scores and can be linked to multiple lessons; deleting a lesson leaves its tunes and materials intact. The backup includes lessons, links and material PDFs.
+
 See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
 
 ## Setup
@@ -15,7 +17,7 @@ See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
    ```
 3. Apply migrations with `supabase db push`. The CLI applies pending files in `supabase/migrations` in order and records them in the remote migration history. For a fresh project, this creates the `sm_composers` and `sm_pieces` tables, row-level security, the private `sheet-music` storage bucket, and database validation for piece links.
 
-   Apply `0018_setlist_planning.sql` before deploying the setlist planning features; it preserves existing setlists and entries. Apply `0019_reorder_setlist_entries.sql` for drag-and-drop reordering of setlist tunes, `0020_setlist_archive_and_duplicate.sql` for archiving and duplicating setlists, `0021_piece_scores.sql` for multiple PDF scores per piece (it moves each existing piece PDF, key and instrument into a score row and drops the old piece columns), `0022_setlist_entry_score.sql` to pre-select which score a setlist entry plays, and `0023_score_lead_sheet.sql` to mark a score as a lead sheet.
+   Apply `0018_setlist_planning.sql` before deploying the setlist planning features; it preserves existing setlists and entries. Apply `0019_reorder_setlist_entries.sql` for drag-and-drop reordering of setlist tunes, `0020_setlist_archive_and_duplicate.sql` for archiving and duplicating setlists, `0021_piece_scores.sql` for multiple PDF scores per piece (it moves each existing piece PDF, key and instrument into a score row and drops the old piece columns), `0022_setlist_entry_score.sql` to pre-select which score a setlist entry plays, `0023_score_lead_sheet.sql` to mark a score as a lead sheet, and `0024_music_lessons.sql` before deploying lessons.
 
    If the project already has these migrations applied manually, **do not run `db push` until its migration history is reconciled**. Verify that the remote database reflects every migration, then mark those versions as applied:
    ```sh
