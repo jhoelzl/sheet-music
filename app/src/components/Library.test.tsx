@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   composerLinks: [] as { piece_id: string; composer_id: string; position: number }[],
   materials: [] as { id: string; title: string; pdf_path: string; tags: string[] }[],
   lessons: [] as { id: string; title: string; lesson_date: string; notes: string }[],
+  lessonGroups: [] as { id: string; teacher_name: string; instrument: string }[],
 }))
 vi.mock('../supabase', () => ({
   supabase: {
@@ -44,6 +45,7 @@ describe('focused library', () => {
     mocks.composerLinks = [{ piece_id: 'p1', composer_id: 'c1', position: 0 }]
     mocks.materials = []
     mocks.lessons = []
+    mocks.lessonGroups = []
     mocks.update.mockImplementation((table: string, patch: Record<string, unknown>, column: string, value: string) => {
       if (table === 'sm_pieces') mocks.pieces = mocks.pieces.map((piece) => piece[column] === value ? { ...piece, ...patch } : piece)
       if (table === 'sm_piece_scores') mocks.scores = mocks.scores.map((score) => score[column] === value ? { ...score, ...patch } : score)
@@ -84,6 +86,8 @@ describe('focused library', () => {
                   ? mocks.materials
                   : table === 'sm_lessons'
                     ? mocks.lessons
+                  : table === 'sm_lesson_groups'
+                    ? mocks.lessonGroups
                 : []
         const result = { data, error: null }
         const promise = Promise.resolve(result)
@@ -412,6 +416,7 @@ describe('focused library', () => {
   it('downloads a zip backup of the data and scores', async () => {
     mocks.materials = [{ id: 'm1', title: 'Chord theory', pdf_path: 'u1/materials/chords.pdf', tags: ['harmony'] }]
     mocks.lessons = [{ id: 'l1', title: 'Guitar lesson', lesson_date: '2026-11-18', notes: '# Practice' }]
+    mocks.lessonGroups = [{ id: 'g1', teacher_name: 'Alex', instrument: 'guitar' }]
     const createObjectURL = vi.fn((_blob: Blob) => 'blob:backup')
     const revokeObjectURL = vi.fn()
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
@@ -432,6 +437,7 @@ describe('focused library', () => {
     expect(text).toContain('teaching-materials/Chord theory (m1).pdf')
     expect(text).toContain('"harmony"')
     expect(text).toContain('Guitar lesson')
+    expect(text).toContain('"teacher_name": "Alex"')
     expect(await screen.findByText('Backup downloaded.')).toBeTruthy()
   })
 
