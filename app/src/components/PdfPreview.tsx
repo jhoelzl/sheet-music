@@ -1,14 +1,18 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { Library } from '../hooks/useLibrary'
+import { scoresOf } from '../hooks/useLibrary'
+import { scoreLabel } from '../lib/scores'
 import { PdfViewer } from './PdfViewer'
 
 export function PdfPreview({ lib }: { lib: Library }) {
-  const { preview, closePdf, recordPdfPages } = lib
+  const { preview, pieces, openPdf, closePdf, recordPdfPages } = lib
   const closeRef = useRef(closePdf)
   useEffect(() => { closeRef.current = closePdf }, [closePdf])
   const dialogRef = useRef<HTMLDivElement>(null)
   const isOpen = preview !== null
+  const piece = preview ? pieces.find((item) => item.id === preview.pieceId) ?? null : null
+  const scores = piece ? scoresOf(piece) : []
 
   useEffect(() => {
     if (!isOpen) return
@@ -50,6 +54,16 @@ export function PdfPreview({ lib }: { lib: Library }) {
             <strong>{preview.title}</strong>
             {preview.pages ? <span className="page-count">{preview.pages} {preview.pages === 1 ? 'page' : 'pages'}</span> : null}
           </div>
+          {piece && scores.length > 1 && (
+            <label className="modal-score">Score
+              <select aria-label="Choose score" value={preview.id} onChange={(event) => {
+                const next = scores.find((score) => score.id === event.target.value)
+                if (next) void openPdf(piece, next)
+              }}>
+                {scores.map((score) => <option key={score.id} value={score.id}>{scoreLabel(score)}</option>)}
+              </select>
+            </label>
+          )}
         </div>
         {preview.error ? (
           <div className="pdf-scroll"><p className="pdf-message" role="alert">{preview.error} Close and try again.</p></div>
