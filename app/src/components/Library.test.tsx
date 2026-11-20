@@ -262,6 +262,23 @@ describe('focused library', () => {
     openWindow.mockRestore()
   })
 
+  it('switches between a piece’s scores in the viewer', async () => {
+    mocks.scores = [
+      { id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', position: 0 },
+      { id: 's2', piece_id: 'p1', pdf_path: 'romance-guitar.pdf', pdf_pages: 1, musical_key: 'A minor', instrument: 'guitar', position: 1 },
+    ]
+    mocks.signedUrl.mockImplementation(async (path: string) => ({ data: { signedUrl: `https://example.test/${path}` }, error: null }))
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    expect(await within(dialog).findByText('PDF content: https://example.test/romance.pdf')).toBeTruthy()
+
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Choose score' }), 's2')
+    expect(await within(dialog).findByText('PDF content: https://example.test/romance-guitar.pdf')).toBeTruthy()
+  })
+
   it('adds another composer to a piece', async () => {
     const user = userEvent.setup()
     render(<TestLibrary />)

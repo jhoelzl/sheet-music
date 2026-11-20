@@ -12,7 +12,7 @@ import { statusOf } from '../lib/status'
 
 export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
 export type Panel = 'composer' | 'piece' | null
-export type Preview = { id: string; title: string; url: string | null; pages: number | null; error: string | null }
+export type Preview = { id: string; pieceId: string; title: string; url: string | null; pages: number | null; error: string | null }
 export const TABLE_COLUMNS = ['composer', 'instruments', 'tags', 'status', 'difficulty', 'rating', 'pages', 'practiced'] as const
 export type TableColumnId = (typeof TABLE_COLUMNS)[number]
 export type Library = ReturnType<typeof useLibrary>
@@ -431,7 +431,7 @@ export function useLibrary() {
   const openPdf = async (p: Piece, score: PieceScore | null = primaryScore(p)) => {
     if (!score) return
     const request = ++previewRequest.current
-    setPreview({ id: score.id, title: p.title, url: null, pages: score.pdf_pages ?? null, error: null })
+    setPreview({ id: score.id, pieceId: p.id, title: p.title, url: null, pages: score.pdf_pages ?? null, error: null })
     try {
       const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(score.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
       if (request !== previewRequest.current) return
