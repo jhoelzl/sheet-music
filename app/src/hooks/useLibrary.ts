@@ -390,6 +390,14 @@ export function useLibrary() {
     setPreview(null)
   }
 
+  /** Signed URL for a piece's score, for views that host the PDF themselves (live mode). */
+  const pdfUrl = useCallback(async (p: Piece) => {
+    if (!p.pdf_path) return null
+    const { data, error } = await supabase.storage.from(PDF_STORAGE_BUCKET).createSignedUrl(p.pdf_path, PDF_SIGNED_URL_TTL_SECONDS)
+    if (error) throw error
+    return data.signedUrl
+  }, [])
+
   const recordPdfPages = async (id: string, pages: number) => {
     setPreview((current) => current?.id === id ? { ...current, pages } : current)
     if (pieces.find((piece) => piece.id === id)?.pdf_pages === pages) return
@@ -458,7 +466,7 @@ export function useLibrary() {
     // new-item form state
     composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, setFile, newInstruments, setNewInstruments, newTags, setNewTags, pieceSaving,
     // actions
-    dismissToast, closePdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
+    dismissToast, closePdf, pdfUrl, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, attachPdf, removeComposer, startEditComposer, commitComposerEdit, openPdf,
   }
 }

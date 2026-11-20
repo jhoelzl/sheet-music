@@ -3,11 +3,15 @@ import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { Library } from '../hooks/useLibrary'
 import { supabase } from '../supabase'
 import { dropIndex, moveItem } from '../lib/reorder'
-import { GripIcon, PauseIcon } from './icons'
+import { SetlistPlayer } from './SetlistPlayer'
+import type { PlayerEntry } from './SetlistPlayer'
+import { SetlistTuneDetails } from './SetlistTuneDetails'
+import { SetlistTunePicker } from './SetlistTunePicker'
+import { ArchiveIcon, GripIcon, InfoIcon, PauseIcon, PdfIcon, PlayIcon } from './icons'
 
-type Setlist = { id: string; name: string; position: number }
+type Setlist = { id: string; name: string; position: number; archived_at: string | null }
 type SetlistEntry = { id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null }
-type LibraryData = Pick<Library, 'pieces' | 'composerNamesOf' | 'hiddenIds'>
+type LibraryData = Pick<Library, 'pieces' | 'composerNamesOf' | 'hiddenIds' | 'openPdf' | 'pdfUrl' | 'recordPdfPages'>
 type DragState = { pointerId: number; fromRow: number; startY: number; startScrollY: number; tops: number[]; heights: number[]; shift: number }
 
 export function SetlistsPage({ lib }: { lib: LibraryData }) {
@@ -22,6 +26,9 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   const [membersLoading, setMembersLoading] = useState(false)
   const [loadedId, setLoadedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
+  const [openDetails, setOpenDetails] = useState<string | null>(null)
+  const [playing, setPlaying] = useState(false)
   const busyRef = useRef(false)
   const listRef = useRef<HTMLOListElement | null>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -44,7 +51,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   useEffect(() => {
     let active = true
     void (async () => {
-      const { data, error: loadError } = await supabase.from('sm_setlists').select('id, name, position').order('position').order('created_at')
+      const { data, error: loadError } = await supabase.from('sm_setlists').select('id, name, position, archived_at').order('position').order('created_at')
       if (!active) return
       if (loadError) setError(loadError.message)
       else {
@@ -88,13 +95,23 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     try { await action() } finally { busyRef.current = false; setBusy(false) }
   }
 
+  const selectSetlist = (setlist: Setlist) => {
+    setRename(null)
+    setPlaceholder('')
+    setOpenDetails(null)
+    if (setlist.id === selectedId) return
+    setLoadedId(null)
+    setMembersLoading(true)
+    setSelectedId(setlist.id)
+  }
+
   const createSetlist = (event: FormEvent) => {
     event.preventDefault()
     const nextName = name.trim()
     if (!nextName) return
     void perform(async () => {
       const position = setlists.reduce((max, item) => Math.max(max, item.position), -1) + 1
-      const { data, error: createError } = await supabase.from('sm_setlists').insert({ name: nextName, position }).select('id, name, position').single()
+      const { data, error: createError } = await supabase.from('sm_setlists').insert({ name: nextName, position }).select('id, name, position, archived_at').single()
       if (createError || !data) { setError(createError?.message ?? 'Could not create setlist.'); return }
       const created = data as Setlist
       setSetlists((current) => [...current, created])
@@ -103,6 +120,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       setSelectedId(created.id)
       setName('')
       setRename(null)
+      setOpenDetails(null)
     })
   }
 
@@ -115,6 +133,43 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       if (saveError) { setError(saveError.message); return }
       setSetlists((current) => current.map((item) => item.id === selectedId ? { ...item, name: nextName } : item))
       setRename(null)
+    })
+  }
+
+  /** "Name (copy)", then "Name (copy 2)" and so on while the name is taken. */
+  const copyNameOf = (base: string) => {
+    const taken = new Set(setlists.map((item) => item.name.trim().toLowerCase()))
+    if (!taken.has(`${base} (copy)`.toLowerCase())) return `${base} (copy)`
+    let counter = 2
+    while (taken.has(`${base} (copy ${counter})`.toLowerCase())) counter++
+    return `${base} (copy ${counter})`
+  }
+
+  const duplicateSetlist = (setlist: Setlist) => {
+    void perform(async () => {
+      const copy = copyNameOf(setlist.name)
+      const { data, error: duplicateError } = await supabase.rpc('sm_duplicate_setlist', { source_id: setlist.id, new_name: copy })
+      if (duplicateError || !data) { setError(duplicateError?.message ?? 'Could not duplicate the setlist.'); return }
+      const position = setlists.reduce((max, item) => Math.max(max, item.position), -1) + 1
+      const created: Setlist = { id: data as string, name: copy, position, archived_at: null }
+      setSetlists((current) => [...current, created])
+      setLoadedId(null)
+      setMembersLoading(true)
+      setSelectedId(created.id)
+      setRename(null)
+      setOpenDetails(null)
+    })
+  }
+
+  const setArchived = (setlist: Setlist, archived: boolean) => {
+    void perform(async () => {
+      const archived_at = archived ? new Date().toISOString() : null
+      const { error: saveError } = await supabase.from('sm_setlists').update({ archived_at }).eq('id', setlist.id)
+      if (saveError) { setError(saveError.message); return }
+      setSetlists((current) => current.map((item) => item.id === setlist.id ? { ...item, archived_at } : item))
+      setOpenDetails(null)
+      setRename(null)
+      if (archived) setShowArchived(true)
     })
   }
 
@@ -135,16 +190,17 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
         setMembersLoading(remaining.length > 0)
         setSelectedId(remaining[0]?.id ?? null)
         setRename(null)
+        setOpenDetails(null)
       }
     })
   }
 
   const moveSetlist = (index: number, offset: -1 | 1) => {
     const other = index + offset
-    if (other < 0 || other >= setlists.length) return
+    if (other < 0 || other >= activeSetlists.length) return
     void perform(async () => {
-      const first = setlists[index]
-      const second = setlists[other]
+      const first = activeSetlists[index]
+      const second = activeSetlists[other]
       const { error: moveError } = await supabase.rpc('sm_swap_setlists', { first_id: first.id, second_id: second.id })
       if (moveError) { setError(moveError.message); return }
       setSetlists((current) => current.map((item) => item.id === first.id ? { ...item, position: second.position }
@@ -153,7 +209,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   }
 
   const addEntry = (pieceId: string | null, text: string | null) => {
-    if (!selectedId || membersLoading || loadedId !== selectedId) return
+    if (!selectedId || entriesDisabled) return
     void perform(async () => {
       const position = members.reduce((max, member) => Math.max(max, member.position), -1) + 1
       const { data, error: addError } = await supabase.from('sm_setlist_pieces')
@@ -171,6 +227,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       const { error: removeError } = await supabase.from('sm_setlist_pieces').delete().eq('setlist_id', selectedId).eq('id', entry.id)
       if (removeError) { setError(removeError.message); return }
       updateMembers(selectedId, (current) => current.filter((item) => item.id !== entry.id))
+      setOpenDetails((current) => current === entry.id ? null : current)
     })
   }
 
@@ -301,7 +358,12 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   }
 
   const selected = setlists.find((setlist) => setlist.id === selectedId)
-  const entriesDisabled = busy || membersLoading || loadedId !== selectedId
+  const activeSetlists = setlists.filter((setlist) => !setlist.archived_at)
+  const archivedSetlists = setlists.filter((setlist) => setlist.archived_at)
+  const isArchived = Boolean(selected?.archived_at)
+  const entriesReady = !busy && !membersLoading && loadedId === selectedId
+  // Archived setlists stay readable — you can browse the tunes and play them — but not editable.
+  const entriesDisabled = !entriesReady || isArchived
   const tuneCount = members.filter((member) => member.piece_id && lib.pieces.some((piece) => piece.id === member.piece_id && !lib.hiddenIds.has(piece.id))).length
   const availablePieces = lib.pieces.filter((piece) => !lib.hiddenIds.has(piece.id))
   // Placeholders are not tunes, so they do not take a number in the running tune count.
@@ -310,6 +372,29 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     const piece = entry.piece_id ? lib.pieces.find((item) => item.id === entry.piece_id) ?? null : null
     return { entry, index, piece, number: piece ? ++tuneNumber : null }
   })
+  const playerEntries: PlayerEntry[] = orderedRows.map(({ entry, piece }) => ({
+    id: entry.id,
+    title: piece?.title ?? entry.placeholder ?? '',
+    subtitle: piece?.subtitle ?? null,
+    composers: piece ? lib.composerNamesOf(piece) : '',
+    comment: entry.comment,
+    piece,
+  }))
+  const chosenPieceIds = orderedRows.flatMap(({ piece }) => piece ? [piece.id] : [])
+
+  const setlistRow = (setlist: Setlist, index: number, moveable: boolean) => (
+    <div className="setlist-tab-row" key={setlist.id}>
+      <button type="button" className={`setlist-tab${setlist.id === selectedId ? ' on' : ''}`}
+        aria-pressed={setlist.id === selectedId} disabled={busy}
+        onClick={() => selectSetlist(setlist)}>{setlist.name}</button>
+      {moveable ? <>
+        <button type="button" className="icon-btn" aria-label={`Move setlist ${setlist.name} up`} disabled={busy || index === 0} onClick={() => moveSetlist(index, -1)}>↑</button>
+        <button type="button" className="icon-btn" aria-label={`Move setlist ${setlist.name} down`} disabled={busy || index === activeSetlists.length - 1} onClick={() => moveSetlist(index, 1)}>↓</button>
+      </> : (
+        <button type="button" className="icon-btn" aria-label={`Restore setlist ${setlist.name}`} title="Restore this setlist" disabled={busy} onClick={() => setArchived(setlist, false)}>{ArchiveIcon}</button>
+      )}
+    </div>
+  )
 
   return (
     <>
@@ -324,19 +409,16 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
           {loading && <p className="muted">Loading setlists…</p>}
           {!loading && !setlists.length && <p className="muted">Create a setlist to start choosing tunes.</p>}
           <div className="setlist-tabs">
-            {setlists.map((setlist, index) => (
-              <div className="setlist-tab-row" key={setlist.id}>
-                <button type="button" className={`setlist-tab${setlist.id === selectedId ? ' on' : ''}`}
-                  aria-pressed={setlist.id === selectedId} disabled={busy}
-                  onClick={() => {
-                    if (setlist.id !== selectedId) { setLoadedId(null); setMembersLoading(true); setSelectedId(setlist.id) }
-                    setRename(null); setPlaceholder('')
-                  }}>{setlist.name}</button>
-                <button type="button" className="icon-btn" aria-label={`Move setlist ${setlist.name} up`} disabled={busy || index === 0} onClick={() => moveSetlist(index, -1)}>↑</button>
-                <button type="button" className="icon-btn" aria-label={`Move setlist ${setlist.name} down`} disabled={busy || index === setlists.length - 1} onClick={() => moveSetlist(index, 1)}>↓</button>
-              </div>
-            ))}
+            {activeSetlists.map((setlist, index) => setlistRow(setlist, index, true))}
+            {!loading && !activeSetlists.length && archivedSetlists.length > 0 && <p className="muted">No active setlists.</p>}
           </div>
+          {archivedSetlists.length > 0 && (
+            <div className="setlist-archived-group">
+              <button type="button" className="link setlist-archived-toggle" aria-expanded={showArchived} disabled={busy}
+                onClick={() => setShowArchived((current) => !current)}>{ArchiveIcon} Archived ({archivedSetlists.length})</button>
+              {showArchived && <div className="setlist-tabs">{archivedSetlists.map((setlist, index) => setlistRow(setlist, index, false))}</div>}
+            </div>
+          )}
         </aside>
         <section className="setlist-editor" aria-label="Setlist contents">
           {!selected ? (
@@ -352,13 +434,19 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                       <button type="button" className="link" disabled={busy} onClick={() => setRename(null)}>Cancel</button>
                     </form>
                   )}
-                  <p>{tuneCount} {tuneCount === 1 ? 'tune' : 'tunes'}</p>
+                  <p>{tuneCount} {tuneCount === 1 ? 'tune' : 'tunes'}{isArchived && <span className="setlist-badge">Archived</span>}</p>
                 </div>
                 <div className="setlist-heading-actions">
-                  {rename === null && <button type="button" className="link" disabled={busy} onClick={() => setRename(selected.name)}>Rename</button>}
+                  <button type="button" className="btn primary" disabled={!entriesReady || !orderedRows.length} onClick={() => setPlaying(true)}>{PlayIcon} Play</button>
+                  {rename === null && !isArchived && <button type="button" className="link" disabled={busy} onClick={() => setRename(selected.name)}>Rename</button>}
+                  <button type="button" className="link" disabled={busy} onClick={() => duplicateSetlist(selected)}>Duplicate</button>
+                  {isArchived
+                    ? <button type="button" className="link" disabled={busy} onClick={() => setArchived(selected, false)}>Restore</button>
+                    : <button type="button" className="link" disabled={busy} onClick={() => setArchived(selected, true)}>Archive</button>}
                   <button type="button" className="link danger" disabled={busy} onClick={() => removeSetlist(selected)}>Delete setlist</button>
                 </div>
               </div>
+              {isArchived && <p className="setlist-archived-note" role="status">Archived setlists are read-only. Restore this one to change its tunes.</p>}
               {membersLoading && <p className="muted">Loading entries…</p>}
               <ol className="setlist-order" aria-label="Tune order" ref={listRef}>
                 {orderedRows.map(({ entry, index, piece, number }, row) => {
@@ -370,6 +458,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                         : drag.fromRow > drag.toRow && row >= drag.toRow && row < drag.fromRow ? `translateY(${drag.shift}px)`
                           : undefined
                   const classes = [dragging ? 'dragging' : '', piece ? '' : 'placeholder'].filter(Boolean).join(' ')
+                  const showingDetails = Boolean(piece) && openDetails === entry.id
                   return (
                     <li key={entry.id} className={classes || undefined} style={transform ? { transform } : undefined}>
                       <button type="button" className="setlist-drag-handle" aria-label={`Reorder ${title}`} disabled={entriesDisabled || visibleRows.length < 2}
@@ -389,10 +478,21 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                         </> : <small>Placeholder</small>}
                       </span>
                       <div className="setlist-piece-actions">
+                        {piece && (
+                          <button type="button" className="icon-btn" aria-label={`Open score for ${title}`} title={piece.pdf_path ? 'Open the score' : 'No PDF attached to this tune'}
+                            disabled={!piece.pdf_path} onClick={() => void lib.openPdf(piece)}>{PdfIcon}</button>
+                        )}
+                        {piece && (
+                          <button type="button" className="icon-btn" aria-label={`${showingDetails ? 'Hide' : 'Show'} details for ${title}`} aria-expanded={showingDetails} title="Tune details"
+                            onClick={() => setOpenDetails(showingDetails ? null : entry.id)}>{InfoIcon}</button>
+                        )}
                         <button type="button" className="icon-btn" aria-label={`Move ${title} up`} disabled={entriesDisabled || row === 0} onClick={() => moveEntry(index, -1)}>↑</button>
                         <button type="button" className="icon-btn" aria-label={`Move ${title} down`} disabled={entriesDisabled || row === visibleRows.length - 1} onClick={() => moveEntry(index, 1)}>↓</button>
                         <button type="button" className="link danger" aria-label={`Remove ${title} from ${selected.name}`} disabled={entriesDisabled} onClick={() => removeEntry(entry)}>Remove</button>
                       </div>
+                      {showingDetails && piece && (
+                        <SetlistTuneDetails piece={piece} composerNamesOf={lib.composerNamesOf} onOpenPdf={(target) => void lib.openPdf(target)} />
+                      )}
                     </li>
                   )
                 })}
@@ -403,27 +503,20 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
               </form>
               <section className="setlist-available" aria-label="Choose tunes">
                 <h4>Choose tunes</h4>
-                {!availablePieces.length && <p className="muted">Add pieces to your library first.</p>}
-                <div className="setlist-tune-list">
-                  {availablePieces.map((piece) => {
-                    const entry = members.find((item) => item.piece_id === piece.id)
-                    return (
-                      <label key={piece.id} className="setlist-tune-choice">
-                        <input type="checkbox" checked={!!entry} disabled={entriesDisabled}
-                          aria-label={`${entry ? 'Remove' : 'Add'} ${piece.title} ${entry ? 'from' : 'to'} ${selected.name}`}
-                          onChange={() => entry ? removeEntry(entry) : addEntry(piece.id, null)} />
-                        <span><strong>{piece.title}</strong>{piece.subtitle && ` · ${piece.subtitle}`}
-                          <small>{lib.composerNamesOf(piece)}{piece.musical_key ? ` · ${piece.musical_key}` : ''}</small>
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
+                <SetlistTunePicker pieces={availablePieces} selectedIds={chosenPieceIds} setlistName={selected.name}
+                  disabled={entriesDisabled} composerNamesOf={lib.composerNamesOf}
+                  onAdd={(id) => addEntry(id, null)}
+                  onRemove={(id) => { const entry = members.find((item) => item.piece_id === id); if (entry) removeEntry(entry) }} />
               </section>
             </>
           )}
         </section>
       </div>
+      {playing && selected && (
+        <SetlistPlayer name={selected.name} entries={playerEntries} pdfUrl={lib.pdfUrl}
+          onClose={() => setPlaying(false)}
+          onPages={(piece, pages) => void lib.recordPdfPages(piece.id, pages)} />
+      )}
     </>
   )
 }
