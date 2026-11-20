@@ -17,6 +17,9 @@ vi.mock('./supabase', () => ({
 vi.mock('./components/Library', () => ({ Library: () => <div>Library content</div> }))
 vi.mock('./components/ComposersPage', () => ({ ComposersPage: () => <div>Composers content</div> }))
 vi.mock('./components/VideosPage', () => ({ VideosPage: () => <div>Videos content</div> }))
+vi.mock('./components/LessonsPage', () => ({ LessonsPage: ({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) => (
+  <div>Lessons content<button type="button" onClick={() => onDirtyChange(true)}>Edit lesson draft</button></div>
+) }))
 vi.mock('./components/Login', () => ({ Login: () => <div>Login content</div> }))
 vi.mock('./components/Toasts', () => ({ Toasts: () => null }))
 vi.mock('./components/PdfPreview', () => ({ PdfPreview: () => null }))
@@ -48,6 +51,9 @@ describe('app navigation', () => {
     await user.click(within(navigation).getByRole('button', { name: 'Videos' }))
     expect(screen.getByText('Videos content')).toBeTruthy()
     expect(within(navigation).getByRole('button', { name: 'Videos' }).getAttribute('aria-current')).toBe('page')
+    await user.click(within(navigation).getByRole('button', { name: 'Lessons' }))
+    expect(screen.getByText('Lessons content')).toBeTruthy()
+    expect(within(navigation).getByRole('button', { name: 'Lessons' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('keeps browser navigation in the header and switches to Composers', async () => {
@@ -61,6 +67,8 @@ describe('app navigation', () => {
     await user.click(within(navigation).getByRole('button', { name: 'Composers' }))
     expect(screen.getByText('Composers content')).toBeTruthy()
     expect(within(navigation).getByRole('button', { name: 'Composers' }).getAttribute('aria-current')).toBe('page')
+    await user.click(within(navigation).getByRole('button', { name: 'Lessons' }))
+    expect(screen.getByText('Lessons content')).toBeTruthy()
   })
 
   it('does not show navigation while signed out', async () => {
@@ -71,6 +79,20 @@ describe('app navigation', () => {
     expect(await screen.findByText('Login content')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reload app' })).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Pages' })).toBeNull()
+  })
+
+  it('protects unsaved lesson notes when changing pages', async () => {
+    mocks.getPlatform.mockReturnValue('web')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const user = userEvent.setup()
+    render(<App />)
+    const navigation = await screen.findByRole('navigation', { name: 'Pages' })
+    await user.click(within(navigation).getByRole('button', { name: 'Lessons' }))
+    await user.click(screen.getByRole('button', { name: 'Edit lesson draft' }))
+    await user.click(within(navigation).getByRole('button', { name: 'Library' }))
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(screen.getByText('Lessons content')).toBeTruthy()
+    confirm.mockRestore()
   })
 
   it('shows a loading state until the session is restored', async () => {

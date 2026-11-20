@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   pieces: [] as Record<string, unknown>[],
   scores: [] as Record<string, unknown>[],
   composerLinks: [] as { piece_id: string; composer_id: string; position: number }[],
+  materials: [] as { id: string; title: string; pdf_path: string }[],
+  lessons: [] as { id: string; title: string; lesson_date: string; notes: string }[],
 }))
 vi.mock('../supabase', () => ({
   supabase: {
@@ -40,6 +42,8 @@ describe('focused library', () => {
     mocks.pieces = [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', tags: ['calm'], play_progress: 50, links: [] }]
     mocks.scores = [{ id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', lead_sheet: false, position: 0 }]
     mocks.composerLinks = [{ piece_id: 'p1', composer_id: 'c1', position: 0 }]
+    mocks.materials = []
+    mocks.lessons = []
     mocks.update.mockImplementation((table: string, patch: Record<string, unknown>, column: string, value: string) => {
       if (table === 'sm_pieces') mocks.pieces = mocks.pieces.map((piece) => piece[column] === value ? { ...piece, ...patch } : piece)
       if (table === 'sm_piece_scores') mocks.scores = mocks.scores.map((score) => score[column] === value ? { ...score, ...patch } : score)
@@ -76,6 +80,10 @@ describe('focused library', () => {
               ? mocks.composerLinks
               : table === 'sm_piece_scores'
                 ? mocks.scores
+                : table === 'sm_teaching_materials'
+                  ? mocks.materials
+                  : table === 'sm_lessons'
+                    ? mocks.lessons
                 : []
         const result = { data, error: null }
         const promise = Promise.resolve(result)
@@ -402,6 +410,8 @@ describe('focused library', () => {
   })
 
   it('downloads a zip backup of the data and scores', async () => {
+    mocks.materials = [{ id: 'm1', title: 'Chord theory', pdf_path: 'u1/materials/chords.pdf' }]
+    mocks.lessons = [{ id: 'l1', title: 'Guitar lesson', lesson_date: '2026-11-18', notes: '# Practice' }]
     const createObjectURL = vi.fn((_blob: Blob) => 'blob:backup')
     const revokeObjectURL = vi.fn()
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
@@ -412,12 +422,15 @@ describe('focused library', () => {
     await user.click(screen.getByRole('button', { name: 'Download backup' }))
 
     await waitFor(() => expect(mocks.download).toHaveBeenCalledWith('romance.pdf'))
+    await waitFor(() => expect(mocks.download).toHaveBeenCalledWith('u1/materials/chords.pdf'))
     expect(click).toHaveBeenCalled()
     const blob = createObjectURL.mock.calls[0][0]
     expect(blob.type).toBe('application/zip')
     const text = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer()))
     expect(text).toContain('data.json')
     expect(text).toContain('scores/Romance - Piano · C major (s1).pdf')
+    expect(text).toContain('teaching-materials/Chord theory (m1).pdf')
+    expect(text).toContain('Guitar lesson')
     expect(await screen.findByText('Backup downloaded.')).toBeTruthy()
   })
 

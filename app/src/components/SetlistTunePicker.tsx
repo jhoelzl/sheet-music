@@ -10,10 +10,11 @@ const MAX_RESULTS = 8
  * search box with a results dropdown. Same interaction as the composer picker
  * on the tunes page, so picking tunes feels like picking composers.
  */
-export function SetlistTunePicker({ pieces, selectedIds, setlistName, disabled = false, composerNamesOf, onAdd, onRemove }: {
+export function SetlistTunePicker({ pieces, selectedIds, setlistName, context = 'setlist', disabled = false, composerNamesOf, onAdd, onRemove }: {
   pieces: Piece[]
   selectedIds: string[]
   setlistName: string
+  context?: 'setlist' | 'lesson'
   disabled?: boolean
   composerNamesOf: (p: Piece) => string
   onAdd: (id: string) => void
@@ -81,7 +82,7 @@ export function SetlistTunePicker({ pieces, selectedIds, setlistName, disabled =
           )}
         </div>
       )}
-      {remaining === 0 && pieces.length > 0 && <p className="muted">Every tune in your library is in this setlist.</p>}
+      {remaining === 0 && pieces.length > 0 && <p className="muted">Every tune in your library is in this {context}.</p>}
       {!pieces.length && <p className="muted">Add pieces to your library first.</p>}
     </div>
   )
