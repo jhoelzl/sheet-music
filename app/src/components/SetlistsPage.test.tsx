@@ -466,7 +466,7 @@ describe('setlists page', () => {
     expect(within(player).getByText('Count in').tagName).toBe('STRONG')
   })
 
-  it('moves tune notes to a side panel or hides them', async () => {
+  it('moves tune notes to the top, left, right, bottom or hides them', async () => {
     mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
     mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Solo on the **bridge**' }]
     const user = userEvent.setup()
@@ -475,20 +475,35 @@ describe('setlists page', () => {
     await user.click(screen.getByRole('button', { name: 'Play' }))
     const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
     const footerNote = () => player.querySelector('.player-comment')
+    const body = () => player.querySelector('.player-body') as HTMLElement
+    const notesSelect = () => within(player).getByRole('combobox', { name: 'Notes position' })
 
     // Default: notes in the footer.
     expect(footerNote()).toBeTruthy()
     expect(within(player).queryByRole('complementary', { name: 'Tune notes' })).toBeNull()
 
-    await user.selectOptions(within(player).getByRole('combobox', { name: 'Notes position' }), 'side')
+    await user.selectOptions(notesSelect(), 'right')
     const side = await within(player).findByRole('complementary', { name: 'Tune notes' })
     expect(within(side).getByText('bridge').tagName).toBe('STRONG')
     await waitFor(() => expect(footerNote()).toBeNull())
-    expect(localStorage.getItem('sm:player-notes')).toBe('side')
+    expect(body().className).toContain('notes-right')
+    expect(localStorage.getItem('sm:player-notes')).toBe('right')
 
-    await user.selectOptions(within(player).getByRole('combobox', { name: 'Notes position' }), 'off')
-    await waitFor(() => expect(within(player).queryByRole('complementary', { name: 'Tune notes' })).toBeNull())
-    expect(footerNote()).toBeNull()
+    await user.selectOptions(notesSelect(), 'left')
+    await waitFor(() => expect(body().className).toContain('notes-left'))
+    expect(within(player).getByRole('complementary', { name: 'Tune notes' })).toBeTruthy()
+
+    await user.selectOptions(notesSelect(), 'top')
+    await waitFor(() => expect(body().className).toContain('notes-top'))
+    expect(within(player).getByRole('complementary', { name: 'Tune notes' })).toBeTruthy()
+
+    await user.selectOptions(notesSelect(), 'bottom')
+    await waitFor(() => expect(footerNote()).toBeTruthy())
+    expect(within(player).queryByRole('complementary', { name: 'Tune notes' })).toBeNull()
+
+    await user.selectOptions(notesSelect(), 'off')
+    await waitFor(() => expect(footerNote()).toBeNull())
+    expect(within(player).queryByRole('complementary', { name: 'Tune notes' })).toBeNull()
   })
 
   it('lets the player choose between a tune’s scores', async () => {

@@ -610,13 +610,18 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .player-jump select { max-width: 200px; }
 .player-body { display: flex; flex: 1; min-height: 0; flex-direction: column; }
 .player-main { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
-.player-body.side { flex-direction: row; }
-.player-side { display: flex; flex: 0 0 320px; max-width: 42%; flex-direction: column; gap: 8px; overflow: auto; padding: 16px; border-left: 1px solid var(--line); background: var(--subtle); }
+.player-body.notes-top { flex-direction: column; }
+.player-body.notes-left, .player-body.notes-right { flex-direction: row; }
+.player-side { display: flex; flex-direction: column; gap: 8px; overflow: auto; padding: 16px; background: var(--subtle); }
+.player-body.notes-left .player-side, .player-body.notes-right .player-side { flex: 0 0 320px; max-width: 42%; }
+.player-body.notes-left .player-side { order: -1; border-right: 1px solid var(--line); }
+.player-body.notes-right .player-side { border-left: 1px solid var(--line); }
+.player-body.notes-top .player-side { order: -1; flex: 0 0 auto; max-height: 40%; border-bottom: 1px solid var(--line); }
 .player-side-title { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .player-side .player-note { color: var(--text); font-size: 15px; }
 @media (max-width: 720px) {
-  .player-body.side { flex-direction: column; }
-  .player-side { flex: 0 0 auto; max-width: none; max-height: 45%; border-left: 0; border-top: 1px solid var(--line); }
+  .player-body.notes-left, .player-body.notes-right { flex-direction: column; }
+  .player-body.notes-left .player-side, .player-body.notes-right .player-side { order: 1; flex: 0 0 auto; max-width: none; max-height: 45%; border-left: 0; border-right: 0; border-top: 1px solid var(--line); }
 }
 .player-message { padding: 24px 16px; color: var(--muted); text-align: center; }
 .player-cue { display: grid; place-content: center; justify-items: center; gap: 12px; flex: 1; padding: 32px 20px; text-align: center; background: var(--accent-soft); }
