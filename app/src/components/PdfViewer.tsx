@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import type { PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist'
 import { scoreImageType } from '../lib/scoreImage'
 
-function PdfPage({ doc, number, width, scrollRoot }: {
+function PdfPage({ doc, number, width, zoom, scrollRoot }: {
   doc: PDFDocumentProxy
   number: number
   width: number
+  zoom: number
   scrollRoot: HTMLElement | null
 }) {
   const container = useRef<HTMLDivElement>(null)
@@ -78,11 +79,15 @@ function PdfPage({ doc, number, width, scrollRoot }: {
 
   const viewport = page?.getViewport({ scale: 1 })
   return (
-    <div ref={container} className="pdf-page" style={{ aspectRatio: viewport ? `${viewport.width} / ${viewport.height}` : '1 / 1.414' }}>
+    <div ref={container} className="pdf-page" style={{ width: `${zoom * 100}%`, aspectRatio: viewport ? `${viewport.width} / ${viewport.height}` : '1 / 1.414' }}>
       {error && <p role="alert">Could not display page {number}. Close and reopen the PDF to retry.</p>}
     </div>
   )
 }
+
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 4
+const ZOOM_STEP = 0.25
 
 export function PdfViewer({ url, onLoad }: { url: string; onLoad: (pages: number) => void }) {
   const [scrollRoot, setScrollRoot] = useState<HTMLDivElement | null>(null)
@@ -92,6 +97,7 @@ export function PdfViewer({ url, onLoad }: { url: string; onLoad: (pages: number
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [error, setError] = useState(false)
   const [width, setWidth] = useState(0)
+  const [zoom, setZoom] = useState(1)
 
   useEffect(() => {
     let active = true
@@ -151,14 +157,26 @@ export function PdfViewer({ url, onLoad }: { url: string; onLoad: (pages: number
     return () => observer.disconnect()
   }, [scrollRoot])
 
+  const changeZoom = (delta: number) => setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((current + delta) * 100) / 100)))
+  const pageWidth = width * zoom
+
   return (
-    <div ref={setScrollRoot} className="pdf-scroll" aria-label="PDF pages" tabIndex={0}>
-      {error && <p className="pdf-message" role="alert">Could not load the score. Check your connection and file format, then close and reopen it.</p>}
-      {!error && !doc && !imageUrl && <p className="pdf-message" role="status">Loading score…</p>}
-      {!error && imageUrl && <img className="score-image" src={imageUrl} alt="Sheet music" onError={() => setError(true)} />}
-      {doc && Array.from({ length: doc.numPages }, (_, index) => (
-        <PdfPage key={index} doc={doc} number={index + 1} width={width} scrollRoot={scrollRoot} />
-      ))}
+    <div className="pdf-viewer">
+      <div ref={setScrollRoot} className="pdf-scroll" aria-label="PDF pages" tabIndex={0}>
+        {error && <p className="pdf-message" role="alert">Could not load the score. Check your connection and file format, then close and reopen it.</p>}
+        {!error && !doc && !imageUrl && <p className="pdf-message" role="status">Loading score…</p>}
+        {!error && imageUrl && <img className="score-image" style={{ width: `${zoom * 100}%` }} src={imageUrl} alt="Sheet music" onError={() => setError(true)} />}
+        {doc && Array.from({ length: doc.numPages }, (_, index) => (
+          <PdfPage key={index} doc={doc} number={index + 1} width={pageWidth} zoom={zoom} scrollRoot={scrollRoot} />
+        ))}
+      </div>
+      {!error && (
+        <div className="pdf-zoom" role="group" aria-label="Zoom">
+          <button type="button" aria-label="Zoom out" title="Zoom out" disabled={zoom <= MIN_ZOOM} onClick={() => changeZoom(-ZOOM_STEP)}>−</button>
+          <button type="button" className="pdf-zoom-value" aria-label="Reset zoom" title="Reset to fit width" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
+          <button type="button" aria-label="Zoom in" title="Zoom in" disabled={zoom >= MAX_ZOOM} onClick={() => changeZoom(ZOOM_STEP)}>+</button>
+        </div>
+      )}
     </div>
   )
 }
