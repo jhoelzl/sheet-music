@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Piece } from '../supabase'
 import { SetlistsPage } from './SetlistsPage'
 
-type Setlist = { id: string; name: string; position: number }
+type Setlist = { id: string; name: string; position: number; archived_at: string | null }
 type Entry = { id: string; setlist_id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null }
 
 const mocks = vi.hoisted(() => ({
@@ -14,15 +14,44 @@ const mocks = vi.hoisted(() => ({
   fail: '',
   setlists: [] as Setlist[],
   members: [] as Entry[],
+  openPdf: vi.fn(),
+  pdfUrl: vi.fn(),
+  recordPdfPages: vi.fn(),
 }))
 
 vi.mock('../supabase', () => ({ supabase: { from: mocks.from, rpc: mocks.rpc } }))
+vi.mock('./PdfViewer', () => ({
+  PdfViewer: ({ url, onLoad }: { url: string; onLoad: (pages: number) => void }) => (
+    <button type="button" data-url={url} onClick={() => onLoad(3)}>score</button>
+  ),
+}))
 
 const piece: Piece = {
   id: 'p1', composer_id: 'c1', composer_ids: ['c1'], title: 'Moanin’', subtitle: null, musical_key: 'F minor',
-  pdf_path: null, play_progress: 0, difficulty: null, rating: null, notes: null, instruments: ['piano'],
+  pdf_path: 'u/moanin.pdf', pdf_pages: 2, play_progress: 0, difficulty: null, rating: null, notes: null, instruments: ['piano'],
 }
-const lib = { pieces: [piece], composerNamesOf: () => 'Bobby Timmons', hiddenIds: new Set<string>() }
+const waltz: Piece = { ...piece, id: 'p2', title: 'Waltz', pdf_path: 'u/waltz.pdf' }
+const lib = {
+  pieces: [piece, waltz],
+  composerNamesOf: () => 'Bobby Timmons',
+  hiddenIds: new Set<string>(),
+  openPdf: mocks.openPdf,
+  pdfUrl: mocks.pdfUrl,
+  recordPdfPages: mocks.recordPdfPages,
+}
+
+/** Wait until the setlist entries are loaded and the picker is usable. */
+async function tuneSearch() {
+  const search = await screen.findByRole('searchbox', { name: 'Search tunes' })
+  await waitFor(() => expect((search as HTMLInputElement).disabled).toBe(false))
+  return search
+}
+
+/** Add a tune through the picker: focus the search box, then choose a result. */
+async function addTune(user: ReturnType<typeof userEvent.setup>, title: string, setlistName: string) {
+  await user.click(screen.getByRole('searchbox', { name: 'Search tunes' }))
+  await user.click(await screen.findByRole('button', { name: `Add ${title} to ${setlistName}` }))
+}
 
 describe('setlists page', () => {
   beforeEach(() => {
@@ -32,7 +61,7 @@ describe('setlists page', () => {
     mocks.insert.mockReset()
     mocks.insert.mockImplementation((table: string, values: Record<string, unknown>) => {
       if (table === 'sm_setlists') {
-        const created = { id: `s${mocks.setlists.length + 1}`, name: String(values.name), position: Number(values.position) }
+        const created = { id: `s${mocks.setlists.length + 1}`, name: String(values.name), position: Number(values.position), archived_at: null }
         mocks.setlists.push(created)
         return created
       }
@@ -49,12 +78,24 @@ describe('setlists page', () => {
         }
         return { error: null }
       }
+      if (name === 'sm_duplicate_setlist') {
+        const copy: Setlist = { id: `s${mocks.setlists.length + 1}`, name: String(args.new_name), position: mocks.setlists.length, archived_at: null }
+        mocks.setlists.push(copy)
+        for (const entry of mocks.members.filter((row) => row.setlist_id === args.source_id)) {
+          mocks.members.push({ ...entry, id: `e${mocks.members.length + 1}`, setlist_id: copy.id })
+        }
+        return { data: copy.id, error: null }
+      }
       const rows = name === 'sm_swap_setlists' ? mocks.setlists : mocks.members.filter((entry) => entry.setlist_id === args.list_id)
       const first = rows.find((row) => row.id === args.first_id)!
       const second = rows.find((row) => row.id === args.second_id)!
       ;[first.position, second.position] = [second.position, first.position]
       return { error: null }
     })
+    mocks.openPdf.mockReset()
+    mocks.pdfUrl.mockReset()
+    mocks.pdfUrl.mockImplementation(async (p: Piece) => `https://signed.test/${p.pdf_path}`)
+    mocks.recordPdfPages.mockReset()
     mocks.from.mockImplementation((table: string) => {
       const filters: Record<string, string> = {}
       const rows = () => table === 'sm_setlists' ? mocks.setlists : mocks.members
@@ -99,16 +140,45 @@ describe('setlists page', () => {
     await user.type(screen.getByRole('textbox', { name: 'Setlist name' }), 'Friday gig')
     await user.click(screen.getByRole('button', { name: 'Create setlist' }))
     await screen.findByRole('heading', { name: 'Friday gig' })
-    await waitFor(() => expect((screen.getByRole('checkbox', { name: 'Add Moanin’ to Friday gig' }) as HTMLInputElement).disabled).toBe(false))
-    await user.click(screen.getByRole('checkbox', { name: 'Add Moanin’ to Friday gig' }))
+    await tuneSearch()
+    await addTune(user, 'Moanin’', 'Friday gig')
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_setlist_pieces', {
       setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null,
     }))
     expect(await screen.findByRole('textbox', { name: 'Comment for Moanin’' })).toBeTruthy()
   })
 
+  it('shows the chosen tunes as removable chips', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await tuneSearch()
+    const picker = screen.getByRole('group', { name: 'Tunes in Gig' })
+    expect(await within(picker).findByText('Moanin’')).toBeTruthy()
+    await user.click(within(picker).getByRole('button', { name: 'Remove Moanin’ from Gig' }))
+    await waitFor(() => expect(mocks.members).toHaveLength(0))
+  })
+
+  it('filters the tune picker by title, composer and key', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    const search = await tuneSearch()
+    await user.type(search, 'F minor')
+    await screen.findByRole('button', { name: 'Add Moanin’ to Gig' })
+    await user.clear(search)
+    await user.type(search, 'waltz')
+    await screen.findByRole('button', { name: 'Add Waltz to Gig' })
+    expect(screen.queryByRole('button', { name: 'Add Moanin’ to Gig' })).toBeNull()
+  })
+
   it('renames and manually reorders setlists, preserving order after reload', async () => {
-    mocks.setlists = [{ id: 's1', name: 'Friday', position: 0 }, { id: 's2', name: 'Saturday', position: 1 }]
+    mocks.setlists = [
+      { id: 's1', name: 'Friday', position: 0, archived_at: null },
+      { id: 's2', name: 'Saturday', position: 1, archived_at: null },
+    ]
     const user = userEvent.setup()
     const rendered = render(<SetlistsPage lib={lib} />)
     await screen.findByRole('heading', { name: 'Friday' })
@@ -129,7 +199,7 @@ describe('setlists page', () => {
   })
 
   it('persists comments and repeatable placeholders with independent order', async () => {
-    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0 }]
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
     mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null }]
     const user = userEvent.setup()
     const rendered = render(<SetlistsPage lib={lib} />)
@@ -157,7 +227,7 @@ describe('setlists page', () => {
   })
 
   it('reorders tunes by dragging the handle with touch', async () => {
-    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0 }]
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
     mocks.members = [
       { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null },
       { id: 'e2', setlist_id: 's1', piece_id: null, position: 1, placeholder: 'Break', comment: null },
@@ -181,14 +251,13 @@ describe('setlists page', () => {
   })
 
   it('numbers tunes only and marks placeholders distinctly', async () => {
-    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0 }]
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
     mocks.members = [
       { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null },
       { id: 'e2', setlist_id: 's1', piece_id: null, position: 1, placeholder: 'Break', comment: null },
       { id: 'e3', setlist_id: 's1', piece_id: 'p2', position: 2, placeholder: null, comment: null },
     ]
-    const twoPieces = { ...lib, pieces: [piece, { ...piece, id: 'p2', title: 'Waltz' }] }
-    render(<SetlistsPage lib={twoPieces} />)
+    render(<SetlistsPage lib={lib} />)
     const list = await screen.findByRole('list', { name: 'Tune order' })
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(3))
     const items = within(list).getAllByRole('listitem')
@@ -199,7 +268,7 @@ describe('setlists page', () => {
   })
 
   it('reports save errors and keeps the previous comment', async () => {
-    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0 }]
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
     mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Sax solo' }]
     const user = userEvent.setup()
     render(<SetlistsPage lib={lib} />)
@@ -212,7 +281,10 @@ describe('setlists page', () => {
   })
 
   it('keeps comments specific to each setlist and allows clearing them', async () => {
-    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0 }, { id: 's2', name: 'Jam', position: 1 }]
+    mocks.setlists = [
+      { id: 's1', name: 'Gig', position: 0, archived_at: null },
+      { id: 's2', name: 'Jam', position: 1, archived_at: null },
+    ]
     mocks.members = [
       { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Piano solo' },
       { id: 'e2', setlist_id: 's2', piece_id: 'p1', position: 0, placeholder: null, comment: 'Sax solo' },
@@ -228,5 +300,125 @@ describe('setlists page', () => {
     await user.keyboard('{Enter}')
     await waitFor(() => expect(mocks.members.find((item) => item.id === 'e2')?.comment).toBeNull())
     expect(mocks.members.find((item) => item.id === 'e1')?.comment).toBe('Piano solo')
+  })
+
+  it('duplicates a setlist with its tunes, placeholders, comments and order', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [
+      { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Piano solo' },
+      { id: 'e2', setlist_id: 's1', piece_id: null, position: 1, placeholder: 'Break', comment: null },
+    ]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await user.click(screen.getByRole('button', { name: 'Duplicate' }))
+    await screen.findByRole('heading', { name: 'Gig (copy)' })
+    expect(mocks.rpc).toHaveBeenCalledWith('sm_duplicate_setlist', { source_id: 's1', new_name: 'Gig (copy)' })
+    const list = await screen.findByRole('list', { name: 'Tune order' })
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(2))
+    expect(within(list).getAllByRole('listitem').map((item) => item.querySelector('strong')?.textContent)).toEqual(['Moanin’', 'Break'])
+    expect((screen.getByRole('textbox', { name: 'Comment for Moanin’' }) as HTMLInputElement).value).toBe('Piano solo')
+    // The copy is a new setlist; the original is untouched.
+    expect(mocks.setlists.map((item) => item.name)).toEqual(['Gig', 'Gig (copy)'])
+  })
+
+  it('numbers further copies apart', async () => {
+    mocks.setlists = [
+      { id: 's1', name: 'Gig', position: 0, archived_at: null },
+      { id: 's2', name: 'Gig (copy)', position: 1, archived_at: null },
+    ]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await user.click(screen.getByRole('button', { name: 'Duplicate' }))
+    await screen.findByRole('heading', { name: 'Gig (copy 2)' })
+  })
+
+  it('archives a setlist, keeps it read-only and restores it', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    await waitFor(() => expect(mocks.setlists[0].archived_at).toBeTruthy())
+    expect(await screen.findByText('Archived')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Archived (1)' })).toBeTruthy()
+    // Archived setlists are read-only.
+    expect((screen.getByRole('searchbox', { name: 'Search tunes' }) as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Add placeholder' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Rename' })).toBeNull()
+    // Playing an archived setlist is still allowed.
+    expect((screen.getByRole('button', { name: 'Play' }) as HTMLButtonElement).disabled).toBe(false)
+    await user.click(screen.getByRole('button', { name: 'Restore' }))
+    await waitFor(() => expect(mocks.setlists[0].archived_at).toBeNull())
+    await waitFor(() => expect((screen.getByRole('searchbox', { name: 'Search tunes' }) as HTMLInputElement).disabled).toBe(false))
+  })
+
+  it('shows tune details and opens the score from a setlist entry', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await tuneSearch()
+    await user.click(screen.getByRole('button', { name: 'Open score for Moanin’' }))
+    expect(mocks.openPdf).toHaveBeenCalledWith(piece)
+    const toggle = screen.getByRole('button', { name: 'Show details for Moanin’' })
+    await user.click(toggle)
+    const details = screen.getByRole('button', { name: 'Hide details for Moanin’' }).closest('li')!
+    expect(within(details).getByText('F minor')).toBeTruthy()
+    expect(within(details).getByText('Bobby Timmons')).toBeTruthy()
+    expect(within(details).getByText('2 pages')).toBeTruthy()
+    expect(within(details).getByText("Can't play yet (0%)")).toBeTruthy()
+    await user.click(within(details).getByRole('button', { name: 'Open score' }))
+    expect(mocks.openPdf).toHaveBeenCalledTimes(2)
+  })
+
+  it('tells the player when a tune has no score attached', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p3', position: 0, placeholder: null, comment: null }]
+    const noScore = { ...lib, pieces: [{ ...piece, id: 'p3', title: 'Unfinished Sketch', pdf_path: null }] }
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={noScore} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await user.click(await screen.findByRole('button', { name: 'Play' }))
+    const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
+    expect(await within(player).findByText('No score attached to this tune. Attach a PDF in the library to see it on stage.')).toBeTruthy()
+    expect(mocks.pdfUrl).not.toHaveBeenCalled()
+  })
+
+  it('plays a setlist in live mode and steps through the scores', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [
+      { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Count in' },
+      { id: 'e2', setlist_id: 's1', piece_id: null, position: 1, placeholder: 'Break', comment: 'Introduce the band' },
+      { id: 'e3', setlist_id: 's1', piece_id: 'p2', position: 2, placeholder: null, comment: null },
+    ]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await user.click(screen.getByRole('button', { name: 'Play' }))
+    const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
+    expect(await within(player).findByText('Tune 1 of 3')).toBeTruthy()
+    await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/moanin.pdf'))
+    expect(within(player).getByText('Count in')).toBeTruthy()
+    // The placeholder is a cue card, not a score.
+    await user.click(within(player).getByRole('button', { name: 'Next tune' }))
+    expect(within(player).getByRole('heading', { name: 'Break' })).toBeTruthy()
+    expect(within(player).getAllByText('Introduce the band').length).toBeGreaterThan(0)
+    await user.click(within(player).getByRole('button', { name: 'Next tune' }))
+    await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/waltz.pdf'))
+    expect((within(player).getByRole('button', { name: 'Next tune' }) as HTMLButtonElement).disabled).toBe(true)
+    // Page counts are recorded from the player too.
+    await user.click(within(player).getByRole('button', { name: 'score' }))
+    expect(mocks.recordPdfPages).toHaveBeenCalledWith('p2', 3)
+    // Arrow keys and the jump list switch tunes; Escape leaves live mode.
+    await user.keyboard('{ArrowLeft}')
+    await waitFor(() => expect(within(player).getByRole('heading', { name: 'Break' })).toBeTruthy())
+    await user.selectOptions(within(player).getByRole('combobox', { name: 'Jump to tune' }), '2')
+    await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/waltz.pdf'))
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Live mode: Gig' })).toBeNull())
   })
 })
