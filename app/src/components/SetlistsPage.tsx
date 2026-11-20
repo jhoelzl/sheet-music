@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { Library } from '../hooks/useLibrary'
+import { scoresOf } from '../hooks/useLibrary'
 import { supabase } from '../supabase'
 import { dropIndex, moveItem } from '../lib/reorder'
+import { scoreLabel } from '../lib/scores'
 import { SetlistComment } from './SetlistComment'
 import { SetlistPlayer } from './SetlistPlayer'
 import type { PlayerEntry } from './SetlistPlayer'
@@ -11,7 +13,7 @@ import { SetlistTunePicker } from './SetlistTunePicker'
 import { ArchiveIcon, GripIcon, InfoIcon, PauseIcon, PdfIcon, PlayIcon } from './icons'
 
 type Setlist = { id: string; name: string; position: number; archived_at: string | null }
-type SetlistEntry = { id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null }
+type SetlistEntry = { id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null; score_id: string | null }
 type LibraryData = Pick<Library, 'pieces' | 'composerNamesOf' | 'hiddenIds' | 'openPdf' | 'pdfUrl' | 'recordPdfPages'>
 type DragState = { pointerId: number; fromRow: number; startY: number; startScrollY: number; tops: number[]; heights: number[]; shift: number }
 
@@ -73,7 +75,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     let active = true
     void (async () => {
       const { data, error: loadError } = await supabase.from('sm_setlist_pieces')
-        .select('id, piece_id, position, placeholder, comment')
+        .select('id, piece_id, position, placeholder, comment, score_id')
         .eq('setlist_id', selectedId).order('position').order('id')
       if (!active) return
       if (loadError) setError(loadError.message)
@@ -215,7 +217,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       const position = members.reduce((max, member) => Math.max(max, member.position), -1) + 1
       const { data, error: addError } = await supabase.from('sm_setlist_pieces')
         .insert({ setlist_id: selectedId, piece_id: pieceId, position, placeholder: text })
-        .select('id, piece_id, position, placeholder, comment').single()
+        .select('id, piece_id, position, placeholder, comment, score_id').single()
       if (addError || !data) { setError(addError?.message ?? 'Could not add setlist entry.'); return }
       updateMembers(selectedId, (current) => [...current, data as SetlistEntry])
       if (text !== null) setPlaceholder('')
@@ -357,6 +359,18 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     })
   }
 
+  /** Choose which of a tune's scores this setlist entry plays. */
+  const saveEntryScore = (entry: SetlistEntry, score_id: string | null) => {
+    if (!selectedId) return
+    if (score_id === entry.score_id) return
+    if (busyRef.current) { setError('Wait for the current change before choosing a score.'); return }
+    void perform(async () => {
+      const { error: saveError } = await supabase.from('sm_setlist_pieces').update({ score_id }).eq('setlist_id', selectedId).eq('id', entry.id)
+      if (saveError) { setError(saveError.message); return }
+      updateMembers(selectedId, (current) => current.map((item) => item.id === entry.id ? { ...item, score_id } : item))
+    })
+  }
+
   const selected = setlists.find((setlist) => setlist.id === selectedId)
   const activeSetlists = setlists.filter((setlist) => !setlist.archived_at)
   const archivedSetlists = setlists.filter((setlist) => setlist.archived_at)
@@ -379,6 +393,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     composers: piece ? lib.composerNamesOf(piece) : '',
     comment: entry.comment,
     piece,
+    scoreId: entry.score_id,
   }))
   const chosenPieceIds = orderedRows.flatMap(({ piece }) => piece ? [piece.id] : [])
 
@@ -459,6 +474,8 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                           : undefined
                   const classes = [dragging ? 'dragging' : '', piece ? '' : 'placeholder'].filter(Boolean).join(' ')
                   const showingDetails = Boolean(piece) && openDetails === entry.id
+                  const scoreOptions = piece ? scoresOf(piece) : []
+                  const chosenScore = scoreOptions.find((score) => score.id === entry.score_id) ?? scoreOptions[0] ?? null
                   return (
                     <li key={entry.id} className={classes || undefined} style={transform ? { transform } : undefined}>
                       <button type="button" className="setlist-drag-handle" aria-label={`Reorder ${title}`} disabled={entriesDisabled || visibleRows.length < 2}
@@ -474,12 +491,21 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                           <small>{lib.composerNamesOf(piece)}{piece.musical_key ? ` · ${piece.musical_key}` : ''}</small>
                           <SetlistComment comment={entry.comment} title={title} disabled={entriesDisabled}
                             onSave={(value) => saveComment(entry, value)} />
+                          {scoreOptions.length > 1 && (
+                            <label className="setlist-score">
+                              <span>Score</span>
+                              <select aria-label={`Score for ${title}`} value={chosenScore?.id ?? ''} disabled={entriesDisabled}
+                                onChange={(event) => saveEntryScore(entry, event.target.value)}>
+                                {scoreOptions.map((score) => <option key={score.id} value={score.id}>{scoreLabel(score)}</option>)}
+                              </select>
+                            </label>
+                          )}
                         </> : <small>Placeholder</small>}
                       </span>
                       <div className="setlist-piece-actions">
                         {piece && (
-                          <button type="button" className="icon-btn" aria-label={`Open score for ${title}`} title={piece.pdf_path ? 'Open the score' : 'No PDF attached to this tune'}
-                            disabled={!piece.pdf_path} onClick={() => void lib.openPdf(piece)}>{PdfIcon}</button>
+                          <button type="button" className="icon-btn" aria-label={`Open score for ${title}`} title={chosenScore ? 'Open the score' : 'No PDF attached to this tune'}
+                            disabled={!chosenScore} onClick={() => void lib.openPdf(piece, chosenScore ?? undefined)}>{PdfIcon}</button>
                         )}
                         {piece && (
                           <button type="button" className="icon-btn" aria-label={`${showingDetails ? 'Hide' : 'Show'} details for ${title}`} aria-expanded={showingDetails} title="Tune details"
