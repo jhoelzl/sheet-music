@@ -494,7 +494,9 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
   .page-nav button { min-width: 0; padding: 6px 3px; font-size: 11px; }
   .ios-native .page-nav button { font-size: 10px; }
 }
-.video-intro, .video-feed { max-width: 680px; margin-left: auto; margin-right: auto; }
+.video-intro, .video-order, .video-feed { max-width: 680px; margin-left: auto; margin-right: auto; }
+.video-order { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.video-order button[aria-pressed="true"] { border-color: var(--accent-strong); background: var(--accent-soft); }
 .video-feed { display: grid; gap: 36px; }
 .video-card { min-width: 0; }
 .video-media { aspect-ratio: 16 / 9; background: #000; border-radius: 16px; overflow: hidden; }

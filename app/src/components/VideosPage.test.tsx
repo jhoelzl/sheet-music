@@ -46,7 +46,31 @@ describe('video feed', () => {
     consoleError.mockRestore()
   })
 
-  afterEach(() => { cleanup(); vi.clearAllMocks() })
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks() })
+
+  it('switches between the original and a stable random order, and reshuffles on demand', async () => {
+    const random = vi.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0.99)
+    const user = userEvent.setup()
+    render(<VideosPage />)
+    await screen.findByRole('button', { name: 'Play Romance' })
+    const titles = () => screen.getAllByRole('article').map((card) => card.querySelector('strong')?.textContent)
+    expect(titles()).toEqual(['Romance', 'Nocturne'])
+
+    await user.click(screen.getByRole('button', { name: 'Random order' }))
+    expect(screen.getByRole('button', { name: 'Random order' }).getAttribute('aria-pressed')).toBe('true')
+    expect(titles()).toEqual(['Nocturne', 'Romance'])
+    await user.click(screen.getByRole('button', { name: 'Play Romance' }))
+    expect(titles()).toEqual(['Nocturne', 'Romance'])
+    expect(random).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: 'Shuffle again' }))
+    expect(titles()).toEqual(['Romance', 'Nocturne'])
+    expect(screen.getByTitle('Romance')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Random order' }))
+    expect(screen.getByRole('button', { name: 'Random order' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.queryByRole('button', { name: 'Shuffle again' })).toBeNull()
+    expect(titles()).toEqual(['Romance', 'Nocturne'])
+  })
 
   it('shows composer details and keeps video playback and source links accessible', async () => {
     const user = userEvent.setup()
