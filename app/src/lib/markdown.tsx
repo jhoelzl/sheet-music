@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
  * A deliberately small markdown renderer for short user notes (setlist comments).
  * It builds React elements instead of HTML, so a comment can never inject markup.
  *
- * Supported: headings, unordered and ordered lists, blockquotes, horizontal rules,
+ * Supported: headings, nested unordered and ordered lists, blockquotes, horizontal rules,
  * paragraphs, hard line breaks, **bold**, *italic*, `code` and [links](https://…).
  */
 
@@ -60,10 +60,50 @@ function inlineLines(lines: string[], key: string): ReactNode[] {
   return nodes
 }
 
+type ListMarker = { indent: number; ordered: boolean; start: number; text: string }
+
+function listMarker(line: string): ListMarker | null {
+  const match = /^([ \t]*)(?:([-*+])|(\d+)[.)])[ \t]+(.*)$/.exec(line)
+  if (!match) return null
+  const indent = [...match[1]].reduce((column, char) => char === '\t' ? column + 4 - column % 4 : column + 1, 0)
+  return { indent, ordered: Boolean(match[3]), start: Number(match[3] ?? 1), text: match[4] }
+}
+
+function parseList(lines: string[], startIndex: number, key: string): { node: ReactNode; next: number } {
+  const first = listMarker(lines[startIndex])!
+  const items: { text: string; children: ReactNode[] }[] = []
+  let index = startIndex
+  while (index < lines.length) {
+    if (!lines[index].trim()) {
+      let next = index + 1
+      while (next < lines.length && !lines[next].trim()) next++
+      const marker = next < lines.length ? listMarker(lines[next]) : null
+      if (!marker || marker.indent < first.indent) break
+      index = next
+    }
+    const marker = listMarker(lines[index])
+    if (!marker || marker.indent < first.indent) break
+    if (marker.indent > first.indent) {
+      const item = items[items.length - 1]
+      const child = parseList(lines, index, `${key}-${items.length}-${item.children.length}`)
+      item.children.push(child.node)
+      index = child.next
+      continue
+    }
+    if (marker.ordered !== first.ordered) break
+    items.push({ text: marker.text, children: [] })
+    index++
+  }
+  const children = items.map((item, i) => <li key={`${key}-${i}`}>{inline(item.text, `${key}-${i}`)}{item.children}</li>)
+  return {
+    node: first.ordered ? <ol key={key} start={first.start}>{children}</ol> : <ul key={key}>{children}</ul>,
+    next: index,
+  }
+}
+
 export function Markdown({ text, className }: { text: string; className?: string }) {
   const blocks: ReactNode[] = []
   let paragraph: string[] = []
-  let list: { ordered: boolean; items: string[] } | null = null
   let quote: string[] = []
   let key = 0
 
@@ -73,22 +113,17 @@ export function Markdown({ text, className }: { text: string; className?: string
     blocks.push(<p key={k}>{inlineLines(paragraph, k)}</p>)
     paragraph = []
   }
-  const flushList = () => {
-    if (!list) return
-    const k = `l${key++}`
-    const items = list.items.map((item, index) => <li key={`${k}-${index}`}>{inline(item, `${k}-${index}`)}</li>)
-    blocks.push(list.ordered ? <ol key={k}>{items}</ol> : <ul key={k}>{items}</ul>)
-    list = null
-  }
   const flushQuote = () => {
     if (!quote.length) return
     const k = `q${key++}`
     blocks.push(<blockquote key={k}>{inlineLines(quote, k)}</blockquote>)
     quote = []
   }
-  const flush = () => { flushParagraph(); flushList(); flushQuote() }
+  const flush = () => { flushParagraph(); flushQuote() }
 
-  for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n')
+  for (let index = 0; index < lines.length; index++) {
+    const raw = lines[index]
     const line = raw.trim()
     if (!line) { flush(); continue }
 
@@ -103,20 +138,18 @@ export function Markdown({ text, className }: { text: string; className?: string
 
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(line)) { flush(); blocks.push(<hr key={`hr${key++}`} />); continue }
 
-    const bullet = /^[-*+]\s+(.*)$/.exec(line)
-    const numbered = /^\d+[.)]\s+(.*)$/.exec(line)
-    if (bullet || numbered) {
-      const ordered = Boolean(numbered)
+    if (listMarker(raw)) {
       flushParagraph(); flushQuote()
-      if (!list || list.ordered !== ordered) { flushList(); list = { ordered, items: [] } }
-      list.items.push((bullet ?? numbered)![1])
+      const parsed = parseList(lines, index, `l${key++}`)
+      blocks.push(parsed.node)
+      index = parsed.next - 1
       continue
     }
 
     const quoted = /^>\s?(.*)$/.exec(line)
-    if (quoted) { flushParagraph(); flushList(); quote.push(quoted[1]); continue }
+    if (quoted) { flushParagraph(); quote.push(quoted[1]); continue }
 
-    flushList(); flushQuote()
+    flushQuote()
     paragraph.push(line)
   }
   flush()

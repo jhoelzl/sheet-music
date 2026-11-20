@@ -105,6 +105,16 @@ describe('lessons', () => {
     expect(mocks.openMaterialPdf).toHaveBeenCalledWith(expect.objectContaining({ title: 'Chord concepts' }))
   })
 
+  it('previews nested lesson notes as nested lists', async () => {
+    mocks.tables.sm_lessons[0].notes = '- Chromatische Treppen Übungen\n    - Auf 9. Bund beginnen\n- Vaya con dios\n    - Melodie weiterüben'
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const preview = await screen.findByRole('region', { name: 'Notes preview' })
+    const items = preview.querySelectorAll('.md > ul > li')
+    expect(items).toHaveLength(2)
+    expect(items[0].querySelector('ul > li')?.textContent).toBe('Auf 9. Bund beginnen')
+    expect(items[1].querySelector('ul > li')?.textContent).toBe('Melodie weiterüben')
+  })
+
   it('creates a lesson and keeps materials when deleting it', async () => {
     const user = userEvent.setup()
     render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
