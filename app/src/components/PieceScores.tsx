@@ -6,18 +6,18 @@ import { INSTRUMENTS } from '../lib/instruments'
 import { CloseIcon, PdfIcon } from './icons'
 import { KeySelect } from './KeySelect'
 
-const labelOf = (value: Instrument) => INSTRUMENTS.find((item) => item.value === value)
+const labelOf = (value: Instrument | null) => INSTRUMENTS.find((item) => item.value === value)
 
 /**
- * The piece's scores: one row per PDF, each with its own key and instrument.
- * A piece can hold several, e.g. a piano score and a guitar arrangement.
+ * The piece's scores: one row per PDF, each with its own key and either an
+ * instrument or a "lead sheet" (chords only, no particular instrument).
  */
 export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
   const scores = lib.scoresOf(p)
   const [adding, setAdding] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [key, setKey] = useState('')
-  const [instrument, setInstrument] = useState<Instrument>('piano')
+  const [instrument, setInstrument] = useState<Instrument | null>('piano')
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
@@ -33,14 +33,19 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
       <ul className="score-list">
         {scores.map((score, index) => (
           <li className="score-row" key={score.id}>
-            <span className="score-instrument" title={labelOf(score.instrument)?.label}>{labelOf(score.instrument)?.icon}</span>
+            <span className="score-instrument" title={score.lead_sheet ? 'Lead sheet' : labelOf(score.instrument)?.label}>
+              {score.lead_sheet ? '♪' : labelOf(score.instrument)?.icon}
+            </span>
             <KeySelect label={`Key for score ${index + 1} of ${p.title}`} value={score.musical_key ?? ''}
               onChange={(value) => lib.updateScore(p, score, { musical_key: value || null })} />
-            <div className="score-instruments" role="group" aria-label={`Instrument for score ${index + 1} of ${p.title}`}>
+            <div className="score-instruments" role="group" aria-label={`Type for score ${index + 1} of ${p.title}`}>
+              <button type="button" className={`chip${score.lead_sheet ? ' on' : ''}`} aria-pressed={score.lead_sheet}
+                title="Chords only, no particular instrument" disabled={lib.uploadingId === p.id}
+                onClick={() => { if (!score.lead_sheet) lib.updateScore(p, score, { lead_sheet: true, instrument: null }) }}>Lead sheet</button>
               {INSTRUMENTS.map((item) => (
-                <button key={item.value} type="button" className={`chip${score.instrument === item.value ? ' on' : ''}`}
-                  aria-pressed={score.instrument === item.value} title={item.label} disabled={lib.uploadingId === p.id}
-                  onClick={() => { if (score.instrument !== item.value) lib.updateScore(p, score, { instrument: item.value }) }}>{item.icon}</button>
+                <button key={item.value} type="button" className={`chip${!score.lead_sheet && score.instrument === item.value ? ' on' : ''}`}
+                  aria-pressed={!score.lead_sheet && score.instrument === item.value} aria-label={item.label} title={item.label} disabled={lib.uploadingId === p.id}
+                  onClick={() => { if (score.lead_sheet || score.instrument !== item.value) lib.updateScore(p, score, { instrument: item.value, lead_sheet: false }) }}>{item.icon}</button>
               ))}
             </div>
             {score.pdf_pages ? <span className="page-count">{score.pdf_pages} {score.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
@@ -56,7 +61,9 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
           <input type="file" accept="application/pdf" aria-label={`PDF for ${p.title}`} disabled={lib.uploadingId === p.id}
             onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
           <KeySelect label={`Key for new score of ${p.title}`} value={key} onChange={setKey} disabled={lib.uploadingId === p.id} />
-          <div className="score-instruments" role="group" aria-label={`Instrument for new score of ${p.title}`}>
+          <div className="score-instruments" role="group" aria-label={`Type for new score of ${p.title}`}>
+            <button type="button" className={`chip${instrument === null ? ' on' : ''}`} aria-pressed={instrument === null}
+              disabled={lib.uploadingId === p.id} onClick={() => setInstrument(null)}>Lead sheet</button>
             {INSTRUMENTS.map((item) => (
               <button key={item.value} type="button" className={`chip${instrument === item.value ? ' on' : ''}`}
                 aria-pressed={instrument === item.value} disabled={lib.uploadingId === p.id}

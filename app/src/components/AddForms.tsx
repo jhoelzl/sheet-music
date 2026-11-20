@@ -31,9 +31,11 @@ export function AddForms({ lib }: { lib: Library }) {
         <label>PDF score (optional)<input type="file" accept="application/pdf" disabled={pieceSaving} onChange={(e) => lib.setFile(e.target.files?.[0] ?? null)} /></label>
         {lib.file && <>
           <label>Key<KeySelect value={lib.newMusicalKey} onChange={lib.setNewMusicalKey} disabled={pieceSaving} /></label>
-          <div className="field-group" role="group" aria-label="Instrument for the new score">
+          <div className="field-group" role="group" aria-label="Type for the new score">
             <span>Instrument</span>
             <div className="instrument-toggle">
+              <button type="button" className={`chip${lib.newScoreInstrument === null ? ' on' : ''}`} aria-pressed={lib.newScoreInstrument === null} disabled={pieceSaving}
+                onClick={() => lib.setNewScoreInstrument(null)}>Lead sheet</button>
               {INSTRUMENTS.map((i) => (
                 <button key={i.value} type="button" className={`chip${lib.newScoreInstrument === i.value ? ' on' : ''}`} aria-pressed={lib.newScoreInstrument === i.value} disabled={pieceSaving}
                   onClick={() => lib.setNewScoreInstrument(i.value)}>{i.icon} {i.label}</button>

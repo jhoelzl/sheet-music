@@ -37,7 +37,7 @@ describe('focused library', () => {
   beforeEach(() => {
     localStorage.clear()
     mocks.pieces = [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', tags: ['calm'], play_progress: 50, links: [] }]
-    mocks.scores = [{ id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', position: 0 }]
+    mocks.scores = [{ id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', lead_sheet: false, position: 0 }]
     mocks.composerLinks = [{ piece_id: 'p1', composer_id: 'c1', position: 0 }]
     mocks.update.mockImplementation((table: string, patch: Record<string, unknown>, column: string, value: string) => {
       if (table === 'sm_pieces') mocks.pieces = mocks.pieces.map((piece) => piece[column] === value ? { ...piece, ...patch } : piece)
@@ -265,7 +265,7 @@ describe('focused library', () => {
   it('switches between a piece’s scores in the viewer', async () => {
     mocks.scores = [
       { id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', position: 0 },
-      { id: 's2', piece_id: 'p1', pdf_path: 'romance-guitar.pdf', pdf_pages: 1, musical_key: 'A minor', instrument: 'guitar', position: 1 },
+      { id: 's2', piece_id: 'p1', pdf_path: 'romance-guitar.pdf', pdf_pages: 1, musical_key: 'A minor', instrument: 'guitar', lead_sheet: false, position: 1 },
     ]
     mocks.signedUrl.mockImplementation(async (path: string) => ({ data: { signedUrl: `https://example.test/${path}` }, error: null }))
     const user = userEvent.setup()
@@ -377,6 +377,19 @@ describe('focused library', () => {
     await waitFor(() => expect(key.value).toBe(''))
   })
 
+  it('marks a score as a lead sheet and back to an instrument', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    const group = () => screen.getByRole('group', { name: 'Type for score 1 of Romance' })
+    await user.click(within(group()).getByRole('button', { name: 'Lead sheet' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { lead_sheet: true, instrument: null }, 'id', 's1'))
+    await waitFor(() => expect(within(group()).getByRole('button', { name: 'Lead sheet' }).getAttribute('aria-pressed')).toBe('true'))
+
+    await user.click(within(group()).getByRole('button', { name: 'Piano' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { instrument: 'piano', lead_sheet: false }, 'id', 's1'))
+  })
+
   it('adds and removes scores on a piece', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-2' })
     const user = userEvent.setup()
@@ -387,7 +400,7 @@ describe('focused library', () => {
     await user.click(screen.getByRole('button', { name: '+ Add score' }))
     await user.upload(screen.getByLabelText('PDF for Romance'), new File(['x'], 'guitar.pdf', { type: 'application/pdf' }))
     await user.selectOptions(screen.getByLabelText('Key for new score of Romance'), 'C major')
-    await user.click(within(screen.getByRole('group', { name: 'Instrument for new score of Romance' })).getByRole('button', { name: /guitar/i }))
+    await user.click(within(screen.getByRole('group', { name: 'Type for new score of Romance' })).getByRole('button', { name: /guitar/i }))
     await user.click(screen.getByRole('button', { name: 'Add score' }))
 
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_piece_scores', expect.objectContaining({
