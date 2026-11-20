@@ -17,6 +17,14 @@ export type PlayerEntry = {
   scoreId?: string | null
 }
 
+export type NotesMode = 'footer' | 'side' | 'off'
+const NOTES_MODES: { value: NotesMode; label: string }[] = [
+  { value: 'footer', label: 'Bottom' },
+  { value: 'side', label: 'Side' },
+  { value: 'off', label: 'Hidden' },
+]
+const NOTES_STORAGE_KEY = 'sm:player-notes'
+
 /**
  * Live mode: one score at a time, full screen, with the next tune one tap away.
  * Placeholders (breaks, announcements) show as cue cards so the running order
@@ -33,6 +41,13 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
   // Which score of the current tune is on stage. Switching tunes resets it to the
   // score pre-selected for the entry, because the chosen id no longer matches.
   const [chosenScoreId, setChosenScoreId] = useState<string | null>(null)
+  // Where the current tune's notes are shown: in the footer (default), in a side
+  // panel, or hidden. Remembered across sessions.
+  const [notesMode, setNotesMode] = useState<NotesMode>(() => {
+    const stored = localStorage.getItem(NOTES_STORAGE_KEY)
+    return stored === 'side' || stored === 'off' ? stored : 'footer'
+  })
+  const changeNotesMode = (mode: NotesMode) => { setNotesMode(mode); localStorage.setItem(NOTES_STORAGE_KEY, mode) }
   // The signed URL and any failure belong to a specific score, so a stale result
   // for a previous score is ignored instead of cleared when the score changes.
   const [signed, setSigned] = useState<{ id: string; url: string } | null>(null)
@@ -48,6 +63,10 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
     ?? scores[0] ?? null
   const scoreId = score?.id ?? null
   const pdfPath = score?.pdf_path ?? null
+  const notes = current?.comment ?? null
+  const hasNotes = Boolean(piece) && Boolean(notes)
+  const showSideNotes = notesMode === 'side' && hasNotes
+  const showFooterNotes = notesMode === 'footer' && hasNotes
   const scoreRef = useRef<PieceScore | null>(score)
   useEffect(() => { scoreRef.current = score }, [score])
   const pdfUrlRef = useRef(pdfUrl)
@@ -118,27 +137,40 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
             </select>
           </label>
         )}
+        <label className="player-jump player-notes">Notes
+          <select aria-label="Notes position" value={notesMode} onChange={(event) => changeNotesMode(event.target.value as NotesMode)}>
+            {NOTES_MODES.map((mode) => <option key={mode.value} value={mode.value}>{mode.label}</option>)}
+          </select>
+        </label>
       </header>
-      <div className="player-body">
-        {error ? (
-          <p className="player-message" role="alert">{error}</p>
-        ) : piece && !score ? (
-          <div className="player-cue">
-            <span className="setlist-marker" aria-hidden="true">{PauseIcon}</span>
-            <h3>{current.title}</h3>
-            <p>No score attached to this tune. Attach a PDF in the library to see it on stage.</p>
-          </div>
-        ) : piece && score ? (
-          url ? <PdfViewer key={url} url={url} onLoad={(pages) => onPages?.(piece, score, pages)} />
-            : <p className="player-message" role="status">Opening score…</p>
-        ) : (
-          <div className="player-cue">
-            <span className="setlist-marker" aria-hidden="true">{PauseIcon}</span>
-            <h3>{current.title}</h3>
-            {current.comment
-              ? <Markdown className="player-note" text={current.comment} />
-              : <p>No notes for this slot.</p>}
-          </div>
+      <div className={`player-body${showSideNotes ? ' side' : ''}`}>
+        <div className="player-main">
+          {error ? (
+            <p className="player-message" role="alert">{error}</p>
+          ) : piece && !score ? (
+            <div className="player-cue">
+              <span className="setlist-marker" aria-hidden="true">{PauseIcon}</span>
+              <h3>{current.title}</h3>
+              <p>No score attached to this tune. Attach a PDF in the library to see it on stage.</p>
+            </div>
+          ) : piece && score ? (
+            url ? <PdfViewer key={url} url={url} onLoad={(pages) => onPages?.(piece, score, pages)} />
+              : <p className="player-message" role="status">Opening score…</p>
+          ) : (
+            <div className="player-cue">
+              <span className="setlist-marker" aria-hidden="true">{PauseIcon}</span>
+              <h3>{current.title}</h3>
+              {current.comment
+                ? <Markdown className="player-note" text={current.comment} />
+                : <p>No notes for this slot.</p>}
+            </div>
+          )}
+        </div>
+        {showSideNotes && notes && (
+          <aside className="player-side" aria-label="Tune notes">
+            <span className="player-side-title">Notes</span>
+            <Markdown className="player-note" text={notes} />
+          </aside>
         )}
       </div>
       <footer className="player-foot">
@@ -146,7 +178,7 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
         <div className="player-current">
           <strong>{current.title}</strong>
           {current.composers && <span>{current.composers}{current.subtitle ? ` · ${current.subtitle}` : ''}</span>}
-          {current.comment && <Markdown className="player-comment" text={current.comment} />}
+          {showFooterNotes && notes && <Markdown className="player-comment" text={notes} />}
         </div>
         <button type="button" className="btn primary player-step" aria-label="Next tune" title="Next tune (→)" disabled={index === last} onClick={() => go(index + 1)}>Next {ChevronRightIcon}</button>
       </footer>

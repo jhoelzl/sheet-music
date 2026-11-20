@@ -144,7 +144,7 @@ describe('setlists page', () => {
     })
   })
 
-  afterEach(() => { cleanup(); vi.clearAllMocks() })
+  afterEach(() => { cleanup(); vi.clearAllMocks(); localStorage.clear() })
 
   it('creates a named setlist and adds a tune to it', async () => {
     const user = userEvent.setup()
@@ -464,6 +464,31 @@ describe('setlists page', () => {
     await user.click(screen.getByRole('button', { name: 'Play' }))
     const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
     expect(within(player).getByText('Count in').tagName).toBe('STRONG')
+  })
+
+  it('moves tune notes to a side panel or hides them', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Solo on the **bridge**' }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await user.click(screen.getByRole('button', { name: 'Play' }))
+    const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
+    const footerNote = () => player.querySelector('.player-comment')
+
+    // Default: notes in the footer.
+    expect(footerNote()).toBeTruthy()
+    expect(within(player).queryByRole('complementary', { name: 'Tune notes' })).toBeNull()
+
+    await user.selectOptions(within(player).getByRole('combobox', { name: 'Notes position' }), 'side')
+    const side = await within(player).findByRole('complementary', { name: 'Tune notes' })
+    expect(within(side).getByText('bridge').tagName).toBe('STRONG')
+    await waitFor(() => expect(footerNote()).toBeNull())
+    expect(localStorage.getItem('sm:player-notes')).toBe('side')
+
+    await user.selectOptions(within(player).getByRole('combobox', { name: 'Notes position' }), 'off')
+    await waitFor(() => expect(within(player).queryByRole('complementary', { name: 'Tune notes' })).toBeNull())
+    expect(footerNote()).toBeNull()
   })
 
   it('lets the player choose between a tune’s scores', async () => {
