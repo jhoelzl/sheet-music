@@ -180,6 +180,24 @@ describe('setlists page', () => {
     expect(updated).toEqual(['Break', 'Encore', 'Moanin’'])
   })
 
+  it('numbers tunes only and marks placeholders distinctly', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0 }]
+    mocks.members = [
+      { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null },
+      { id: 'e2', setlist_id: 's1', piece_id: null, position: 1, placeholder: 'Break', comment: null },
+      { id: 'e3', setlist_id: 's1', piece_id: 'p2', position: 2, placeholder: null, comment: null },
+    ]
+    const twoPieces = { ...lib, pieces: [piece, { ...piece, id: 'p2', title: 'Waltz' }] }
+    render(<SetlistsPage lib={twoPieces} />)
+    const list = await screen.findByRole('list', { name: 'Tune order' })
+    await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(3))
+    const items = within(list).getAllByRole('listitem')
+    expect(items[0].querySelector('.setlist-number')?.textContent).toBe('1')
+    expect(items[1].querySelector('.setlist-number')).toBeNull()
+    expect(items[1].querySelector('.setlist-marker')).toBeTruthy()
+    expect(items[2].querySelector('.setlist-number')?.textContent).toBe('2')
+  })
+
   it('reports save errors and keeps the previous comment', async () => {
     mocks.setlists = [{ id: 's1', name: 'Gig', position: 0 }]
     mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Sax solo' }]
