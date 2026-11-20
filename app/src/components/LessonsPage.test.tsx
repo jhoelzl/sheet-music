@@ -29,7 +29,7 @@ vi.mock('../supabase', () => ({
         const rows = mocks.tables[table]
         const matches = (row: Row) => Object.entries(filters).every(([key, value]) => row[key] === value)
         if (action === 'insert') {
-          const row = { ...values, ...(!values.id && !table.startsWith('sm_lesson_') ? { id: `id-${rows.length + 1}` } : {}) }
+          const row = { ...values, ...(!values.id && table !== 'sm_lesson_pieces' && table !== 'sm_lesson_materials' ? { id: `id-${rows.length + 1}` } : {}) }
           rows.push(row)
           return { data: row, error: null }
         }
@@ -65,6 +65,7 @@ describe('lessons', () => {
   beforeEach(() => {
     mocks.tables = {
       sm_lessons: [{ id: 'l1', lesson_date: '2026-11-18', title: 'Guitar', notes: '' }],
+      sm_lesson_groups: [{ id: 'g1', teacher_name: 'Alex', instrument: 'guitar' }],
       sm_teaching_materials: [], sm_lesson_pieces: [], sm_lesson_materials: [],
     }
     mocks.fail = ''
@@ -73,6 +74,86 @@ describe('lessons', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
   afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks() })
+
+  it('creates groups and assigns existing and new lessons, with filtered activity', async () => {
+    mocks.tables.sm_lessons[0].lesson_date = todayISO()
+    const user = userEvent.setup()
+    const rendered = render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    expect((screen.getByLabelText('Lesson group') as HTMLSelectElement).value).toBe('')
+    await user.selectOptions(screen.getByLabelText('Lesson group'), 'g1')
+    await user.click(screen.getByRole('button', { name: 'Save lesson' }))
+    await waitFor(() => expect(mocks.tables.sm_lessons[0].group_id).toBe('g1'))
+    await user.type(screen.getByLabelText('Teacher name'), 'Blair')
+    await user.selectOptions(screen.getByLabelText('Instrument'), 'piano')
+    await user.click(screen.getByRole('button', { name: 'Add group' }))
+    await waitFor(() => expect(mocks.tables.sm_lesson_groups).toHaveLength(2))
+    await user.type(screen.getByLabelText('Lesson title'), 'Piano lesson')
+    await user.click(screen.getByRole('button', { name: 'Add lesson' }))
+    await waitFor(() => expect(mocks.tables.sm_lessons[1].group_id).toBe('id-2'))
+    await user.selectOptions(screen.getByLabelText('Show lessons for'), 'g1')
+    expect(screen.getByText('1 lesson today')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Guitar/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Piano lesson/ })).toBeNull()
+    rendered.unmount()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    await user.selectOptions(screen.getByLabelText('Show lessons for'), 'id-2')
+    expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Piano lesson')
+    expect((screen.getByLabelText('Lesson group') as HTMLSelectElement).value).toBe('id-2')
+  })
+
+  it('shows errors and preserves group inputs when a group cannot be saved', async () => {
+    mocks.fail = 'sm_lesson_groups:insert'
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    await user.type(screen.getByLabelText('Teacher name'), 'Blair')
+    await user.click(screen.getByRole('button', { name: 'Add group' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Database unavailable')
+    expect((screen.getByLabelText('Teacher name') as HTMLInputElement).value).toBe('Blair')
+    expect(mocks.tables.sm_lesson_groups).toHaveLength(1)
+  })
+
+  it('moves a lesson between groups without losing its links', async () => {
+    mocks.tables.sm_lessons[0].group_id = 'g1'
+    mocks.tables.sm_lesson_groups.push({ id: 'g2', teacher_name: 'Blair', instrument: 'piano' })
+    mocks.tables.sm_lesson_pieces = [{ lesson_id: 'l1', piece_id: 'p1' }]
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    await user.selectOptions(screen.getByLabelText('Show lessons for'), 'g1')
+    await user.selectOptions(screen.getByLabelText('Lesson group'), 'g2')
+    await user.click(screen.getByRole('button', { name: 'Save lesson' }))
+    await waitFor(() => expect(mocks.tables.sm_lessons[0].group_id).toBe('g2'))
+    expect((screen.getByLabelText('Show lessons for') as HTMLSelectElement).value).toBe('all')
+    expect(screen.getByRole('button', { name: 'Remove Autumn Leaves from Guitar' })).toBeTruthy()
+    expect(mocks.tables.sm_lesson_pieces).toEqual([{ lesson_id: 'l1', piece_id: 'p1' }])
+  })
+
+  it('protects unsaved lessons when switching groups and keeps occupied groups', async () => {
+    mocks.tables.sm_lessons[0].group_id = 'g1'
+    mocks.tables.sm_lesson_groups.push({ id: 'g2', teacher_name: 'Blair', instrument: 'piano' })
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.type(await screen.findByLabelText('Notes (Markdown)'), 'Unsaved')
+    vi.mocked(window.confirm).mockReturnValue(false)
+    await user.selectOptions(screen.getByLabelText('Show lessons for'), 'g2')
+    expect((screen.getByLabelText('Show lessons for') as HTMLSelectElement).value).toBe('all')
+    expect((screen.getByLabelText('Notes (Markdown)') as HTMLTextAreaElement).value).toBe('Unsaved')
+    vi.mocked(window.confirm).mockReturnValue(true)
+    await user.selectOptions(screen.getByLabelText('Show lessons for'), 'g1')
+    await user.click(screen.getByRole('button', { name: 'Delete group' }))
+    expect(screen.getByRole('alert').textContent).toContain('Move or delete')
+    expect(mocks.tables.sm_lesson_groups).toHaveLength(2)
+    await user.clear(screen.getByLabelText('Edit teacher name'))
+    await user.type(screen.getByLabelText('Edit teacher name'), 'Alice')
+    await user.click(screen.getByRole('button', { name: 'Save group' }))
+    await waitFor(() => expect(mocks.tables.sm_lesson_groups[0].teacher_name).toBe('Alice'))
+    await user.selectOptions(screen.getByLabelText('Show lessons for'), 'g2')
+    await user.click(screen.getByRole('button', { name: 'Delete group' }))
+    await waitFor(() => expect(mocks.tables.sm_lesson_groups).toHaveLength(1))
+  })
 
   it('saves markdown notes and links a tune and reusable material across reloads', async () => {
     const user = userEvent.setup()

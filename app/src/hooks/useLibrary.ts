@@ -486,7 +486,7 @@ export function useLibrary() {
     setBackingUp(true)
     notify('Preparing your backup…', 'info')
     try {
-      const [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult] = await Promise.all([
+      const [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonGroupsResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult] = await Promise.all([
         supabase.from('sm_composers').select('*'),
         supabase.from('sm_pieces').select('*'),
         supabase.from('sm_piece_composers').select('*'),
@@ -494,12 +494,13 @@ export function useLibrary() {
         supabase.from('sm_setlists').select('*'),
         supabase.from('sm_setlist_pieces').select('*'),
         supabase.from('sm_practice_log').select('*'),
+        supabase.from('sm_lesson_groups').select('*'),
         supabase.from('sm_lessons').select('*'),
         supabase.from('sm_teaching_materials').select('*'),
         supabase.from('sm_lesson_pieces').select('*'),
         supabase.from('sm_lesson_materials').select('*'),
       ])
-      const results = [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult]
+      const results = [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonGroupsResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult]
       const failed = results.find((result) => result.error)
       if (failed) throw failed.error
       const scores = (scoresResult.data ?? []) as PieceScore[]
@@ -513,6 +514,7 @@ export function useLibrary() {
         setlists: setlistsResult.data ?? [],
         setlist_pieces: entriesResult.data ?? [],
         practice_log: logResult.data ?? [],
+        lesson_groups: lessonGroupsResult.data ?? [],
         lessons: lessonsResult.data ?? [],
         teaching_materials: materials,
         lesson_pieces: lessonPiecesResult.data ?? [],

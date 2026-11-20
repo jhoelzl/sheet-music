@@ -5,7 +5,7 @@ import type { Library } from '../hooks/useLibrary'
 import { todayISO } from '../lib/dates'
 import { Markdown } from '../lib/markdown'
 import { supabase } from '../supabase'
-import type { Lesson, TeachingMaterial } from '../supabase'
+import type { Instrument, Lesson, LessonGroup, TeachingMaterial } from '../supabase'
 import { SetlistTunePicker } from './SetlistTunePicker'
 import { SetlistTuneDetails } from './SetlistTuneDetails'
 import { SearchPicker } from './SearchPicker'
@@ -18,6 +18,12 @@ type LibraryData = Pick<Library, 'pieces' | 'hiddenIds' | 'composerNamesOf' | 'o
 
 export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyChange: (dirty: boolean) => void }) {
   const [lessons, setLessons] = useState<Lesson[]>([])
+  const [groups, setGroups] = useState<LessonGroup[]>([])
+  const [groupFilter, setGroupFilter] = useState('all')
+  const [newLessonGroup, setNewLessonGroup] = useState('')
+  const [teacherName, setTeacherName] = useState('')
+  const [instrument, setInstrument] = useState<Instrument>('guitar')
+  const [groupDraft, setGroupDraft] = useState<LessonGroup | null>(null)
   const [materials, setMaterials] = useState<TeachingMaterial[]>([])
   const [lessonPieces, setLessonPieces] = useState<LessonPiece[]>([])
   const [lessonMaterials, setLessonMaterials] = useState<LessonMaterial[]>([])
@@ -38,25 +44,31 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
   const selected = lessons.find((lesson) => lesson.id === selectedId)
-  const dirty = Boolean(draft && selected && (draft.title !== selected.title || draft.lesson_date !== selected.lesson_date || draft.notes !== selected.notes))
+  const dirty = Boolean(draft && selected && (draft.title !== selected.title || draft.lesson_date !== selected.lesson_date || draft.notes !== selected.notes || draft.group_id !== selected.group_id))
+  const savedGroup = groups.find((group) => group.id === groupDraft?.id)
+  const groupDirty = Boolean(groupDraft && savedGroup && (groupDraft.teacher_name !== savedGroup.teacher_name || groupDraft.instrument !== savedGroup.instrument))
 
-  useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => { onDirtyChange(dirty || groupDirty) }, [dirty, groupDirty, onDirtyChange])
 
   useEffect(() => {
     let active = true
     void (async () => {
       try {
-        const [l, m, p, lm] = await Promise.all([
-          supabase.from('sm_lessons').select('id, lesson_date, title, notes').order('lesson_date', { ascending: false }),
+        const [l, m, p, lm, g] = await Promise.all([
+          supabase.from('sm_lessons').select('id, lesson_date, title, notes, group_id').order('lesson_date', { ascending: false }),
           supabase.from('sm_teaching_materials').select('id, title, pdf_path, tags').order('title'),
           supabase.from('sm_lesson_pieces').select('lesson_id, piece_id'),
           supabase.from('sm_lesson_materials').select('lesson_id, material_id'),
+          supabase.from('sm_lesson_groups').select('id, teacher_name, instrument').order('teacher_name'),
         ])
-        const failure = [l, m, p, lm].find((result) => result.error)
+        const failure = [l, m, p, lm, g].find((result) => result.error)
         if (failure?.error) throw failure.error
         if (!active) return
-        const loaded = (l.data ?? []) as Lesson[]
+        const loaded = ((l.data ?? []) as Lesson[]).map((lesson) => ({ ...lesson, group_id: lesson.group_id ?? null }))
+        const loadedGroups = (g.data ?? []) as LessonGroup[]
         setLessons(loaded)
+        setGroups(loadedGroups)
+        if (loadedGroups.length === 1) setNewLessonGroup(loadedGroups[0].id)
         setMaterials((m.data ?? []) as TeachingMaterial[])
         setLessonPieces((p.data ?? []) as LessonPiece[])
         setLessonMaterials((lm.data ?? []) as LessonMaterial[])
@@ -92,18 +104,81 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
     setOpenPieceId(null)
   }
 
+  const chooseGroup = (value: string) => {
+    if (value === groupFilter) return
+    const nextLesson = lessons.find((lesson) => value === 'all' || (value === 'unassigned' ? !lesson.group_id : lesson.group_id === value))
+    if (dirty && nextLesson?.id !== selectedId && !window.confirm('Discard unsaved lesson changes?')) return
+    if (groupDirty && !window.confirm('Discard unsaved group changes?')) return
+    setGroupFilter(value)
+    if (value !== 'all' && value !== 'unassigned') setNewLessonGroup(value)
+    setGroupDraft(groups.find((group) => group.id === value) ?? null)
+    if (nextLesson?.id !== selectedId) {
+      setSelectedId(nextLesson?.id ?? null)
+      setDraft(nextLesson ?? null)
+      setOpenPieceId(null)
+    }
+  }
+
+  const createGroup = (event: FormEvent) => {
+    event.preventDefault()
+    if (!teacherName.trim()) return
+    void perform(async () => {
+      const { data, error: failure } = await supabase.from('sm_lesson_groups')
+        .insert({ teacher_name: teacherName.trim(), instrument }).select('id, teacher_name, instrument').single()
+      if (failure) throw failure
+      if (!data) throw new Error('Could not create lesson group.')
+      const group = data as LessonGroup
+      setGroups((current) => [...current, group])
+      setNewLessonGroup(group.id)
+      setTeacherName('')
+    })
+  }
+
+  const saveGroup = (event: FormEvent) => {
+    event.preventDefault()
+    if (!groupDraft?.teacher_name.trim()) return
+    const group = { ...groupDraft, teacher_name: groupDraft.teacher_name.trim() }
+    void perform(async () => {
+      const { error: failure } = await supabase.from('sm_lesson_groups')
+        .update({ teacher_name: group.teacher_name, instrument: group.instrument }).eq('id', group.id)
+      if (failure) throw failure
+      setGroups((current) => current.map((item) => item.id === group.id ? group : item))
+      setGroupDraft(group)
+    })
+  }
+
+  const deleteGroup = () => {
+    if (!groupDraft) return
+    if (lessons.some((lesson) => lesson.group_id === groupDraft.id)) {
+      setError('Move or delete this group’s lessons before deleting the group.')
+      return
+    }
+    if (!window.confirm(`Delete the group for ${groupDraft.teacher_name}?`)) return
+    void perform(async () => {
+      const { error: failure } = await supabase.from('sm_lesson_groups').delete().eq('id', groupDraft.id)
+      if (failure) throw failure
+      setGroups((current) => current.filter((group) => group.id !== groupDraft.id))
+      setNewLessonGroup((current) => current === groupDraft.id ? '' : current)
+      setGroupFilter('all')
+      setGroupDraft(null)
+    })
+  }
+
   const createLesson = (event: FormEvent) => {
     event.preventDefault()
+    if (!newLessonGroup) return
     if (dirty && !window.confirm('Discard unsaved lesson changes?')) return
+    if (groupFilter !== 'all' && groupFilter !== newLessonGroup && groupDirty && !window.confirm('Discard unsaved group changes?')) return
     void perform(async () => {
       const { data, error: failure } = await supabase.from('sm_lessons')
-        .insert({ title: newTitle.trim(), lesson_date: newDate, notes: '' }).select('id, lesson_date, title, notes').single()
+        .insert({ title: newTitle.trim(), lesson_date: newDate, notes: '', group_id: newLessonGroup }).select('id, lesson_date, title, notes, group_id').single()
       if (failure) throw failure
       if (!data) throw new Error('Could not create lesson.')
       const lesson = data as Lesson
       setLessons((current) => [...current, lesson])
       setSelectedId(lesson.id)
       setDraft(lesson)
+      if (groupFilter !== 'all' && groupFilter !== lesson.group_id) { setGroupFilter('all'); setGroupDraft(null) }
       setOpenPieceId(null)
       setNewTitle('')
     })
@@ -114,13 +189,15 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
     if (!draft) return
     const saved = { ...draft, title: draft.title.trim() }
     if (!saved.title || !saved.lesson_date) { setError('A title and date are required.'); return }
+    if (groupFilter !== 'all' && groupFilter !== (saved.group_id ?? 'unassigned') && groupDirty && !window.confirm('Discard unsaved group changes?')) return
     void perform(async () => {
       const { error: failure } = await supabase.from('sm_lessons').update({
-        title: saved.title, lesson_date: saved.lesson_date, notes: saved.notes,
+        title: saved.title, lesson_date: saved.lesson_date, notes: saved.notes, group_id: saved.group_id,
       }).eq('id', saved.id)
       if (failure) throw failure
       setLessons((current) => current.map((lesson) => lesson.id === saved.id ? saved : lesson))
       setDraft(saved)
+      if (groupFilter !== 'all' && groupFilter !== (saved.group_id ?? 'unassigned')) { setGroupFilter('all'); setGroupDraft(null) }
     })
   }
 
@@ -130,11 +207,12 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       const { error: failure } = await supabase.from('sm_lessons').delete().eq('id', selected.id)
       if (failure) throw failure
       const remaining = lessons.filter((lesson) => lesson.id !== selected.id)
+      const next = remaining.find((lesson) => groupFilter === 'all' || (groupFilter === 'unassigned' ? !lesson.group_id : lesson.group_id === groupFilter))
       setLessons(remaining)
       setLessonPieces((current) => current.filter((link) => link.lesson_id !== selected.id))
       setLessonMaterials((current) => current.filter((link) => link.lesson_id !== selected.id))
-      setSelectedId(remaining[0]?.id ?? null)
-      setDraft(remaining[0] ?? null)
+      setSelectedId(next?.id ?? null)
+      setDraft(next ?? null)
       setOpenPieceId(null)
     })
   }
@@ -217,9 +295,10 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const selectedPieceIds = lessonPieces.filter((link) => link.lesson_id === selectedId).map((link) => link.piece_id)
   const selectedMaterialIds = lessonMaterials.filter((link) => link.lesson_id === selectedId).map((link) => link.material_id)
   const openPiece = selectedPieceIds.includes(openPieceId ?? '') ? lib.pieces.find((piece) => piece.id === openPieceId) : undefined
-  const sortedLessons = [...lessons].sort((a, b) => b.lesson_date.localeCompare(a.lesson_date) || a.title.localeCompare(b.title))
+  const visibleLessons = lessons.filter((lesson) => groupFilter === 'all' || (groupFilter === 'unassigned' ? !lesson.group_id : lesson.group_id === groupFilter))
+  const sortedLessons = [...visibleLessons].sort((a, b) => b.lesson_date.localeCompare(a.lesson_date) || a.title.localeCompare(b.title))
   const today = todayISO()
-  const pastLessons = lessons.filter((lesson) => lesson.lesson_date <= today)
+  const pastLessons = visibleLessons.filter((lesson) => lesson.lesson_date <= today)
   const todayCount = pastLessons.filter((lesson) => lesson.lesson_date === today).length
   const materialTags = [...new Set(materials.flatMap((material) => material.tags))].sort((a, b) => a.localeCompare(b))
   const filterTags = materialTagFilter && !materialTags.includes(materialTagFilter) ? [...materialTags, materialTagFilter] : materialTags
@@ -230,6 +309,26 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       {error && <p className="lessons-error" role="alert">{error}</p>}
       {loading ? <p role="status">Loading lessons…</p> : loadFailed ? <p>Reload the app to try again.</p> : (
         <>
+          <section className="lesson-groups" aria-label="Lesson groups">
+            <h3>Lesson groups</h3>
+            <p className="muted">Organize lessons by teacher and instrument. Existing lessons remain unassigned until you assign them.</p>
+            <form className="panel lesson-group-form" onSubmit={createGroup}>
+              <label className="grow">Teacher name<input required value={teacherName} disabled={busy} onChange={(event) => setTeacherName(event.target.value)} /></label>
+              <label>Instrument<select value={instrument} disabled={busy} onChange={(event) => setInstrument(event.target.value as Instrument)}><option value="guitar">Guitar</option><option value="piano">Piano</option></select></label>
+              <button type="submit" className="btn" disabled={busy || !teacherName.trim()}>Add group</button>
+            </form>
+            <label>Show lessons for<select value={groupFilter} disabled={busy} onChange={(event) => chooseGroup(event.target.value)}>
+              <option value="all">All groups</option><option value="unassigned">Unassigned lessons</option>
+              {groups.map((group) => <option key={group.id} value={group.id}>{group.teacher_name} · {group.instrument}</option>)}
+            </select></label>
+            {groupDraft && <form className="panel lesson-group-form" onSubmit={saveGroup}>
+              <label className="grow">Edit teacher name<input required value={groupDraft.teacher_name} disabled={busy} onChange={(event) => setGroupDraft({ ...groupDraft, teacher_name: event.target.value })} /></label>
+              <label>Edit instrument<select value={groupDraft.instrument} disabled={busy} onChange={(event) => setGroupDraft({ ...groupDraft, instrument: event.target.value as Instrument })}><option value="guitar">Guitar</option><option value="piano">Piano</option></select></label>
+              <button className="btn" type="submit" disabled={busy || !groupDirty || !groupDraft.teacher_name.trim()}>Save group</button>
+              {groupDirty && <span className="muted">Unsaved group changes</span>}
+              <button className="link danger" type="button" disabled={busy} onClick={deleteGroup}>Delete group</button>
+            </form>}
+          </section>
           <section className="practice-summary" aria-label="Lesson activity">
             <button type="button" className="practice-summary-toggle" aria-expanded={showActivity} aria-controls="lesson-activity" onClick={() => setShowActivity(!showActivity)}>
               <span className="practice-summary-icon" aria-hidden="true">✦</span>
@@ -244,19 +343,27 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
           <form className="panel lesson-create" onSubmit={createLesson}>
             <label>Date<input type="date" value={newDate} required disabled={busy} onChange={(event) => setNewDate(event.target.value)} /></label>
             <label className="grow">Lesson title<input value={newTitle} required disabled={busy} placeholder="e.g. Guitar lesson" onChange={(event) => setNewTitle(event.target.value)} /></label>
-            <button type="submit" className="btn primary" disabled={busy || !newTitle.trim()}>Add lesson</button>
+            <label>Group for new lesson<select required value={newLessonGroup} disabled={busy} onChange={(event) => setNewLessonGroup(event.target.value)}><option value="">Choose a group</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.teacher_name} · {group.instrument}</option>)}</select></label>
+            <button type="submit" className="btn primary" disabled={busy || !newTitle.trim() || !newLessonGroup}>Add lesson</button>
           </form>
           <div className="lessons-layout">
             <section aria-label="Your lessons" className="lessons-list">
               <h3>Your lessons</h3>
-              {!lessons.length && <p className="muted">No lessons yet.</p>}
-              {sortedLessons.map((lesson) => <button key={lesson.id} type="button" className={`lesson-choice${selectedId === lesson.id ? ' on' : ''}`}
-                disabled={busy} aria-pressed={selectedId === lesson.id} onClick={() => choose(lesson)}><strong>{lesson.title}</strong><span>{lesson.lesson_date}</span></button>)}
+              {!visibleLessons.length && <p className="muted">{lessons.length ? 'No lessons in this group.' : 'No lessons yet.'}</p>}
+              {[...groups.map((group) => ({ id: group.id, name: `${group.teacher_name} · ${group.instrument}` })), { id: null, name: 'Unassigned' }].map((group) => {
+                const items = sortedLessons.filter((lesson) => lesson.group_id === group.id)
+                return items.length > 0 && <div key={group.id ?? 'unassigned'} className="lesson-list-group">
+                  <h4>{group.name}</h4>
+                  {items.map((lesson) => <button key={lesson.id} type="button" className={`lesson-choice${selectedId === lesson.id ? ' on' : ''}`}
+                    disabled={busy} aria-pressed={selectedId === lesson.id} onClick={() => choose(lesson)}><strong>{lesson.title}</strong><span>{lesson.lesson_date}</span></button>)}
+                </div>
+              })}
             </section>
             {selected && draft && <section className="lesson-detail" aria-label="Lesson details">
               <form className="lesson-editor" onSubmit={saveLesson}>
                 <label>Title<input required disabled={busy} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
                 <label>Lesson date<input type="date" required disabled={busy} value={draft.lesson_date} onChange={(event) => setDraft({ ...draft, lesson_date: event.target.value })} /></label>
+                <label>Lesson group<select value={draft.group_id ?? ''} disabled={busy} onChange={(event) => setDraft({ ...draft, group_id: event.target.value || null })}><option value="">Unassigned</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.teacher_name} · {group.instrument}</option>)}</select></label>
                 <label>Notes (Markdown)<textarea rows={10} disabled={busy} value={draft.notes} placeholder="What did you work on?" onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>
                 <div className="lesson-actions"><button type="submit" className="btn primary" disabled={busy || !dirty || !draft.title.trim()}>Save lesson</button>
                   {dirty && <span className="muted">Unsaved changes</span>}

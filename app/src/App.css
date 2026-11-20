@@ -470,9 +470,14 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .page-nav-icon svg { width: 22px; height: 22px; }
 .lessons-page { max-width: 960px; margin: 0 auto; }
 .lessons-error { color: var(--danger); margin-bottom: 12px; }
+.lesson-groups { padding: 16px; margin-bottom: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.lesson-groups h3 { margin-bottom: 8px; font-size: 15px; }
+.lesson-groups .lesson-group-form { margin: 12px 0; padding: 0; border: 0; flex-wrap: wrap; }
+.lesson-create { flex-wrap: wrap; }
 .lessons-layout { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 20px; }
 .lessons-list, .lesson-detail, .teaching-materials { padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .lessons-list h3, .lesson-section h3, .lesson-preview h3, .teaching-materials h3 { margin-bottom: 10px; font-size: 15px; }
+.lesson-list-group h4 { margin: 12px 0 4px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .lesson-choice { display: flex; width: 100%; flex-direction: column; gap: 3px; padding: 10px; text-align: left; color: var(--text); background: transparent; border: 0; border-radius: 8px; }
 .lesson-choice span { color: var(--muted); font-size: 12px; }
 .lesson-choice.on { background: var(--accent-soft); }
@@ -485,6 +490,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .material-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
 @media (max-width: 640px) {
   .lessons-layout { grid-template-columns: 1fr; }
+  .lesson-create > label { flex: 1 1 140px; min-width: 0; }
   .page-nav button { min-width: 0; padding: 6px 3px; font-size: 11px; }
   .ios-native .page-nav button { font-size: 10px; }
 }

@@ -13,6 +13,7 @@ export type BackupPayload = {
   setlists: unknown[]
   setlist_pieces: unknown[]
   practice_log: unknown[]
+  lesson_groups: unknown[]
   lessons: unknown[]
   teaching_materials: unknown[]
   lesson_pieces: unknown[]
