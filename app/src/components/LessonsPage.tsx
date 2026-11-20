@@ -7,6 +7,8 @@ import { Markdown } from '../lib/markdown'
 import { supabase } from '../supabase'
 import type { Lesson, TeachingMaterial } from '../supabase'
 import { SetlistTunePicker } from './SetlistTunePicker'
+import { SetlistTuneDetails } from './SetlistTuneDetails'
+import { SearchPicker } from './SearchPicker'
 import { ActivityCalendar } from './ActivityCalendar'
 
 type LessonPiece = { lesson_id: string; piece_id: string }
@@ -20,6 +22,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [lessonMaterials, setLessonMaterials] = useState<LessonMaterial[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Lesson | null>(null)
+  const [openPieceId, setOpenPieceId] = useState<string | null>(null)
   const [newDate, setNewDate] = useState(todayISO)
   const [newTitle, setNewTitle] = useState('')
   const [materialTitle, setMaterialTitle] = useState('')
@@ -83,6 +86,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
     if (dirty && !window.confirm('Discard unsaved lesson changes?')) return
     setSelectedId(lesson.id)
     setDraft(lesson)
+    setOpenPieceId(null)
   }
 
   const createLesson = (event: FormEvent) => {
@@ -97,6 +101,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       setLessons((current) => [...current, lesson])
       setSelectedId(lesson.id)
       setDraft(lesson)
+      setOpenPieceId(null)
       setNewTitle('')
     })
   }
@@ -127,6 +132,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       setLessonMaterials((current) => current.filter((link) => link.lesson_id !== selected.id))
       setSelectedId(remaining[0]?.id ?? null)
       setDraft(remaining[0] ?? null)
+      setOpenPieceId(null)
     })
   }
 
@@ -139,12 +145,13 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
         : await supabase.from('sm_lesson_pieces').delete().eq('lesson_id', selected.id).eq('piece_id', pieceId)
       if (result.error) throw result.error
       setLessonPieces((current) => add ? [...current, link] : current.filter((item) => item.lesson_id !== selected.id || item.piece_id !== pieceId))
+      if (!add) setOpenPieceId((current) => current === pieceId ? null : current)
     })
   }
 
   const changeMaterial = (materialId: string, add: boolean) => {
-    if (!selected) return
-    void perform(async () => {
+    if (!selected) return Promise.resolve()
+    return perform(async () => {
       const link = { lesson_id: selected.id, material_id: materialId }
       const result = add
         ? await supabase.from('sm_lesson_materials').insert(link)
@@ -196,6 +203,8 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   }
 
   const selectedPieceIds = lessonPieces.filter((link) => link.lesson_id === selectedId).map((link) => link.piece_id)
+  const selectedMaterialIds = lessonMaterials.filter((link) => link.lesson_id === selectedId).map((link) => link.material_id)
+  const openPiece = selectedPieceIds.includes(openPieceId ?? '') ? lib.pieces.find((piece) => piece.id === openPieceId) : undefined
   const sortedLessons = [...lessons].sort((a, b) => b.lesson_date.localeCompare(a.lesson_date) || a.title.localeCompare(b.title))
   const today = todayISO()
   const pastLessons = lessons.filter((lesson) => lesson.lesson_date <= today)
@@ -240,19 +249,26 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               </form>
               {draft.notes && <section className="lesson-preview" aria-label="Notes preview"><h3>Notes preview</h3><Markdown text={draft.notes} /></section>}
               <section className="lesson-section"><h3>Tunes</h3>
-                <SetlistTunePicker pieces={lib.pieces.filter((piece) => !lib.hiddenIds.has(piece.id))} selectedIds={selectedPieceIds}
+                <SetlistTunePicker key={selected.id} pieces={lib.pieces.filter((piece) => !lib.hiddenIds.has(piece.id))} selectedIds={selectedPieceIds}
                   setlistName={selected.title} context="lesson" disabled={busy} composerNamesOf={lib.composerNamesOf}
-                  onAdd={(id) => changePiece(id, true)} onRemove={(id) => changePiece(id, false)} />
-                {selectedPieceIds.map((id) => {
-                  const piece = lib.pieces.find((item) => item.id === id)
-                  return piece && piece.scores?.length ? <button className="link" key={id} type="button" onClick={() => void lib.openPdf(piece)}>Open score: {piece.title}</button> : null
-                })}
+                  onAdd={(id) => changePiece(id, true)} onRemove={(id) => changePiece(id, false)}
+                  openPieceId={openPieceId} onSelectPiece={(piece) => setOpenPieceId((current) => current === piece.id ? null : piece.id)} />
+                {openPiece && <section aria-label={`Details for ${openPiece.title}`}>
+                  <h4>{openPiece.title}</h4>
+                  <SetlistTuneDetails piece={openPiece} composerNamesOf={lib.composerNamesOf} onOpenPdf={(piece) => void lib.openPdf(piece)} />
+                </section>}
               </section>
               <section className="lesson-section"><h3>Materials in this lesson</h3>
                 {!materials.length && <p className="muted">Upload teaching materials below to link them here.</p>}
-                {materials.map((material) => <label className="lesson-material-link" key={material.id}>
-                  <input type="checkbox" disabled={busy} checked={lessonMaterials.some((link) => link.lesson_id === selected.id && link.material_id === material.id)}
-                    onChange={(event) => changeMaterial(material.id, event.target.checked)} />{material.title}</label>)}
+                <SearchPicker key={selected.id} items={materials.map((material) => ({ id: material.id, name: material.title }))}
+                  selectedIds={selectedMaterialIds} label={`Materials for ${selected.title}`} singular="material" plural="materials" disabled={busy}
+                  onChange={(ids) => {
+                    const added = ids.find((id) => !selectedMaterialIds.includes(id))
+                    const removed = selectedMaterialIds.find((id) => !ids.includes(id))
+                    if (added) return changeMaterial(added, true)
+                    if (removed) return changeMaterial(removed, false)
+                  }}
+                  onOpen={(id) => { const material = materials.find((item) => item.id === id); if (material) void lib.openMaterialPdf(material) }} />
               </section>
             </section>}
           </div>

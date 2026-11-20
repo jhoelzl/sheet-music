@@ -225,6 +225,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .piece-composer-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--muted); font-size: 12px; }
 .composer-picker, .composer-picker-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .composer-picker .tag { padding-right: 4px; }
+.picker-item-open { padding: 0 2px; color: inherit; background: transparent; border: 0; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .composer-search { position: relative; }
 .composer-search input { width: 160px; height: 32px; font-size: 12px; }
 .composer-results { position: absolute; z-index: 3; top: calc(100% + 4px); left: 0; width: max(100%, 200px); max-width: min(300px, 80vw); max-height: 240px; overflow-y: auto; padding: 4px; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 4px 16px #0002; }
@@ -478,8 +479,6 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .lesson-editor { display: grid; gap: 12px; }
 .lesson-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .lesson-preview, .lesson-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
-.lesson-material-link { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 14px; color: var(--text); }
-.lesson-material-link input { width: 18px; height: 18px; }
 .teaching-materials { margin-top: 20px; }
 .teaching-materials .panel { margin: 12px 0; padding: 0; border: 0; flex-wrap: wrap; }
 .material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }

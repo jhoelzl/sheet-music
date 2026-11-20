@@ -1,7 +1,5 @@
-import { useRef, useState } from 'react'
-import { usePickerDismiss } from '../hooks/usePickerDismiss'
 import type { Composer } from '../supabase'
-import { CloseIcon } from './icons'
+import { SearchPicker } from './SearchPicker'
 
 export function ComposerPicker({ composers, selectedIds, label, requireOne = false, disabled = false, onChange }: {
   composers: Composer[]
@@ -11,69 +9,6 @@ export function ComposerPicker({ composers, selectedIds, label, requireOne = fal
   disabled?: boolean
   onChange: (ids: string[]) => void | Promise<void>
 }) {
-  const [query, setQuery] = useState('')
-  const [saving, setSaving] = useState(false)
-  const savingRef = useRef(false)
-  const dismiss = usePickerDismiss(Boolean(query.trim()), () => setQuery(''))
-  const search = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-  const matches = query.trim()
-    ? composers.filter((composer) => !selectedIds.includes(composer.id) && search(composer.name).includes(search(query.trim())))
-    : []
-
-  const change = async (ids: string[]) => {
-    if (savingRef.current || disabled) return
-    savingRef.current = true
-    setSaving(true)
-    try {
-      await onChange(ids)
-    } finally {
-      savingRef.current = false
-      setSaving(false)
-    }
-  }
-  const busy = saving || disabled
-  const add = (id: string) => {
-    setQuery('')
-    void change([...new Set([...selectedIds, id])])
-  }
-
-  return (
-    <div className="composer-picker" role="group" aria-label={label} {...dismiss}>
-      <div className="composer-picker-chips">
-        {selectedIds.map((id) => {
-          const name = composers.find((composer) => composer.id === id)?.name ?? 'Unknown composer'
-          const cannotRemove = requireOne && selectedIds.length === 1
-          return (
-            <span className="tag" key={id}>
-              {name}
-              <button type="button" className="tag-remove" aria-label={`Remove composer ${name}`}
-                title={cannotRemove ? 'A piece must have at least one composer' : `Remove ${name}`}
-                disabled={busy || cannotRemove} onClick={() => void change(selectedIds.filter((selected) => selected !== id))}>{CloseIcon}</button>
-            </span>
-          )
-        })}
-      </div>
-      <div className="composer-search">
-        <input type="search" aria-label={`Search ${label.toLowerCase()}`} placeholder="Search composers" value={query} disabled={busy}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setQuery('')
-            if (event.key === 'Enter' && query.trim()) {
-              event.preventDefault()
-              if (matches[0]) add(matches[0].id)
-            }
-          }} />
-        {query.trim() && (
-          <div className="composer-results" aria-live="polite">
-            {matches.slice(0, 8).map((composer) => (
-              <button type="button" key={composer.id} disabled={busy} onPointerDown={(event) => { if (event.pointerType === 'mouse') event.preventDefault() }}
-                onClick={() => add(composer.id)}>{composer.name}</button>
-            ))}
-            {matches.length === 0 && <span>No matching composers</span>}
-            {matches.length > 8 && <span>Keep typing to narrow results</span>}
-          </div>
-        )}
-      </div>
-    </div>
-  )
+  return <SearchPicker items={composers} selectedIds={selectedIds} label={label} singular="composer" plural="composers"
+    requireOne={requireOne} disabled={disabled} onChange={onChange} />
 }
