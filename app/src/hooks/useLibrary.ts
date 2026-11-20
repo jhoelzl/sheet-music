@@ -82,6 +82,8 @@ export function useLibrary() {
   const composerSavingRef = useRef(false)
   const [title, setTitle] = useState('')
   const [file, setFile] = useState<File | null>(null)
+  const [pieceSaving, setPieceSaving] = useState(false)
+  const pieceSavingRef = useRef(false)
   const [panel, setPanel] = useState<Panel>(null)
 
   const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
@@ -156,58 +158,74 @@ export function useLibrary() {
   const addPiece = async (e: FormEvent) => {
     e.preventDefault()
     if (!newComposerIds.length) { notify('Select at least one composer.'); return }
-    const { data: { user } } = await supabase.auth.getUser()
-    let pdf_path: string | null = null
-    let pdf_pages: number | null = null
-    if (file && user) {
-      pdf_pages = await countPdfPages(file)
-      pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
-      const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, file, { contentType: 'application/pdf' })
-      if (up.error) { notify(`Upload failed: ${up.error.message}`); return }
+    if (pieceSavingRef.current) return
+    pieceSavingRef.current = true
+    setPieceSaving(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      let pdf_path: string | null = null
+      let pdf_pages: number | null = null
+      if (file && user) {
+        pdf_pages = await countPdfPages(file)
+        pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
+        const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, file, { contentType: 'application/pdf' })
+        if (up.error) { notify(`Upload failed: ${up.error.message}`); return }
+      }
+      const { data, error } = await supabase.from('sm_pieces').insert({
+        title: title.trim(),
+        subtitle: newSubtitle.trim() || null,
+        musical_key: newMusicalKey.trim() || null,
+        composer_id: newComposerIds[0],
+        pdf_path,
+        ...(pdf_pages ? { pdf_pages } : {}),
+        instruments: newInstruments,
+        ...(newTags.length ? { tags: newTags } : {}),
+      }).select('id').single()
+      if (error || !data) {
+        notify(error?.message ?? 'Could not add piece.')
+        return
+      }
+      const { error: linkError } = await supabase.from('sm_piece_composers').insert(
+        newComposerIds.map((composer_id, position) => ({ piece_id: data.id, composer_id, position })),
+      )
+      await load()
+      // The piece exists now, so always reset the form even if the composer links failed;
+      // otherwise a second submit would create a duplicate.
+      setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewInstruments(['piano']); setNewTags([]); setPanel(null)
+      if (linkError) notify(`Piece saved, but its composer list could not be saved: ${linkError.message}`)
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'Could not add piece.')
+    } finally {
+      pieceSavingRef.current = false
+      setPieceSaving(false)
     }
-    const { data, error } = await supabase.from('sm_pieces').insert({
-      title: title.trim(),
-      subtitle: newSubtitle.trim() || null,
-      musical_key: newMusicalKey.trim() || null,
-      composer_id: newComposerIds[0],
-      pdf_path,
-      ...(pdf_pages ? { pdf_pages } : {}),
-      instruments: newInstruments,
-      ...(newTags.length ? { tags: newTags } : {}),
-    }).select('id').single()
-    if (error || !data) {
-      notify(error?.message ?? 'Could not add piece.')
-      return
-    }
-    const { error: linkError } = await supabase.from('sm_piece_composers').insert(
-      newComposerIds.map((composer_id, position) => ({ piece_id: data.id, composer_id, position })),
-    )
-    await load()
-    if (linkError) {
-      notify(`Piece saved, but its composer list could not be saved: ${linkError.message}`)
-      return
-    }
-    setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewInstruments(['piano']); setNewTags([]); setPanel(null)
   }
 
   const practicedToday = new Set(logs.filter((l) => l.practiced_on === todayISO()).map((l) => l.piece_id))
+  const practicingRef = useRef(new Set<string>())
 
   const togglePracticed = async (p: Piece) => {
-    const today = todayISO()
-    const existing = logs.find((l) => l.piece_id === p.id && l.practiced_on === today)
-    const sync = (dates: string[]) => supabase.from('sm_pieces').update({ last_practiced: dates.sort().pop() ?? null }).eq('id', p.id)
-    const others = logs.filter((l) => l.piece_id === p.id && l.practiced_on !== today).map((l) => l.practiced_on)
-    if (existing) {
-      const ok = await run(supabase.from('sm_practice_log').delete().eq('id', existing.id))
-      if (ok) await sync(others)
-    } else {
-      const ok = await run(supabase.from('sm_practice_log').insert({ piece_id: p.id, practiced_on: today }))
-      if (ok) {
-        await sync([...others, today])
-        notify(`Logged practice: ${p.title}`, 'info')
+    if (practicingRef.current.has(p.id)) return
+    practicingRef.current.add(p.id)
+    try {
+      const today = todayISO()
+      const existing = logs.find((l) => l.piece_id === p.id && l.practiced_on === today)
+      const sync = (dates: string[]) => supabase.from('sm_pieces').update({ last_practiced: dates.sort().pop() ?? null }).eq('id', p.id)
+      const others = logs.filter((l) => l.piece_id === p.id && l.practiced_on !== today).map((l) => l.practiced_on)
+      if (existing) {
+        const ok = await run(supabase.from('sm_practice_log').delete().eq('id', existing.id))
+        if (ok) await sync(others)
+      } else {
+        const ok = await run(supabase.from('sm_practice_log').insert({ piece_id: p.id, practiced_on: today }))
+        if (ok) {
+          await sync([...others, today])
+          notify(`Logged practice: ${p.title}`, 'info')
+        }
       }
+      await load()
+    } finally {
+      practicingRef.current.delete(p.id)
     }
-    await load()
   }
 
   const update = (p: Piece, patch: Partial<Piece>) => {
@@ -438,7 +456,7 @@ export function useLibrary() {
     search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, composerNameOf, composerIdsOf, composerNamesOf,
     // new-item form state
-    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, setFile, newInstruments, setNewInstruments, newTags, setNewTags,
+    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, setFile, newInstruments, setNewInstruments, newTags, setNewTags, pieceSaving,
     // actions
     dismissToast, closePdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, attachPdf, removeComposer, startEditComposer, commitComposerEdit, openPdf,

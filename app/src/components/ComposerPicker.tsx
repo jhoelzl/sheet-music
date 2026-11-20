@@ -2,11 +2,12 @@ import { useRef, useState } from 'react'
 import type { Composer } from '../supabase'
 import { CloseIcon } from './icons'
 
-export function ComposerPicker({ composers, selectedIds, label, requireOne = false, onChange }: {
+export function ComposerPicker({ composers, selectedIds, label, requireOne = false, disabled = false, onChange }: {
   composers: Composer[]
   selectedIds: string[]
   label: string
   requireOne?: boolean
+  disabled?: boolean
   onChange: (ids: string[]) => void | Promise<void>
 }) {
   const [query, setQuery] = useState('')
@@ -18,7 +19,7 @@ export function ComposerPicker({ composers, selectedIds, label, requireOne = fal
     : []
 
   const change = async (ids: string[]) => {
-    if (savingRef.current) return
+    if (savingRef.current || disabled) return
     savingRef.current = true
     setSaving(true)
     try {
@@ -28,9 +29,10 @@ export function ComposerPicker({ composers, selectedIds, label, requireOne = fal
       setSaving(false)
     }
   }
+  const busy = saving || disabled
   const add = (id: string) => {
     setQuery('')
-    void change([...selectedIds, id])
+    void change([...new Set([...selectedIds, id])])
   }
 
   return (
@@ -45,13 +47,13 @@ export function ComposerPicker({ composers, selectedIds, label, requireOne = fal
               {name}
               <button type="button" className="tag-remove" aria-label={`Remove composer ${name}`}
                 title={cannotRemove ? 'A piece must have at least one composer' : `Remove ${name}`}
-                disabled={saving || cannotRemove} onClick={() => void change(selectedIds.filter((selected) => selected !== id))}>{CloseIcon}</button>
+                disabled={busy || cannotRemove} onClick={() => void change(selectedIds.filter((selected) => selected !== id))}>{CloseIcon}</button>
             </span>
           )
         })}
       </div>
       <div className="composer-search">
-        <input type="search" aria-label={`Search ${label.toLowerCase()}`} placeholder="Search composers" value={query} disabled={saving}
+        <input type="search" aria-label={`Search ${label.toLowerCase()}`} placeholder="Search composers" value={query} disabled={busy}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Escape') setQuery('')
@@ -63,7 +65,7 @@ export function ComposerPicker({ composers, selectedIds, label, requireOne = fal
         {query.trim() && (
           <div className="composer-results" aria-live="polite">
             {matches.slice(0, 8).map((composer) => (
-              <button type="button" key={composer.id} onPointerDown={(event) => event.preventDefault()}
+              <button type="button" key={composer.id} disabled={busy} onPointerDown={(event) => event.preventDefault()}
                 onClick={() => add(composer.id)}>{composer.name}</button>
             ))}
             {matches.length === 0 && <span>No matching composers</span>}

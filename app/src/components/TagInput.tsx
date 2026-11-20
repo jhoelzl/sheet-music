@@ -2,10 +2,11 @@ import { useId, useState } from 'react'
 import { MAX_TAGS, MAX_TAG_LENGTH, normalizeTag } from '../lib/tags'
 import { CloseIcon } from './icons'
 
-export function TagInput({ tags, suggestions, label, onChange }: { tags: string[]; suggestions: string[]; label: string; onChange: (tags: string[]) => void }) {
+export function TagInput({ tags, suggestions, label, disabled = false, onChange }: { tags: string[]; suggestions: string[]; label: string; disabled?: boolean; onChange: (tags: string[]) => void }) {
   const [draft, setDraft] = useState('')
   const listId = useId()
   const add = (raw: string) => {
+    if (disabled) return
     const t = normalizeTag(raw)
     setDraft('')
     if (t && !tags.includes(t) && tags.length < MAX_TAGS) onChange([...tags, t])
@@ -15,10 +16,10 @@ export function TagInput({ tags, suggestions, label, onChange }: { tags: string[
       {tags.map((t) => (
         <span className="tag" key={t}>
           #{t}
-          <button type="button" className="tag-remove" aria-label={`Remove tag ${t}`} onClick={() => onChange(tags.filter((x) => x !== t))}>{CloseIcon}</button>
+          <button type="button" className="tag-remove" aria-label={`Remove tag ${t}`} disabled={disabled} onClick={() => onChange(tags.filter((x) => x !== t))}>{CloseIcon}</button>
         </span>
       ))}
-      <input list={listId} aria-label="Add tag" maxLength={MAX_TAG_LENGTH} value={draft}
+      <input list={listId} aria-label="Add tag" maxLength={MAX_TAG_LENGTH} value={draft} disabled={disabled}
         onChange={(e) => {
           const v = e.target.value
           if (v.includes(',')) { v.split(',').forEach((part, i, all) => { if (i < all.length - 1) add(part); else setDraft(part) }) } else setDraft(v)
