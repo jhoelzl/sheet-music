@@ -7,6 +7,7 @@ import { Markdown } from '../lib/markdown'
 import { supabase } from '../supabase'
 import type { Lesson, TeachingMaterial } from '../supabase'
 import { SetlistTunePicker } from './SetlistTunePicker'
+import { ActivityCalendar } from './ActivityCalendar'
 
 type LessonPiece = { lesson_id: string; piece_id: string }
 type LessonMaterial = { lesson_id: string; material_id: string }
@@ -25,6 +26,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [file, setFile] = useState<File | null>(null)
   const [fileKey, setFileKey] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [showActivity, setShowActivity] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -195,12 +197,26 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
 
   const selectedPieceIds = lessonPieces.filter((link) => link.lesson_id === selectedId).map((link) => link.piece_id)
   const sortedLessons = [...lessons].sort((a, b) => b.lesson_date.localeCompare(a.lesson_date) || a.title.localeCompare(b.title))
+  const today = todayISO()
+  const pastLessons = lessons.filter((lesson) => lesson.lesson_date <= today)
+  const todayCount = pastLessons.filter((lesson) => lesson.lesson_date === today).length
   return (
     <div className="lessons-page">
       <div className="library-intro"><div><h2>Lessons</h2><p>Keep lesson notes, tunes and teaching materials together.</p></div></div>
       {error && <p className="lessons-error" role="alert">{error}</p>}
       {loading ? <p role="status">Loading lessons…</p> : loadFailed ? <p>Reload the app to try again.</p> : (
         <>
+          <section className="practice-summary" aria-label="Lesson activity">
+            <button type="button" className="practice-summary-toggle" aria-expanded={showActivity} aria-controls="lesson-activity" onClick={() => setShowActivity(!showActivity)}>
+              <span className="practice-summary-icon" aria-hidden="true">✦</span>
+              <span className="practice-summary-copy"><strong>Your lessons</strong><span>{todayCount} {todayCount === 1 ? 'lesson' : 'lessons'} today</span></span>
+              <span className="practice-summary-action">{showActivity ? 'Hide activity' : 'View activity'} <span aria-hidden="true">{showActivity ? '↑' : '↓'}</span></span>
+            </button>
+            {showActivity && <div id="lesson-activity">
+              <ActivityCalendar kind="lesson" entries={pastLessons.map((lesson) => ({ id: lesson.id, date: lesson.lesson_date, title: lesson.title }))}
+                selectionDisabled={busy} onSelectEntry={(id) => { const lesson = lessons.find((item) => item.id === id); if (lesson) choose(lesson) }} />
+            </div>}
+          </section>
           <form className="panel lesson-create" onSubmit={createLesson}>
             <label>Date<input type="date" value={newDate} required disabled={busy} onChange={(event) => setNewDate(event.target.value)} /></label>
             <label className="grow">Lesson title<input value={newTitle} required disabled={busy} placeholder="e.g. Guitar lesson" onChange={(event) => setNewTitle(event.target.value)} /></label>
