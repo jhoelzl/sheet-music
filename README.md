@@ -13,7 +13,7 @@ See [docs/improvements.md](docs/improvements.md) for the improvement backlog.
    ```
 3. Apply migrations with `supabase db push`. The CLI applies pending files in `supabase/migrations` in order and records them in the remote migration history. For a fresh project, this creates the `sm_composers` and `sm_pieces` tables, row-level security, the private `sheet-music` storage bucket, and database validation for piece links.
 
-   Apply `0018_setlist_planning.sql` before deploying the setlist planning features; it preserves existing setlists and entries.
+   Apply `0018_setlist_planning.sql` before deploying the setlist planning features; it preserves existing setlists and entries. Apply `0019_reorder_setlist_entries.sql` for drag-and-drop reordering of setlist tunes.
 
    If the project already has these migrations applied manually, **do not run `db push` until its migration history is reconciled**. Verify that the remote database reflects every migration, then mark those versions as applied:
    ```sh
