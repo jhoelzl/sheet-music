@@ -3,7 +3,7 @@ import { usePickerDismiss } from '../hooks/usePickerDismiss'
 import { CloseIcon } from './icons'
 
 export function SearchPicker({ items, selectedIds, label, singular, plural, requireOne = false, disabled = false, onChange, onOpen }: {
-  items: { id: string; name: string }[]
+  items: { id: string; name: string; keywords?: string[] }[]
   selectedIds: string[]
   label: string
   singular: string
@@ -19,7 +19,7 @@ export function SearchPicker({ items, selectedIds, label, singular, plural, requ
   const dismiss = usePickerDismiss(Boolean(query.trim()), () => setQuery(''))
   const search = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   const matches = query.trim()
-    ? items.filter((item) => !selectedIds.includes(item.id) && search(item.name).includes(search(query.trim())))
+    ? items.filter((item) => !selectedIds.includes(item.id) && [item.name, ...(item.keywords ?? [])].some((value) => search(value).includes(search(query.trim()))))
     : []
   const change = async (ids: string[]) => {
     if (savingRef.current || disabled) return

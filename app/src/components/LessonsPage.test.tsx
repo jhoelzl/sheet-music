@@ -248,7 +248,7 @@ describe('lessons', () => {
 
   it('reuses materials in multiple lessons and unlinks them independently', async () => {
     mocks.tables.sm_lessons.push({ id: 'l2', lesson_date: '2026-11-11', title: 'Previous', notes: '' })
-    mocks.tables.sm_teaching_materials.push({ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf' })
+    mocks.tables.sm_teaching_materials.push({ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: [] })
     mocks.tables.sm_lesson_materials.push({ lesson_id: 'l1', material_id: 'm1' })
     const user = userEvent.setup()
     render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
@@ -264,8 +264,8 @@ describe('lessons', () => {
 
   it('searches and links multiple materials, opens each, and unlinks only the chosen one', async () => {
     mocks.tables.sm_teaching_materials = [
-      { id: 'm1', title: 'Étude', pdf_path: 'u1/etude.pdf' },
-      { id: 'm2', title: 'Scales', pdf_path: 'u1/scales.pdf' },
+      { id: 'm1', title: 'Étude', pdf_path: 'u1/etude.pdf', tags: [] },
+      { id: 'm2', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: [] },
     ]
     const user = userEvent.setup()
     const rendered = render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
@@ -292,7 +292,7 @@ describe('lessons', () => {
   })
 
   it('shows an error and preserves the linked material when unlinking fails', async () => {
-    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf' }]
+    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: [] }]
     mocks.tables.sm_lesson_materials = [{ lesson_id: 'l1', material_id: 'm1' }]
     mocks.fail = 'sm_lesson_materials:delete'
     const user = userEvent.setup()
@@ -300,6 +300,76 @@ describe('lessons', () => {
     await user.click(await screen.findByRole('button', { name: 'Remove material Scales' }))
     expect((await screen.findByRole('alert')).textContent).toContain('Database unavailable')
     expect(screen.getByRole('button', { name: 'Open material Scales' })).toBeTruthy()
+  })
+
+  it('uploads material tags and keeps them after reloading', async () => {
+    const user = userEvent.setup()
+    const rendered = render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    await user.type(screen.getByLabelText('Material title'), 'Chord concepts')
+    const tags = within(screen.getByRole('group', { name: 'Tags for new material' }))
+    await user.type(tags.getByRole('combobox', { name: 'Add tag' }), '#Jazz{Enter}theory{Enter}')
+    await user.upload(screen.getByLabelText('PDF file'), new File(['pdf'], 'chords.pdf', { type: 'application/pdf' }))
+    await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
+    await waitFor(() => expect(mocks.tables.sm_teaching_materials[0].tags).toEqual(['jazz', 'theory']))
+    expect(await screen.findByRole('group', { name: 'Tags for Chord concepts' })).toBeTruthy()
+    rendered.unmount()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const persisted = await screen.findByRole('group', { name: 'Tags for Chord concepts' })
+    expect(within(persisted).getByRole('button', { name: 'Remove tag jazz' })).toBeTruthy()
+    expect(within(persisted).getByRole('button', { name: 'Remove tag theory' })).toBeTruthy()
+  })
+
+  it('edits tags on existing materials and filters the material library', async () => {
+    mocks.tables.sm_teaching_materials = [
+      { id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: [] },
+      { id: 'm2', title: 'Chords', pdf_path: 'u1/chords.pdf', tags: ['harmony'] },
+      { id: 'm3', title: 'Exercises', pdf_path: 'u1/exercises.pdf', tags: ['technique'] },
+    ]
+    const user = userEvent.setup()
+    const rendered = render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const scales = await screen.findByRole('group', { name: 'Tags for Scales' })
+    await user.type(within(scales).getByRole('combobox', { name: 'Add tag' }), 'Technique{Enter}')
+    await waitFor(() => expect(mocks.tables.sm_teaching_materials[0].tags).toEqual(['technique']))
+    const filter = screen.getByRole('group', { name: 'Filter teaching materials by tag' })
+    await user.click(within(filter).getByRole('button', { name: '#technique' }))
+    expect(screen.getByRole('button', { name: 'Scales' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Exercises' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Chords' })).toBeNull()
+    await user.click(within(screen.getByRole('group', { name: 'Tags for Scales' })).getByRole('button', { name: 'Remove tag technique' }))
+    await waitFor(() => expect(mocks.tables.sm_teaching_materials[0].tags).toEqual([]))
+    expect(screen.queryByRole('button', { name: 'Scales' })).toBeNull()
+    await user.click(within(filter).getByRole('button', { name: 'All tags' }))
+    expect(screen.getByRole('button', { name: 'Chords' })).toBeTruthy()
+    rendered.unmount()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    expect(within(await screen.findByRole('group', { name: 'Tags for Scales' })).queryByRole('button', { name: 'Remove tag technique' })).toBeNull()
+  })
+
+  it('finds materials by tag when linking them to a lesson', async () => {
+    mocks.tables.sm_teaching_materials = [
+      { id: 'm1', title: 'Circle of fifths', pdf_path: 'u1/fifths.pdf', tags: ['harmony'] },
+      { id: 'm2', title: 'Alternate picking', pdf_path: 'u1/picking.pdf', tags: ['technique'] },
+    ]
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const search = await screen.findByRole('searchbox', { name: 'Search materials for guitar' })
+    await user.type(search, 'harmony{Enter}')
+    await screen.findByRole('button', { name: 'Open material Circle of fifths' })
+    expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l1', material_id: 'm1' }])
+    expect(screen.queryByRole('button', { name: 'Open material Alternate picking' })).toBeNull()
+  })
+
+  it('reports failed tag updates and keeps the previously saved tags', async () => {
+    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: ['technique'] }]
+    mocks.fail = 'sm_teaching_materials:update'
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const group = await screen.findByRole('group', { name: 'Tags for Scales' })
+    await user.click(within(group).getByRole('button', { name: 'Remove tag technique' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Database unavailable')
+    expect(within(group).getByRole('button', { name: 'Remove tag technique' })).toBeTruthy()
+    expect(mocks.tables.sm_teaching_materials[0].tags).toEqual(['technique'])
   })
 
   it('removes an uploaded PDF if its database record fails', async () => {
