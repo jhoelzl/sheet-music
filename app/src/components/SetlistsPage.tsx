@@ -514,7 +514,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       {playing && selected && (
         <SetlistPlayer name={selected.name} entries={playerEntries} pdfUrl={lib.pdfUrl}
           onClose={() => setPlaying(false)}
-          onPages={(piece, pages) => void lib.recordPdfPages(piece.id, pages)} />
+          onPages={(_piece, score, pages) => void lib.recordPdfPages(score.id, pages)} />
       )}
     </>
   )

@@ -1,12 +1,11 @@
 import type { Piece } from '../supabase'
 import type { Library } from '../hooks/useLibrary'
 import { practicedText } from '../lib/dates'
-import { INSTRUMENTS, toggleInstrument } from '../lib/instruments'
 import { LINK_TYPES, linkLabel, safeUrl } from '../lib/links'
 import { STATUSES, statusOf, statusPatch } from '../lib/status'
 import { CloseIcon } from './icons'
 import { EditDeleteButtons, PieceTitle, PracticeButton } from './PieceParts'
-import { KeySelect } from './KeySelect'
+import { PieceScores } from './PieceScores'
 import { ComposerPicker } from './ComposerPicker'
 import { Rating } from './Rating'
 import { TagInput } from './TagInput'
@@ -18,16 +17,9 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
       <div className="piece-head">
         <div className="piece-titleline">
           <PieceTitle lib={lib} p={p} />
-          {p.pdf_pages ? <span className="page-count" title="Pages in the PDF">{p.pdf_pages} {p.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
+          {p.pdf_pages ? <span className="page-count" title="Pages in the score">{p.pdf_pages} {p.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
         </div>
         <div className="piece-actions">
-          {!p.pdf_path && (
-            <label className={`attach-btn${lib.uploadingId === p.id ? ' busy' : ''}`}>
-              {lib.uploadingId === p.id ? 'Uploading…' : '+ Attach PDF'}
-              <input type="file" accept="application/pdf" hidden disabled={lib.uploadingId === p.id}
-                onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void lib.attachPdf(p, f) }} />
-            </label>
-          )}
           <EditDeleteButtons lib={lib} p={p} />
         </div>
       </div>
@@ -43,20 +35,11 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
             if (subtitle !== (p.subtitle ?? '')) lib.update(p, { subtitle: subtitle || null })
           }} />
         </label>
-        <label className="piece-detail-field">Key
-          <KeySelect label={`Key for ${p.title}`} value={p.musical_key ?? ''}
-            onChange={(musical_key) => lib.update(p, { musical_key: musical_key || null })} />
-        </label>
         <TagInput tags={p.tags ?? []} suggestions={lib.allTags} label={`Tags for ${p.title}`} onChange={(tags) => lib.update(p, { tags })} />
         <input className="notes" aria-label={`Notes for ${p.title}`} defaultValue={p.notes ?? ''} onBlur={(e) => { if (e.target.value !== (p.notes ?? '')) lib.update(p, { notes: e.target.value }) }} />
       </div>
+      <PieceScores lib={lib} p={p} />
       <div className="piece-row piece-practice-row">
-        <div className="chip-group" role="group" aria-label={`Instruments for ${p.title}`}>
-          {INSTRUMENTS.map((i) => (
-            <button key={i.value} className={`chip${p.instruments.includes(i.value) ? ' on' : ''}`} aria-pressed={p.instruments.includes(i.value)} title={i.label}
-              onClick={() => lib.update(p, { instruments: toggleInstrument(p.instruments, i.value) })}>{i.icon} {i.label}</button>
-          ))}
-        </div>
         <div className={`progress s${status}`}>
           <input type="range" min={0} max={STATUSES.length - 1} step={1} value={STATUSES.findIndex((s) => s.value === status)}
             aria-label={`Progress for ${p.title}`}

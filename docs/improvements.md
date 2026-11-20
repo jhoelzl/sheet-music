@@ -32,7 +32,6 @@ Backlog of open improvements, grouped by area. Effort: **S** (hours), **M** (a d
 - 🟡 **Setlists / playlists.** Group pieces for a concert or lesson independent of the composer. (L)
 - 🟡 **Import / export.** Export the library as JSON/CSV and import it back, so the data is never locked in. (M)
 - 🟡 **Metadata fields.** Key, tempo, opus number, year, and source (book / IMSLP). Add them to search. (M)
-- 🟢 **Multiple files per piece.** Score, parts, fingering versions. (L)
 - 🟢 **IMSLP lookup.** Search by title and composer to prefill metadata and link. (L)
 - 🟢 **PDF annotations / bookmarks** in the preview modal, or at least a "jump to page" bookmark. (L)
 - 🟢 **Sharing.** Read-only public link to a composer or setlist. (L)

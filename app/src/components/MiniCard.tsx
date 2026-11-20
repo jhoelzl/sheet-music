@@ -5,6 +5,7 @@ import { InstrumentIcons, PieceActions, PieceTitle, PracticeButton, StatusPill, 
 import { Rating } from './Rating'
 
 export function MiniCard({ lib, p, board = false }: { lib: Library; p: Piece; board?: boolean }) {
+  const keys = lib.keysOf(p)
   return (
     <article className="piece mini">
       <div className="piece-head">
@@ -17,7 +18,7 @@ export function MiniCard({ lib, p, board = false }: { lib: Library; p: Piece; bo
       <div className="mini-meta">
         <InstrumentIcons p={p} />
         {p.pdf_pages ? <span className="page-count">{p.pdf_pages} p.</span> : null}
-        {p.musical_key && <span className="page-count">{p.musical_key}</span>}
+        {keys.length > 0 && <span className="page-count">{keys.join(' · ')}</span>}
         {p.last_practiced && <span className="practiced-text">{practicedText(p.last_practiced)}</span>}
       </div>
       <TagList lib={lib} p={p} />

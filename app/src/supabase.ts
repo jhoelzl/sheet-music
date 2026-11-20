@@ -19,14 +19,28 @@ export type LinkType = 'youtube' | 'spotify' | 'instagram' | 'other'
 
 export type PieceLink = { type: LinkType; url: string }
 
+/** One PDF of a piece, with the key it is written in and the instrument it is for. */
+export type PieceScore = {
+  id: string
+  piece_id: string
+  pdf_path: string
+  pdf_pages: number | null
+  musical_key: string | null
+  instrument: Instrument
+  position: number
+}
+
 export type Piece = {
-  instruments: Instrument[]
-  tags?: string[]
   id: string
   composer_id: string
   composer_ids?: string[]
   title: string
   subtitle?: string | null
+  tags?: string[]
+  /** The piece's PDFs. A piece can have several, e.g. a piano and a guitar score. */
+  scores?: PieceScore[]
+  // Read-only values derived from `scores` when the library loads.
+  instruments: Instrument[]
   musical_key?: string | null
   pdf_path: string | null
   pdf_pages?: number | null
@@ -38,5 +52,9 @@ export type Piece = {
   created_at?: string
   last_practiced?: string | null
 }
+
+/** Piece columns the client writes directly. Derived fields (scores, instruments, key, pages) are not here. */
+export type PiecePatch = Partial<Pick<Piece,
+  'composer_id' | 'title' | 'subtitle' | 'tags' | 'play_progress' | 'difficulty' | 'rating' | 'notes' | 'links' | 'last_practiced'>>
 
 export type PracticeLog = { id: string; piece_id: string; practiced_on: string }
