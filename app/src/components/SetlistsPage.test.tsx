@@ -5,7 +5,7 @@ import type { Piece, PieceScore } from '../supabase'
 import { SetlistsPage } from './SetlistsPage'
 
 type Setlist = { id: string; name: string; position: number; archived_at: string | null }
-type Entry = { id: string; setlist_id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null }
+type Entry = { id: string; setlist_id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null; score_id?: string | null }
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
@@ -77,7 +77,7 @@ describe('setlists page', () => {
         mocks.setlists.push(created)
         return created
       }
-      const created = { id: `e${mocks.members.length + 1}`, comment: null, ...values } as Entry
+      const created = { id: `e${mocks.members.length + 1}`, comment: null, score_id: null, ...values } as Entry
       mocks.members.push(created)
       return created
     })
@@ -379,7 +379,7 @@ describe('setlists page', () => {
     await screen.findByRole('heading', { name: 'Gig' })
     await tuneSearch()
     await user.click(screen.getByRole('button', { name: 'Open score for Moanin’' }))
-    expect(mocks.openPdf).toHaveBeenCalledWith(piece)
+    expect(mocks.openPdf).toHaveBeenCalledWith(piece, piece.scores?.[0])
     const toggle = screen.getByRole('button', { name: 'Show details for Moanin’' })
     await user.click(toggle)
     const details = screen.getByRole('button', { name: 'Hide details for Moanin’' }).closest('li')!
@@ -484,5 +484,32 @@ describe('setlists page', () => {
     await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/piano.pdf'))
     await user.selectOptions(within(player).getByRole('combobox', { name: 'Choose score' }), 'sc-b')
     await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/guitar.pdf'))
+  })
+
+  it('pre-selects a score for a setlist entry and opens it in live mode', async () => {
+    const twoScores: Piece = {
+      ...piece,
+      scores: [
+        { id: 'sc-a', piece_id: 'p1', pdf_path: 'u/piano.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', position: 0 },
+        { id: 'sc-b', piece_id: 'p1', pdf_path: 'u/guitar.pdf', pdf_pages: 1, musical_key: 'C major', instrument: 'guitar', position: 1 },
+      ],
+    }
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null, score_id: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={{ ...lib, pieces: [twoScores, waltz] }} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    const select = await screen.findByRole('combobox', { name: 'Score for Moanin’' }) as HTMLSelectElement
+    // With nothing chosen yet, the first score is the effective default.
+    expect(select.value).toBe('sc-a')
+    await user.selectOptions(select, 'sc-b')
+    await waitFor(() => expect(mocks.members[0].score_id).toBe('sc-b'))
+
+    await user.click(screen.getByRole('button', { name: 'Play' }))
+    const player = await screen.findByRole('dialog', { name: 'Live mode: Gig' })
+    await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/guitar.pdf'))
+    // The on-stage picker can still switch to another score.
+    await user.selectOptions(within(player).getByRole('combobox', { name: 'Choose score' }), 'sc-a')
+    await waitFor(() => expect(within(player).getByRole('button', { name: 'score' }).dataset.url).toBe('https://signed.test/u/piano.pdf'))
   })
 })

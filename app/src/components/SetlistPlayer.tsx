@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Piece, PieceScore } from '../supabase'
-import { INSTRUMENTS } from '../lib/instruments'
 import { Markdown } from '../lib/markdown'
+import { scoreLabel } from '../lib/scores'
 import { PdfViewer } from './PdfViewer'
 import { ChevronLeftIcon, ChevronRightIcon, CloseIcon, PauseIcon } from './icons'
 
@@ -13,11 +13,8 @@ export type PlayerEntry = {
   composers: string
   comment: string | null
   piece: Piece | null
-}
-
-const scoreLabel = (score: PieceScore) => {
-  const instrument = INSTRUMENTS.find((item) => item.value === score.instrument)
-  return [instrument?.label ?? score.instrument, score.musical_key].filter(Boolean).join(' · ')
+  /** Score pre-selected for this entry in the setlist, if any. */
+  scoreId?: string | null
 }
 
 /**
@@ -34,7 +31,7 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
 }) {
   const [index, setIndex] = useState(0)
   // Which score of the current tune is on stage. Switching tunes resets it to the
-  // first score, because the chosen id no longer matches the new tune's scores.
+  // score pre-selected for the entry, because the chosen id no longer matches.
   const [chosenScoreId, setChosenScoreId] = useState<string | null>(null)
   // The signed URL and any failure belong to a specific score, so a stale result
   // for a previous score is ignored instead of cleared when the score changes.
@@ -46,7 +43,9 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
   const current = entries[index] ?? null
   const piece = current?.piece ?? null
   const scores = piece?.scores ?? []
-  const score = scores.find((item) => item.id === chosenScoreId) ?? scores[0] ?? null
+  const score = scores.find((item) => item.id === chosenScoreId)
+    ?? scores.find((item) => item.id === current?.scoreId)
+    ?? scores[0] ?? null
   const scoreId = score?.id ?? null
   const pdfPath = score?.pdf_path ?? null
   const scoreRef = useRef<PieceScore | null>(score)
