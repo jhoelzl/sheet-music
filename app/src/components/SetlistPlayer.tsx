@@ -17,10 +17,12 @@ export type PlayerEntry = {
   scoreId?: string | null
 }
 
-export type NotesMode = 'footer' | 'side' | 'off'
+export type NotesMode = 'top' | 'left' | 'right' | 'bottom' | 'off'
 const NOTES_MODES: { value: NotesMode; label: string }[] = [
-  { value: 'footer', label: 'Bottom' },
-  { value: 'side', label: 'Side' },
+  { value: 'top', label: 'Top' },
+  { value: 'left', label: 'Left' },
+  { value: 'right', label: 'Right' },
+  { value: 'bottom', label: 'Bottom' },
   { value: 'off', label: 'Hidden' },
 ]
 const NOTES_STORAGE_KEY = 'sm:player-notes'
@@ -41,11 +43,14 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
   // Which score of the current tune is on stage. Switching tunes resets it to the
   // score pre-selected for the entry, because the chosen id no longer matches.
   const [chosenScoreId, setChosenScoreId] = useState<string | null>(null)
-  // Where the current tune's notes are shown: in the footer (default), in a side
-  // panel, or hidden. Remembered across sessions.
+  // Where the current tune's notes are shown: top, left, right, in the footer
+  // (default), or hidden. Remembered across sessions. 'footer'/'side' are the
+  // values used before left/right were split out.
   const [notesMode, setNotesMode] = useState<NotesMode>(() => {
     const stored = localStorage.getItem(NOTES_STORAGE_KEY)
-    return stored === 'side' || stored === 'off' ? stored : 'footer'
+    if (stored === 'footer') return 'bottom'
+    if (stored === 'side') return 'right'
+    return NOTES_MODES.some((mode) => mode.value === stored) ? stored as NotesMode : 'bottom'
   })
   const changeNotesMode = (mode: NotesMode) => { setNotesMode(mode); localStorage.setItem(NOTES_STORAGE_KEY, mode) }
   // The signed URL and any failure belong to a specific score, so a stale result
@@ -65,8 +70,9 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
   const pdfPath = score?.pdf_path ?? null
   const notes = current?.comment ?? null
   const hasNotes = Boolean(piece) && Boolean(notes)
-  const showSideNotes = notesMode === 'side' && hasNotes
-  const showFooterNotes = notesMode === 'footer' && hasNotes
+  const panelMode = notesMode === 'top' || notesMode === 'left' || notesMode === 'right'
+  const showNotesPanel = panelMode && hasNotes
+  const showFooterNotes = notesMode === 'bottom' && hasNotes
   const scoreRef = useRef<PieceScore | null>(score)
   useEffect(() => { scoreRef.current = score }, [score])
   const pdfUrlRef = useRef(pdfUrl)
@@ -143,7 +149,7 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
           </select>
         </label>
       </header>
-      <div className={`player-body${showSideNotes ? ' side' : ''}`}>
+      <div className={`player-body${showNotesPanel ? ` notes-${notesMode}` : ''}`}>
         <div className="player-main">
           {error ? (
             <p className="player-message" role="alert">{error}</p>
@@ -166,7 +172,7 @@ export function SetlistPlayer({ name, entries, pdfUrl, onClose, onPages }: {
             </div>
           )}
         </div>
-        {showSideNotes && notes && (
+        {showNotesPanel && notes && (
           <aside className="player-side" aria-label="Tune notes">
             <span className="player-side-title">Notes</span>
             <Markdown className="player-note" text={notes} />
