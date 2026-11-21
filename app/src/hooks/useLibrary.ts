@@ -19,6 +19,7 @@ import type { UserSettings } from '../lib/userSettings'
 export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
 export type Panel = 'composer' | 'piece' | null
 export type Preview = { id: string; pieceId: string | null; title: string; url: string | null; pages: number | null; error: string | null }
+export type BrowseScore = { pieceId: string; scoreId: string }
 export const TABLE_COLUMNS = ['composer', 'instruments', 'tags', 'status', 'difficulty', 'rating', 'pages', 'practiced'] as const
 export type TableColumnId = (typeof TABLE_COLUMNS)[number]
 export type Library = ReturnType<typeof useLibrary>
@@ -52,6 +53,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [logs, setLogs] = useState<PracticeLog[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [browseScores, setBrowseScores] = useState<BrowseScore[] | null>(null)
   const previewRequest = useRef(0)
   const [sort, setSort] = useState<SortKey>(defaults.library_sort)
   const [view, setViewState] = useState<View>(() => {
@@ -486,13 +488,19 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   }
 
   const openPdf = async (p: Piece, score: PieceScore | null = primaryScore(p)) => {
+    setBrowseScores(null)
     if (score) await openStoredPdf(score.id, p.id, p.title, score.pdf_path, score.pdf_pages ?? null)
   }
-  const openMaterialPdf = (material: TeachingMaterial) =>
-    openStoredPdf(material.id, null, material.title, material.pdf_path, null)
+  const openBrowsePdf = (p: Piece, score: PieceScore) =>
+    openStoredPdf(score.id, p.id, p.title, score.pdf_path, score.pdf_pages ?? null)
+  const openMaterialPdf = (material: TeachingMaterial) => {
+    setBrowseScores(null)
+    return openStoredPdf(material.id, null, material.title, material.pdf_path, null)
+  }
 
   const closePdf = () => {
     previewRequest.current++
+    setBrowseScores(null)
     setPreview(null)
   }
 
@@ -634,11 +642,20 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const flat = sortPieces(visible, sort)
   const noMatches = composers.length > 0 && visible.length === 0
 
+  const startScoreBrowse = () => {
+    const ordered = view === 'table' ? tableRows : flat
+    const items = ordered.flatMap((piece) => scoresOf(piece).map((score) => ({ piece, score })))
+    const first = items[0]
+    if (!first) { notify('No scores in the current selection.', 'info'); return }
+    setBrowseScores(items.map(({ piece, score }) => ({ pieceId: piece.id, scoreId: score.id })))
+    void openBrowsePdf(first.piece, first.score)
+  }
+
   const clearFilters = () => { setSearch(''); setFilter('all'); setMissingDataFilter('all'); setInstrumentFilter('all'); setTagFilter(null) }
 
   return {
     // data
-    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, allScoreTags, filterTags, practicedToday,
+    composers, pieces, logs, toasts, preview, browseScores, visible, flat, tableRows, allTags, allScoreTags, filterTags, practicedToday,
     // ui state
     sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, savingScoreIds, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
@@ -647,7 +664,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     // new-item form state
     composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreTags, setNewScoreTags, newTags, setNewTags, pieceSaving,
     // actions
-    dismissToast, closePdf, pdfUrl, openMaterialPdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
+    dismissToast, closePdf, pdfUrl, openMaterialPdf, openBrowsePdf, startScoreBrowse, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, addScore, updateScore, removeScore, removeComposer, startEditComposer, commitComposerEdit, openPdf,
     scoresOf, keysOf, primaryScore, backup, backingUp,
   }
