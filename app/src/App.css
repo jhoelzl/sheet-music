@@ -95,6 +95,11 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .panel { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 20px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .panel label { min-width: 160px; }
 .panel .grow { flex: 1; }
+.piece-add-form { flex-wrap: wrap; }
+.piece-add-form > * { max-width: 100%; }
+.piece-add-form .document-input { min-width: 0; }
+.piece-add-form .document-input .muted, .piece-add-form .document-input .error { max-width: 100%; overflow-wrap: anywhere; }
+.piece-add-form .instrument-toggle { flex-wrap: wrap; height: auto; min-height: 40px; }
 .document-input { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 160px; }
 .document-input label { width: 100%; }
 .document-input .muted, .document-input .error { font-size: 12px; }
