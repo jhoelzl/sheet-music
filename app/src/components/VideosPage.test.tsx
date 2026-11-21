@@ -12,6 +12,7 @@ vi.mock('@capacitor/core', () => ({
 
 describe('video feed', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/')
     mocks.getPlatform.mockReturnValue('web')
     mocks.open.mockResolvedValue(undefined)
     mocks.from.mockImplementation((table: string) => ({
@@ -81,6 +82,21 @@ describe('video feed', () => {
     expect(screen.getByRole('button', { name: 'Random order' }).getAttribute('aria-pressed')).toBe('true')
     await user.click(screen.getByRole('button', { name: 'Random order' }))
     expect(screen.getAllByRole('article').map((card) => card.querySelector('strong')?.textContent)).toEqual(['Romance', 'Nocturne'])
+  })
+
+  it('restores the same random order after remount', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    const user = userEvent.setup()
+    const rendered = render(<VideosPage />)
+    await screen.findByRole('button', { name: 'Play Romance' })
+    await user.click(screen.getByRole('button', { name: 'Random order' }))
+    const before = screen.getAllByRole('article').map((card) => card.querySelector('strong')?.textContent)
+    expect(new URLSearchParams(window.location.search).get('videoOrder')).toBe('random:0')
+    rendered.unmount()
+    render(<VideosPage />)
+    await screen.findByRole('button', { name: 'Play Romance' })
+    expect(screen.getAllByRole('article').map((card) => card.querySelector('strong')?.textContent)).toEqual(before)
+    expect(screen.getByRole('button', { name: 'Random order' }).getAttribute('aria-pressed')).toBe('true')
   })
 
   it('shows composer details and keeps video playback and source links accessible', async () => {

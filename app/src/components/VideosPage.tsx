@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useUrlString } from '../hooks/useUrlState'
 import { supabase } from '../supabase'
 import type { Composer, Piece } from '../supabase'
 import { safeUrl } from '../lib/links'
@@ -8,8 +9,16 @@ import type { Video } from './VideoFeed'
 
 export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean }) {
   const [videos, setVideos] = useState<Video[] | null>(null)
-  const [shuffledVideos, setShuffledVideos] = useState<Video[] | null>(null)
+  const [defaultOrder] = useState(() => defaultRandom ? `random:${randomSeed()}` : 'ordered')
+  const [order, setOrder] = useUrlString('videoOrder', defaultOrder)
   const [error, setError] = useState('')
+  const seedMatch = /^random:(\d{1,10})$/.exec(order)
+  const seed = seedMatch && Number(seedMatch[1]) <= 0xffffffff ? Number(seedMatch[1]) : null
+  const shuffledVideos = useMemo(() => videos && seed !== null ? shuffle(videos, seed) : null, [videos, seed])
+
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('videoOrder')) setOrder(defaultOrder)
+  }, [defaultOrder, setOrder])
 
   useEffect(() => {
     void (async () => {
@@ -39,9 +48,8 @@ export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean 
         }
       }
       setVideos(out)
-      if (defaultRandom) setShuffledVideos(shuffle(out))
     })()
-  }, [defaultRandom])
+  }, [])
 
   if (error) return <div className="empty"><h3>Could not load videos</h3><p>{error}</p></div>
   if (!videos) return <p>Loading…</p>
@@ -51,18 +59,24 @@ export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean 
       <div className="library-intro video-intro"><div><span className="library-kicker">Your music</span><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'} from your library</p></div></div>
       {videos.length > 1 && <div className="video-order" aria-label="Video order">
         <button type="button" className="btn" aria-pressed={shuffledVideos !== null}
-          onClick={() => setShuffledVideos(shuffledVideos ? null : shuffle(videos))}>Random order</button>
-        {shuffledVideos && <button type="button" className="btn" onClick={() => setShuffledVideos(shuffle(videos))}>Shuffle again</button>}
+          onClick={() => setOrder(shuffledVideos ? 'ordered' : `random:${randomSeed()}`)}>Random order</button>
+        {shuffledVideos && <button type="button" className="btn" onClick={() => setOrder(`random:${randomSeed()}`)}>Shuffle again</button>}
       </div>}
       <VideoFeed videos={shuffledVideos ?? videos} />
     </>
   )
 }
 
-function shuffle(videos: Video[]): Video[] {
+function randomSeed() {
+  return Math.floor(Math.random() * 0x100000000)
+}
+
+function shuffle(videos: Video[], seed: number): Video[] {
   const result = [...videos]
+  let state = seed
   for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0
+    const j = Math.floor((state / 0x100000000) * (i + 1))
     const current = result[i]
     result[i] = result[j]
     result[j] = current

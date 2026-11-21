@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
@@ -32,6 +32,7 @@ vi.mock('./hooks/useUserSettings', () => ({
 
 describe('app navigation', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/')
     mocks.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } }, error: null })
     mocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
     mocks.theme = 'system'
@@ -120,6 +121,40 @@ describe('app navigation', () => {
     expect(confirm).toHaveBeenCalledWith('Discard unsaved changes?')
     expect(screen.getByText('Lessons content')).toBeTruthy()
     confirm.mockRestore()
+  })
+
+  it('restores pages from the URL and supports browser back and forward', async () => {
+    window.history.replaceState(null, '', '/?page=videos&other=keep#anchor')
+    const user = userEvent.setup()
+    render(<App />)
+    expect(await screen.findByText('Videos content')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Composers' }))
+    expect(window.location.search).toContain('page=composers')
+    expect(window.location.search).toContain('other=keep')
+    expect(window.location.hash).toBe('#anchor')
+    act(() => window.history.back())
+    await waitFor(() => expect(screen.getByText('Videos content')).toBeTruthy())
+    act(() => window.history.forward())
+    await waitFor(() => expect(screen.getByText('Composers content')).toBeTruthy())
+  })
+
+  it('does not lose an unsaved lesson on cancelled browser navigation', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Lessons' }))
+    await user.click(screen.getByRole('button', { name: 'Edit lesson draft' }))
+    act(() => window.history.back())
+    await waitFor(() => expect(confirm).toHaveBeenCalledOnce())
+    expect(screen.getByText('Lessons content')).toBeTruthy()
+    expect(new URLSearchParams(window.location.search).get('page')).toBe('lessons')
+    confirm.mockRestore()
+  })
+
+  it('uses the library for an invalid page', async () => {
+    window.history.replaceState(null, '', '/?page=unknown')
+    render(<App />)
+    expect(await screen.findByText('Library content')).toBeTruthy()
   })
 
   it('shows a loading state until the session is restored', async () => {

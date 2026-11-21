@@ -74,6 +74,7 @@ const lib = {
 
 describe('lessons', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/')
     mocks.scannerAvailable.mockReturnValue(false)
     mocks.tables = {
       sm_lessons: [{ id: 'l1', lesson_date: '2026-11-18', title: 'Guitar', notes: '' }],
@@ -86,6 +87,51 @@ describe('lessons', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
   afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals() })
+
+  it('restores the selected group, lesson and material filter from the URL', async () => {
+    mocks.tables.sm_lessons[0].group_id = 'g1'
+    mocks.tables.sm_lessons.push({ id: 'l2', lesson_date: '2026-11-19', title: 'Second', notes: '', group_id: 'g1' })
+    mocks.tables.sm_teaching_materials = [
+      { id: 'm1', title: 'Scales', pdf_path: 'scales.pdf', tags: ['warm up'] },
+      { id: 'm2', title: 'Chords', pdf_path: 'chords.pdf', tags: ['jazz'] },
+    ]
+    const user = userEvent.setup()
+    const rendered = render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    await user.selectOptions(screen.getByLabelText('Show lessons for'), 'g1')
+    await user.click(screen.getByRole('button', { name: /Second/ }))
+    await user.click(screen.getByRole('button', { name: '#warm up' }))
+    expect(Object.fromEntries(new URLSearchParams(window.location.search))).toMatchObject({
+      lessonGroup: 'g1', lesson: 'l2', materialTag: 'warm up',
+    })
+    rendered.unmount()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    expect(await screen.findByLabelText('Title')).toHaveProperty('value', 'Second')
+    expect(screen.getByLabelText('Show lessons for')).toHaveProperty('value', 'g1')
+    expect(screen.getByRole('button', { name: '#warm up' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByRole('button', { name: 'Chords' })).toBeNull()
+  })
+
+  it('falls back to available lessons for an invalid group and lesson URL', async () => {
+    window.history.replaceState(null, '', '/?lessonGroup=missing&lesson=missing')
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    expect(await screen.findByLabelText('Title')).toHaveProperty('value', 'Guitar')
+    expect(screen.getByLabelText('Show lessons for')).toHaveProperty('value', 'all')
+  })
+
+  it('follows history navigation to a different group and lesson', async () => {
+    mocks.tables.sm_lessons[0].group_id = 'g1'
+    mocks.tables.sm_lesson_groups.push({ id: 'g2', teacher_name: 'Blair', instrument: 'piano' })
+    mocks.tables.sm_lessons.push({ id: 'l2', lesson_date: '2026-11-19', title: 'Piano', notes: '', group_id: 'g2' })
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    act(() => {
+      window.history.pushState(null, '', '/?lessonGroup=g2&lesson=l2')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    await waitFor(() => expect(screen.getByLabelText('Title')).toHaveProperty('value', 'Piano'))
+    expect(screen.getByLabelText('Show lessons for')).toHaveProperty('value', 'g2')
+  })
 
   it('creates groups and assigns existing and new lessons, with filtered activity', async () => {
     mocks.tables.sm_lessons[0].lesson_date = todayISO()
