@@ -1,6 +1,7 @@
 import { useId, useState } from 'react'
 import { MAX_TAGS, MAX_TAG_LENGTH, normalizeTag } from '../lib/tags'
-import { CloseIcon } from './icons'
+import { confirmDelete } from '../lib/confirmDelete'
+import { DeleteButton } from './DeleteButton'
 
 export function TagInput({ tags, suggestions, label, disabled = false, onChange }: { tags: string[]; suggestions: string[]; label: string; disabled?: boolean; onChange: (tags: string[]) => void }) {
   const [draft, setDraft] = useState('')
@@ -11,12 +12,15 @@ export function TagInput({ tags, suggestions, label, disabled = false, onChange 
     setDraft('')
     if (t && !tags.includes(t) && tags.length < MAX_TAGS) onChange([...tags, t])
   }
+  const remove = (tag: string) => {
+    if (!disabled && confirmDelete(`tag "${tag}" from ${label}`)) onChange(tags.filter((item) => item !== tag))
+  }
   return (
     <div className="tag-input" role="group" aria-label={label}>
       {tags.map((t) => (
         <span className="tag" key={t}>
           #{t}
-          <button type="button" className="tag-remove" aria-label={`Remove tag ${t}`} disabled={disabled} onClick={() => onChange(tags.filter((x) => x !== t))}>{CloseIcon}</button>
+          <DeleteButton compact label={`Delete tag ${t}`} disabled={disabled} onClick={() => remove(t)} />
         </span>
       ))}
       <input list={listId} aria-label="Add tag" placeholder="+ tag" maxLength={MAX_TAG_LENGTH} value={draft} disabled={disabled}
@@ -35,7 +39,7 @@ export function TagInput({ tags, suggestions, label, disabled = false, onChange 
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') { e.preventDefault(); add(draft) }
-          else if (e.key === 'Backspace' && !draft && tags.length) onChange(tags.slice(0, -1))
+          else if (e.key === 'Backspace' && !draft && tags.length) remove(tags[tags.length - 1])
         }}
         onBlur={() => { if (draft.trim()) add(draft) }} />
       <datalist id={listId}>{suggestions.filter((s) => !tags.includes(s)).map((s) => <option key={s} value={s} />)}</datalist>

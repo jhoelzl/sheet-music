@@ -52,7 +52,7 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
             {score.pdf_pages ? <span className="page-count">{score.pdf_pages} {score.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
             <button type="button" className="icon-btn" aria-label={`Open score ${index + 1} for ${p.title}`} title="Open this score"
               onClick={() => void lib.openPdf(p, score)}>{PdfIcon}</button>
-            <DeleteButton label={`Remove score ${index + 1} for ${p.title}`}
+            <DeleteButton label={`Delete score ${index + 1} for ${p.title}`}
               disabled={lib.uploadingId === p.id} onClick={() => lib.removeScore(p, score)} />
           </li>
         ))}

@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { PDF_STORAGE_BUCKET } from '../config'
 import type { Library } from '../hooks/useLibrary'
 import { todayISO } from '../lib/dates'
+import { confirmDelete } from '../lib/confirmDelete'
 import { Markdown } from '../lib/markdown'
 import { supabase } from '../supabase'
 import type { Instrument, Lesson, LessonGroup, TeachingMaterial } from '../supabase'
@@ -156,7 +157,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       setError('Move or delete this group’s lessons before deleting the group.')
       return
     }
-    if (!window.confirm(`Delete the lesson group for "${groupDraft.teacher_name}"?`)) return
+    if (!confirmDelete(`the lesson group for "${groupDraft.teacher_name}"`)) return
     void perform(async () => {
       const { error: failure } = await supabase.from('sm_lesson_groups').delete().eq('id', groupDraft.id)
       if (failure) throw failure
@@ -205,7 +206,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   }
 
   const deleteLesson = () => {
-    if (!selected || !window.confirm(`Delete lesson "${selected.title}" and its notes and links? Teaching materials and tunes will be kept.`)) return
+    if (!selected || !confirmDelete(`lesson "${selected.title}"`, 'Its notes and links will also be deleted. Teaching materials and tunes will be kept.')) return
     void perform(async () => {
       const { error: failure } = await supabase.from('sm_lessons').delete().eq('id', selected.id)
       if (failure) throw failure
@@ -222,6 +223,8 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
 
   const changePiece = (pieceId: string, add: boolean) => {
     if (!selected) return
+    const piece = lib.pieces.find((item) => item.id === pieceId)
+    if (!add && !confirmDelete(`tune "${piece?.title ?? 'Unknown tune'}" from lesson "${selected.title}"`, 'The tune and its scores will be kept.')) return
     void perform(async () => {
       const link = { lesson_id: selected.id, piece_id: pieceId }
       const result = add
@@ -284,14 +287,14 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   }
 
   const deleteMaterial = (material: TeachingMaterial) => {
-    if (!window.confirm(`Delete teaching material "${material.title}" and its PDF? It will also be removed from all lessons.`)) return
+    if (!confirmDelete(`teaching material "${material.title}"`, 'Its PDF and links to all lessons will also be deleted.')) return
     void perform(async () => {
       const { error: failure } = await supabase.from('sm_teaching_materials').delete().eq('id', material.id)
       if (failure) throw failure
       setMaterials((current) => current.filter((item) => item.id !== material.id))
       setLessonMaterials((current) => current.filter((item) => item.material_id !== material.id))
       const removed = await supabase.storage.from(PDF_STORAGE_BUCKET).remove([material.pdf_path])
-      if (removed.error) throw new Error(`Material removed, but its PDF could not be deleted (${material.pdf_path}): ${removed.error.message}`)
+      if (removed.error) throw new Error(`Material deleted, but its PDF could not be deleted (${material.pdf_path}): ${removed.error.message}`)
     })
   }
 
