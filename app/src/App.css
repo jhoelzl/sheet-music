@@ -258,6 +258,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .piece-scores .muted { font-size: 12px; }
 .score-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .score-row, .score-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.score-add [role="status"], .score-add [role="alert"] { flex-basis: 100%; }
 .score-row select, .score-add select { width: 130px; height: 28px; padding: 0 8px; font-size: 12px; }
 .score-tags, .score-instruments { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .score-instruments .chip, .score-tags .tag-input .chip { min-height: 36px; padding: 0 8px; }
@@ -521,8 +522,8 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .teaching-materials-heading p { font-size: 13px; }
 .materials-count { margin-left: 5px; color: var(--muted); font-size: 12px; font-weight: 500; }
 .teaching-materials .panel { margin: 0 0 14px; padding: 14px; flex-wrap: wrap; }
-.material-upload-status, .material-upload-error, .material-upload-confirmation { margin: 0 0 14px; font-size: 13px; overflow-wrap: anywhere; }
-.material-upload-status { color: var(--muted); }
+.document-upload-status, .material-upload-error, .material-upload-confirmation { margin: 0 0 14px; font-size: 13px; overflow-wrap: anywhere; }
+.document-upload-status { color: var(--muted); }
 .material-upload-error { color: var(--danger); }
 .material-upload-confirmation { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--accent); }
 .material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }
