@@ -557,7 +557,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .materials-saved-heading { margin: 0 0 10px; }
 .teaching-materials .filter-bar { margin-bottom: 12px; }
 .teaching-materials > .muted { margin-bottom: 12px; }
-.material-add { margin-top: 14px; }
+.material-add, .material-add-button { margin-bottom: 16px; }
 .material-add .document-add-section label { width: 100%; min-width: 0; }
 .material-add-title { display: flex; flex-wrap: wrap; gap: 4px 8px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
 .material-add-title strong { color: var(--text); }

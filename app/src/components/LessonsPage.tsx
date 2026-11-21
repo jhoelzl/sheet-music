@@ -454,6 +454,49 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               <button type="button" className="btn" disabled={!visibleMaterials.length || busy}
                 onClick={() => void lib.openMaterialPdf(visibleMaterials[0], visibleMaterials)}>Browse materials</button>
             </div>
+            {uploadedMaterial && <UploadStatus state="success" title="Upload complete" detail={`Uploaded “${uploadedMaterial.title}”.${materialTagFilter && !uploadedMaterial.tags.includes(materialTagFilter) ? ' Hidden by the current tag filter.' : ''}`}>
+              <button type="button" className="link" onClick={() => void lib.openMaterialPdf(uploadedMaterial, materials)}>Open material</button>
+            </UploadStatus>}
+            {showMaterialForm ? <form className="document-add material-add" onSubmit={uploadMaterial} aria-labelledby="material-add-heading">
+              <div className="document-add-heading">
+                <span className="document-add-icon" aria-hidden="true">+</span>
+                <div>
+                  <span className="document-add-kicker">New teaching material</span>
+                  <h4 id="material-add-heading">Add teaching material</h4>
+                  <p>Your saved materials will stay unchanged.</p>
+                </div>
+              </div>
+              {uploadingMaterial && <UploadStatus key={materialUploadStage?.message} state="pending" stage={materialUploadStage} title="Uploading teaching material" />}
+              {uploadError && <UploadStatus state="error" stage={materialAttemptId ? materialUploadStage : null} title="Upload failed" detail={`${uploadError}${materialAttemptId ? `${/[.!?]$/.test(uploadError) ? '' : '.'} Your document is still selected; retry without scanning again.` : ''}`}>
+                {materialAttemptId && <>
+                  <button type="submit" className="btn primary" disabled={busy}>Retry upload</button>
+                  <button type="button" className="link" disabled={busy} onClick={() => {
+                    if (!window.confirm('The previous request may still complete. Check the material list before starting over. Discard this upload?')) return
+                    setMaterialAttemptId(null); setUploadError('')
+                  }}>Start over</button>
+                </>}
+              </UploadStatus>}
+              {file && (uploadingMaterial || materialAttemptId !== null) && <div className="document-add-file">
+                <span>{uploadingMaterial ? 'Uploading document' : 'Selected document'}</span><strong>“{file.name}”</strong>
+              </div>}
+              {materialAttemptId !== null && <div className="material-add-title"><span>Material title</span><strong>{materialTitle}</strong></div>}
+              <div className="document-add-section" hidden={materialAttemptId !== null}>
+                <span className="document-add-step">1 <span>Choose a document</span></span>
+                <DocumentInput key={fileKey} label="PDF file" file={file} disabled={busy || materialAttemptId !== null}
+                  onChange={(next) => { setFile(next); setUploadError('') }} onProcessingChange={setProcessingPhotos} />
+              </div>
+              <div className="document-add-section" hidden={materialAttemptId !== null}>
+                <span className="document-add-step">2 <span>Material details</span></span>
+                <label>Material title<input required value={materialTitle} disabled={busy || materialAttemptId !== null} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
+                <div className="score-field"><span>Tags</span>
+                  <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy || materialAttemptId !== null} onChange={setNewMaterialTags} />
+                </div>
+              </div>
+              {(!uploadError || !materialAttemptId) && <div className="document-add-actions">
+                <button type="submit" className="btn primary" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : 'Upload PDF'}</button>
+                <button type="button" className="link" disabled={busy || processingPhotos} onClick={cancelMaterialUpload}>Cancel</button>
+              </div>}
+            </form> : <button type="button" className="btn material-add-button" disabled={busy} onClick={() => { setUploadedMaterialId(null); setShowMaterialForm(true) }}>+ Add material</button>}
             <div className="piece-scores-heading materials-saved-heading">
               <span className="piece-scores-label">Saved materials</span>
               <span className="piece-scores-count">{materials.length}</span>
@@ -497,49 +540,6 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               </div>
             })}
             {!materials.length && <p className="muted">No teaching materials yet.</p>}
-            {uploadedMaterial && <UploadStatus state="success" title="Upload complete" detail={`Uploaded “${uploadedMaterial.title}”.${materialTagFilter && !uploadedMaterial.tags.includes(materialTagFilter) ? ' Hidden by the current tag filter.' : ''}`}>
-              <button type="button" className="link" onClick={() => void lib.openMaterialPdf(uploadedMaterial, materials)}>Open material</button>
-            </UploadStatus>}
-            {showMaterialForm ? <form className="document-add material-add" onSubmit={uploadMaterial} aria-labelledby="material-add-heading">
-              <div className="document-add-heading">
-                <span className="document-add-icon" aria-hidden="true">+</span>
-                <div>
-                  <span className="document-add-kicker">New teaching material</span>
-                  <h4 id="material-add-heading">Add teaching material</h4>
-                  <p>Your saved materials will stay unchanged.</p>
-                </div>
-              </div>
-              {uploadingMaterial && <UploadStatus key={materialUploadStage?.message} state="pending" stage={materialUploadStage} title="Uploading teaching material" />}
-              {uploadError && <UploadStatus state="error" stage={materialAttemptId ? materialUploadStage : null} title="Upload failed" detail={`${uploadError}${materialAttemptId ? `${/[.!?]$/.test(uploadError) ? '' : '.'} Your document is still selected; retry without scanning again.` : ''}`}>
-                {materialAttemptId && <>
-                  <button type="submit" className="btn primary" disabled={busy}>Retry upload</button>
-                  <button type="button" className="link" disabled={busy} onClick={() => {
-                    if (!window.confirm('The previous request may still complete. Check the material list before starting over. Discard this upload?')) return
-                    setMaterialAttemptId(null); setUploadError('')
-                  }}>Start over</button>
-                </>}
-              </UploadStatus>}
-              {file && (uploadingMaterial || materialAttemptId !== null) && <div className="document-add-file">
-                <span>{uploadingMaterial ? 'Uploading document' : 'Selected document'}</span><strong>“{file.name}”</strong>
-              </div>}
-              {materialAttemptId !== null && <div className="material-add-title"><span>Material title</span><strong>{materialTitle}</strong></div>}
-              <div className="document-add-section" hidden={materialAttemptId !== null}>
-                <span className="document-add-step">1 <span>Choose a document</span></span>
-                <DocumentInput key={fileKey} label="PDF file" file={file} disabled={busy || materialAttemptId !== null}
-                  onChange={(next) => { setFile(next); setUploadError('') }} onProcessingChange={setProcessingPhotos} />
-              </div>
-              <div className="document-add-section" hidden={materialAttemptId !== null}>
-                <span className="document-add-step">2 <span>Material details</span></span>
-                <label>Material title<input required value={materialTitle} disabled={busy || materialAttemptId !== null} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
-                <div className="score-field"><span>Tags</span>
-                  <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy || materialAttemptId !== null} onChange={setNewMaterialTags} />
-                </div>
-              </div>
-              {(!uploadError || !materialAttemptId) && <div className="document-add-actions">
-                <button type="submit" className="btn primary" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : 'Upload PDF'}</button>
-                <button type="button" className="link" disabled={busy || processingPhotos} onClick={cancelMaterialUpload}>Cancel</button>
-              </div>}
-            </form> : <button type="button" className="btn" disabled={busy} onClick={() => { setUploadedMaterialId(null); setShowMaterialForm(true) }}>+ Add material</button>}
           </section>
           <form className="panel lesson-create" onSubmit={createLesson}>
             <label>Date<input type="date" value={newDate} required disabled={busy} onChange={(event) => setNewDate(event.target.value)} /></label>

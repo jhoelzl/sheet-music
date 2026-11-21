@@ -489,8 +489,11 @@ describe('focused library', () => {
     const saved = screen.getByRole('list', { name: 'Saved scores for Romance' })
     expect(within(saved).getByText('Score 1')).toBeTruthy()
     expect(within(saved).getByText('Saved · 2 pages')).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: '+ Add score' }))
+    const addButton = screen.getByRole('button', { name: '+ Add score' })
+    expect(addButton.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await user.click(addButton)
     const form = screen.getByRole('form', { name: 'Add a score to Romance' })
+    expect(form.compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(within(form).getByText('Your saved scores will stay unchanged.')).toBeTruthy()
     expect(within(form).queryByText('Score 1')).toBeNull()
     await user.upload(within(form).getByLabelText('PDF for Romance'), new File(['pdf'], 'new-score.pdf', { type: 'application/pdf' }))
@@ -503,6 +506,7 @@ describe('focused library', () => {
     await act(async () => finish({ error: null }))
     expect(await screen.findByText('Score uploaded and saved.')).toBeTruthy()
     expect(within(saved).getByText('Score 2')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '+ Add score' }).compareDocumentPosition(saved) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('keeps a scanned score and its upload identity on failure and retry', async () => {
