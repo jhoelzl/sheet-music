@@ -316,7 +316,7 @@ describe('focused library', () => {
     await user.selectOptions(screen.getByLabelText('Key'), 'Eb major')
     const newScoreTags = screen.getByRole('group', { name: 'Tags for the new score' })
     await user.click(within(newScoreTags).getByRole('button', { name: 'Lead sheet' }))
-    await user.selectOptions(within(newScoreTags).getByRole('combobox', { name: /choose existing tag/i }), 'duet')
+    await user.click(within(newScoreTags).getByRole('button', { name: '#duet' }))
     await user.click(screen.getByRole('button', { name: 'Add piece' }))
 
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_pieces', expect.objectContaining({
@@ -461,6 +461,26 @@ describe('focused library', () => {
     await user.type(within(tags).getByRole('textbox', { name: 'Add tag' }), 'practice{Enter}')
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'solo', 'practice'] }, 'id', 's1'))
     expect(await within(dialog).findByText('#practice')).toBeTruthy()
+  })
+
+  it('shows all existing custom tags as selectable buttons in the score viewer', async () => {
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'other.pdf', pdf_pages: 1, tags: ['duet', 'jazz'], position: 1 })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    const tags = within(dialog).getByRole('group', { name: 'Tags for the score of Romance' })
+    expect(within(tags).getByRole('button', { name: '#duet' }).getAttribute('aria-pressed')).toBe('false')
+    expect(within(tags).getByRole('button', { name: '#jazz' }).getAttribute('aria-pressed')).toBe('false')
+    expect(within(tags).queryByRole('combobox')).toBeNull()
+    await user.type(within(tags).getByRole('textbox', { name: 'Add tag' }), 'practice')
+    await user.click(within(tags).getByRole('button', { name: '#duet' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'duet', 'practice'] }, 'id', 's1'))
+    await waitFor(() => expect(within(tags).getByRole('button', { name: '#duet' }).getAttribute('aria-pressed')).toBe('true'))
+    await user.click(within(tags).getByRole('button', { name: '#duet' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'practice'] }, 'id', 's1'))
+    expect(within(tags).getByRole('button', { name: '#duet' }).getAttribute('aria-pressed')).toBe('false')
   })
 
   it('does not show score editing or browsing for teaching materials', async () => {
@@ -898,7 +918,7 @@ describe('focused library', () => {
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['solo', 'duet'] }, 'id', 's1'))
     await user.click(within(group()).getByRole('button', { name: 'Solo' }))
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['duet'] }, 'id', 's1'))
-    await user.click(within(group()).getByRole('button', { name: 'Delete tag duet' }))
+    await user.click(within(group()).getByRole('button', { name: '#duet' }))
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: [] }, 'id', 's1'))
   })
 
@@ -926,16 +946,17 @@ describe('focused library', () => {
     render(<TestLibrary />)
     await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
     const group = () => screen.getByRole('group', { name: 'Tags for score 1 of Romance' })
-    const picker = within(group()).getByRole('combobox', { name: /choose existing tag/i })
-    expect(within(picker).getByRole('option', { name: 'duet' })).toBeTruthy()
-    expect(within(picker).queryByRole('option', { name: 'guitar' })).toBeNull()
-    await user.selectOptions(picker, 'duet')
+    const tag = within(group()).getByRole('button', { name: '#duet' })
+    expect(tag.getAttribute('aria-pressed')).toBe('false')
+    expect(within(group()).queryByRole('combobox')).toBeNull()
+    await user.click(tag)
     await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'duet'] }, 'id', 's1'))
-    await waitFor(() => expect(within(group()).queryByRole('combobox', { name: /choose existing tag/i })).toBeNull())
+    await waitFor(() => expect(within(group()).getByRole('button', { name: '#duet' }).getAttribute('aria-pressed')).toBe('true'))
   })
 
   it('adds and removes scores on a piece', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-2' })
+    mocks.scores[0].tags = ['piano', 'duet']
     const user = userEvent.setup()
     render(<TestLibrary />)
     await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
@@ -948,10 +969,11 @@ describe('focused library', () => {
     await user.click(within(group).getByRole('button', { name: 'Piano' }))
     await user.click(within(group).getByRole('button', { name: 'Guitar' }))
     await user.click(within(group).getByRole('button', { name: 'Solo' }))
+    await user.click(within(group).getByRole('button', { name: '#duet' }))
     await user.click(screen.getByRole('button', { name: 'Add score' }))
 
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_piece_scores', expect.objectContaining({
-      piece_id: 'p1', pdf_path: 'u1/uuid-2.pdf', musical_key: 'C major', tags: ['guitar', 'solo'], position: 1,
+      piece_id: 'p1', pdf_path: 'u1/uuid-2.pdf', musical_key: 'C major', tags: ['guitar', 'solo', 'duet'], position: 1,
     })))
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Key for score 2 of Romance' })).toBeTruthy())
 

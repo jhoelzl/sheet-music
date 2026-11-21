@@ -19,7 +19,7 @@ export function ScoreTags({ tags, suggestions, label, disabled, onChange }: {
         ))}
       </div>
       <TagInput tags={tags.filter((tag) => !predefined.includes(tag))}
-        suggestions={suggestions.filter((tag) => !predefined.includes(tag))} selectSuggestions
+        suggestions={suggestions.filter((tag) => !predefined.includes(tag))} suggestionButtons
         label={`Custom tags for ${label}`} disabled={disabled}
         onChange={(custom) => onChange([...new Set([...tags.filter((tag) => predefined.includes(tag)), ...custom])])} />
     </div>
