@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { TouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { Library } from '../hooks/useLibrary'
 import { scoresOf } from '../hooks/useLibrary'
@@ -11,6 +12,7 @@ export function PdfPreview({ lib }: { lib: Library }) {
   const closeRef = useRef(closePdf)
   useEffect(() => { closeRef.current = closePdf }, [closePdf])
   const dialogRef = useRef<HTMLDivElement>(null)
+  const swipeStart = useRef<{ x: number; y: number; touchId: number; scoreId: string; scroll: HTMLElement } | null>(null)
   const isOpen = preview !== null
   const piece = preview ? pieces.find((item) => item.id === preview.pieceId) ?? null : null
   const scores = piece ? scoresOf(piece) : []
@@ -25,6 +27,33 @@ export function PdfPreview({ lib }: { lib: Library }) {
   const previous = [...browseItems].reverse().find((item) => item.index < browseIndex)
   const next = browseItems.find((item) => item.index > browseIndex)
   const saving = lib.savingScoreIds.size > 0
+
+  const startSwipe = (event: TouchEvent<HTMLDivElement>) => {
+    swipeStart.current = null
+    if (!browseScores || browseIndex < 0 || !preview || event.touches.length !== 1 || !(event.target instanceof Element)) return
+    const scroll = event.target.closest<HTMLElement>('.pdf-scroll')
+    if (!scroll || !event.currentTarget.contains(scroll) || scroll.scrollWidth > scroll.clientWidth + 1 || (window.visualViewport?.scale ?? 1) > 1) return
+    const touch = event.touches[0]
+    swipeStart.current = { x: touch.clientX, y: touch.clientY, touchId: touch.identifier, scoreId: preview.id, scroll }
+  }
+
+  const endSwipe = (event: TouchEvent<HTMLDivElement>) => {
+    const start = swipeStart.current
+    swipeStart.current = null
+    if (!start || !preview || start.scoreId !== preview.id || event.touches.length || !start.scroll.isConnected ||
+        start.scroll.scrollWidth > start.scroll.clientWidth + 1 || (window.visualViewport?.scale ?? 1) > 1) return
+    const touch = Array.from(event.changedTouches).find((item) => item.identifier === start.touchId)
+    if (!touch) return
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    if (Math.abs(dx) < 80 || Math.abs(dx) <= Math.abs(dy) * 1.5) return
+    const destination = dx < 0 ? next : previous
+    if (!destination) return
+    if (document.activeElement instanceof HTMLElement && dialogRef.current?.contains(document.activeElement)) {
+      document.activeElement.blur()
+    }
+    void openBrowsePdf(destination.piece, destination.score)
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -62,7 +91,9 @@ export function PdfPreview({ lib }: { lib: Library }) {
   if (!preview) return null
   return createPortal(
     <div className="modal-backdrop">
-      <div ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-label={`PDF: ${preview.title}`}>
+      <div ref={dialogRef} className="modal" role="dialog" aria-modal="true" aria-label={`PDF: ${preview.title}`}
+        onTouchStart={startSwipe} onTouchMove={(event) => { if (event.touches.length !== 1) swipeStart.current = null }}
+        onTouchEnd={endSwipe} onTouchCancel={() => { swipeStart.current = null }}>
         <div className="modal-head">
           <button type="button" className="btn pdf-close" onClick={closePdf}>{piece ? '← Library' : '← Close'}</button>
           <div className="modal-title">
