@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './supabase'
@@ -14,6 +14,7 @@ import { PdfPreview } from './components/PdfPreview'
 import { Toasts } from './components/Toasts'
 import { strokeIcon } from './components/icons'
 import { useLibrary } from './hooks/useLibrary'
+import { updateUrlState, URL_STATE_CHANGE } from './hooks/useUrlState'
 import { useUserSettings } from './hooks/useUserSettings'
 import type { SettingsState } from './hooks/useUserSettings'
 import type { UserSettings } from './lib/userSettings'
@@ -26,6 +27,8 @@ const lessonsIcon = strokeIcon('M5 4h14v16H5zM8 8h8M8 12h8M8 16h5')
 const settingsIcon = strokeIcon('M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M19.07 4.93l-1.42 1.42M6.35 17.65l-1.42 1.42')
 
 type Page = 'library' | 'composers' | 'videos' | 'setlists' | 'lessons' | 'settings'
+const PAGES: Page[] = ['library', 'composers', 'videos', 'setlists', 'lessons', 'settings']
+const pageFromUrl = (): Page => PAGES.find((item) => item === new URLSearchParams(window.location.search).get('page')) ?? 'library'
 type AuthState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; session: Session | null }
 
 function AuthenticatedContent({ page, isIOS, onLessonDirty, userId, settingsState, saveSettings, retrySettings }: {
@@ -62,8 +65,15 @@ function useTheme(theme: UserSettings['theme']) {
 export default function App() {
   const [auth, setAuth] = useState<AuthState>({ status: 'loading' })
   const [authAttempt, setAuthAttempt] = useState(0)
-  const [page, setPage] = useState<Page>('library')
+  const [page, setPage] = useState<Page>(pageFromUrl)
   const [lessonDirty, setLessonDirty] = useState(false)
+  const pageRef = useRef(page)
+  const dirtyRef = useRef(lessonDirty)
+  const currentUrl = useRef(window.location.href)
+  useEffect(() => {
+    pageRef.current = page
+    dirtyRef.current = lessonDirty
+  }, [page, lessonDirty])
   const isIOS = Capacitor.getPlatform() === 'ios'
   const session = auth.status === 'ready' ? auth.session : null
   const userSettings = useUserSettings(session?.user.id ?? null)
@@ -100,10 +110,37 @@ export default function App() {
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [lessonDirty])
+  useEffect(() => {
+    const rememberUrl = () => { currentUrl.current = window.location.href }
+    const onPopState = () => {
+      const next = pageFromUrl()
+      const previousParams = new URL(currentUrl.current).searchParams
+      const nextParams = new URL(window.location.href).searchParams
+      const changesLesson = next !== pageRef.current ||
+        previousParams.get('lesson') !== nextParams.get('lesson') ||
+        previousParams.get('lessonGroup') !== nextParams.get('lessonGroup') ||
+        previousParams.get('materialTag') !== nextParams.get('materialTag')
+      if (pageRef.current === 'lessons' && changesLesson && dirtyRef.current && !window.confirm('Discard unsaved changes?')) {
+        window.history.pushState(window.history.state, '', currentUrl.current)
+        window.dispatchEvent(new Event(URL_STATE_CHANGE))
+        return
+      }
+      if (changesLesson) setLessonDirty(false)
+      setPage(next)
+      rememberUrl()
+    }
+    window.addEventListener(URL_STATE_CHANGE, rememberUrl)
+    window.addEventListener('popstate', onPopState)
+    return () => {
+      window.removeEventListener(URL_STATE_CHANGE, rememberUrl)
+      window.removeEventListener('popstate', onPopState)
+    }
+  }, [])
   const navigate = (next: Page) => {
     if (next === page) return
     if (lessonDirty && !window.confirm('Discard unsaved changes?')) return
     setLessonDirty(false)
+    updateUrlState('page', next, true)
     setPage(next)
   }
   const navigation = session && (

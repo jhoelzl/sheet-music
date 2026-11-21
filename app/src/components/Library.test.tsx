@@ -92,6 +92,7 @@ function swipe(element: HTMLElement, from: [number, number], to: [number, number
 
 describe('focused library', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/')
     mocks.scannerAvailable.mockReturnValue(false)
     vi.stubGlobal('confirm', vi.fn(() => true))
     localStorage.clear()
@@ -1017,11 +1018,68 @@ describe('focused library', () => {
     const user = userEvent.setup()
     const { rerender } = render(<TestRememberedView key="user-1" userId="user-1" />)
     await user.selectOptions(await screen.findByLabelText('View'), 'grid')
+    window.history.replaceState(null, '', '/')
     rerender(<TestRememberedView key="user-2" userId="user-2" />)
     expect(screen.getByLabelText('View')).toHaveProperty('value', 'list')
     await user.selectOptions(screen.getByLabelText('View'), 'table')
+    window.history.replaceState(null, '', '/')
     rerender(<TestRememberedView key="user-1" userId="user-1" />)
     expect(screen.getByLabelText('View')).toHaveProperty('value', 'grid')
+  })
+
+  it('restores library filters, sort and view after remount and preserves other URL state', async () => {
+    window.history.replaceState(null, '', '/?page=library&other=keep#anchor')
+    const user = userEvent.setup()
+    const rendered = render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.type(screen.getByLabelText('Search pieces'), 'Étude &')
+    await user.selectOptions(screen.getByLabelText('Sort pieces'), 'rating')
+    await user.selectOptions(screen.getByLabelText('View'), 'grid')
+    await user.click(screen.getByRole('button', { name: 'Filters' }))
+    await user.click(within(screen.getByRole('group', { name: 'Filter by instrument' })).getByRole('button', { name: /Piano/ }))
+    await user.click(within(screen.getByRole('group', { name: 'Filter pieces' })).getByRole('button', { name: 'In progress (25–75%)' }))
+    await user.click(within(screen.getByRole('group', { name: 'Filter missing data' })).getByRole('button', { name: 'No scores' }))
+    await user.click(within(screen.getByRole('group', { name: 'Filter by tag' })).getByRole('button', { name: '#calm' }))
+    const params = new URLSearchParams(window.location.search)
+    expect(Object.fromEntries(params)).toMatchObject({
+      page: 'library', other: 'keep', librarySearch: 'Étude &', librarySort: 'rating', libraryView: 'grid',
+      libraryInstrument: 'piano', libraryFilter: 'learned', libraryMissing: 'scores', libraryTag: 'calm',
+    })
+    expect(window.location.hash).toBe('#anchor')
+    rendered.unmount()
+    render(<TestLibrary />)
+    await waitFor(() => expect(screen.getByLabelText('Search pieces')).toHaveProperty('value', 'Étude &'))
+    expect(screen.getByLabelText('View')).toHaveProperty('value', 'grid')
+    expect(screen.getByLabelText('Sort pieces')).toHaveProperty('value', 'rating')
+    await user.click(screen.getByRole('button', { name: /Filters/ }))
+    expect(within(screen.getByRole('group', { name: 'Filter by instrument' })).getByRole('button', { name: /Piano/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(screen.getByRole('group', { name: 'Filter pieces' })).getByRole('button', { name: 'In progress (25–75%)' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(screen.getByRole('group', { name: 'Filter missing data' })).getByRole('button', { name: 'No scores' }).getAttribute('aria-pressed')).toBe('true')
+    expect(within(screen.getByRole('group', { name: 'Filter by tag' })).getByRole('button', { name: '#calm' }).getAttribute('aria-pressed')).toBe('true')
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getByLabelText('Search pieces')).toHaveProperty('value', '')
+    expect(new URLSearchParams(window.location.search).get('libraryTag')).toBeNull()
+  })
+
+  it('falls back safely when library URL options are invalid', async () => {
+    window.history.replaceState(null, '', '/?libraryView=bad&librarySort=bad&libraryFilter=bad&libraryMissing=bad&libraryInstrument=bad')
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    expect(screen.getByLabelText('View')).toHaveProperty('value', 'list')
+    expect(screen.getByLabelText('Sort pieces')).toHaveProperty('value', 'title')
+  })
+
+  it('restores table sorting after remount', async () => {
+    const user = userEvent.setup()
+    const rendered = render(<TestLibrary />)
+    await user.selectOptions(await screen.findByLabelText('View'), 'table')
+    const table = await screen.findByRole('table')
+    await user.click(within(table).getByRole('button', { name: 'Composer' }))
+    expect(new URLSearchParams(window.location.search).get('libraryTableSort')).toBe('composer:asc')
+    rendered.unmount()
+    render(<TestLibrary />)
+    const restoredTable = await screen.findByRole('table')
+    expect(within(restoredTable).getByRole('columnheader', { name: 'Composer' }).getAttribute('aria-sort')).toBe('ascending')
   })
 
   it('combines and removes independent score tags, including custom tags', async () => {

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { Library } from '../hooks/useLibrary'
 import { scoresOf } from '../hooks/useLibrary'
+import { useUrlEnum, useUrlOptional } from '../hooks/useUrlState'
 import { supabase } from '../supabase'
 import { dropIndex, moveItem } from '../lib/reorder'
 import { confirmDelete } from '../lib/confirmDelete'
@@ -23,7 +24,9 @@ type DragState = { pointerId: number; fromRow: number; startY: number; startScro
 
 export function SetlistsPage({ lib }: { lib: LibraryData }) {
   const [setlists, setSetlists] = useState<Setlist[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [urlSetlist, setUrlSetlist] = useUrlOptional('setlist')
+  const [selectedId, setSelectedIdState] = useState<string | null>(null)
+  const setSelectedId = useCallback((id: string | null) => { setSelectedIdState(id); setUrlSetlist(id) }, [setUrlSetlist])
   const [membersBySetlist, setMembersBySetlist] = useState<Record<string, SetlistEntry[]>>({})
   const [name, setName] = useState('')
   const [newDate, setNewDate] = useState('')
@@ -34,10 +37,14 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   const [placeholder, setPlaceholder] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [membersLoading, setMembersLoading] = useState(false)
   const [loadedId, setLoadedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [showArchived, setShowArchived] = useState(false)
+  const [archivedParam, setArchivedParam] = useUrlEnum('setlistArchived', '0', ['0', '1'])
+  const showArchived = archivedParam === '1'
+  const setShowArchived = (next: boolean | ((current: boolean) => boolean)) =>
+    setArchivedParam((typeof next === 'function' ? next(showArchived) : next) ? '1' : '0')
   const [openDetails, setOpenDetails] = useState<string | null>(null)
   const [playing, setPlaying] = useState(false)
   const busyRef = useRef(false)
@@ -64,19 +71,35 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     void (async () => {
       const { data, error: loadError } = await supabase.from('sm_setlists').select('id, name, position, archived_at, event_date, event_time').order('position').order('created_at')
       if (!active) return
-      if (loadError) setError(loadError.message)
+      if (loadError) { setLoadFailed(true); setError(loadError.message) }
       else {
         const loaded = (data ?? []) as Setlist[]
         setSetlists(loaded)
         if (loaded.length) {
           setMembersLoading(true)
-          setSelectedId((current) => current ?? loaded[0].id)
+          const requested = new URLSearchParams(window.location.search).get('setlist')
+          setSelectedId(loaded.find((item) => item.id === requested)?.id ?? loaded[0].id)
+        } else {
+          setSelectedId(null)
         }
       }
       setLoading(false)
     })()
     return () => { active = false }
-  }, [])
+  }, [setSelectedId])
+
+  useEffect(() => {
+    if (loading || loadFailed || urlSetlist === selectedId) return
+    const next = setlists.find((item) => item.id === urlSetlist) ?? setlists[0]
+    if (urlSetlist !== (next?.id ?? null)) setUrlSetlist(next?.id ?? null)
+    setSelectedIdState(next?.id ?? null)
+    setLoadedId(null)
+    setMembersLoading(Boolean(next))
+    setRename(null)
+    setSchedule(null)
+    setPlaceholder('')
+    setOpenDetails(null)
+  }, [urlSetlist, selectedId, loading, loadFailed, setlists, setUrlSetlist])
 
   useEffect(() => {
     if (!selectedId) return

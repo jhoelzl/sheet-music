@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Piece, PieceScore } from '../supabase'
@@ -68,6 +68,7 @@ async function openComment(user: ReturnType<typeof userEvent.setup>, title: stri
 
 describe('setlists page', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/')
     vi.stubGlobal('confirm', vi.fn(() => true))
     mocks.setlists = []
     mocks.members = []
@@ -147,6 +148,46 @@ describe('setlists page', () => {
   })
 
   afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); localStorage.clear() })
+
+  it('restores the selected setlist and archived filter after remount', async () => {
+    mocks.setlists = [
+      { id: 's1', name: 'First', position: 0, archived_at: null },
+      { id: 's2', name: 'Archived gig', position: 1, archived_at: '2026-01-01' },
+    ]
+    const user = userEvent.setup()
+    const rendered = render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'First' })
+    await user.click(screen.getByRole('button', { name: 'Archived (1)' }))
+    await user.click(screen.getByRole('button', { name: 'Archived gig' }))
+    expect(new URLSearchParams(window.location.search).get('setlist')).toBe('s2')
+    expect(new URLSearchParams(window.location.search).get('setlistArchived')).toBe('1')
+    rendered.unmount()
+    render(<SetlistsPage lib={lib} />)
+    expect(await screen.findByRole('heading', { name: 'Archived gig' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Archived (1)' }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('falls back to an available setlist for an invalid URL', async () => {
+    window.history.replaceState(null, '', '/?setlist=missing')
+    mocks.setlists = [{ id: 's1', name: 'First', position: 0, archived_at: null }]
+    render(<SetlistsPage lib={lib} />)
+    expect(await screen.findByRole('heading', { name: 'First' })).toBeTruthy()
+    expect(new URLSearchParams(window.location.search).get('setlist')).toBe('s1')
+  })
+
+  it('follows history navigation to another setlist', async () => {
+    mocks.setlists = [
+      { id: 's1', name: 'First', position: 0, archived_at: null },
+      { id: 's2', name: 'Second', position: 1, archived_at: null },
+    ]
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'First' })
+    act(() => {
+      window.history.pushState(null, '', '/?setlist=s2')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(await screen.findByRole('heading', { name: 'Second' })).toBeTruthy()
+  })
 
   it('creates a named setlist and adds a tune to it', async () => {
     const user = userEvent.setup()

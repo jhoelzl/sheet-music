@@ -10,11 +10,12 @@ import type { ZipEntry } from '../lib/zip'
 import { todayISO } from '../lib/dates'
 import { confirmDelete } from '../lib/confirmDelete'
 import { detectLinkType, safeUrl } from '../lib/links'
-import { VIEWS, sortPieces } from '../lib/sorting'
-import type { MissingDataFilter, SortKey, TableKey, View } from '../lib/sorting'
+import { FILTERS, MISSING_DATA_FILTERS, SORTS, VIEWS, sortPieces } from '../lib/sorting'
+import type { MissingDataFilter, TableKey, View } from '../lib/sorting'
 import { statusOf } from '../lib/status'
 import { DEFAULT_USER_SETTINGS } from '../lib/userSettings'
 import type { UserSettings } from '../lib/userSettings'
+import { useUrlEnum, useUrlOptional, useUrlString } from './useUrlState'
 
 export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
 export type Panel = 'composer' | 'piece' | null
@@ -56,12 +57,10 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [browseScores, setBrowseScores] = useState<BrowseScore[] | null>(null)
   const [browseMaterials, setBrowseMaterials] = useState<TeachingMaterial[] | null>(null)
   const previewRequest = useRef(0)
-  const [sort, setSort] = useState<SortKey>(defaults.library_sort)
-  const [view, setViewState] = useState<View>(() => {
-    if (defaults.library_view !== 'remember') return defaults.library_view
-    const v = localStorage.getItem(viewStorageKey) ?? localStorage.getItem('sm:view')
-    return VIEWS.some((x) => x.value === v) ? (v as View) : 'list'
-  })
+  const [sort, setSort] = useUrlEnum('librarySort', defaults.library_sort, SORTS.map((item) => item.value))
+  const rememberedView = localStorage.getItem(viewStorageKey) ?? localStorage.getItem('sm:view')
+  const defaultView = defaults.library_view !== 'remember' ? defaults.library_view : VIEWS.find((item) => item.value === rememberedView)?.value ?? 'list'
+  const [view, setViewState] = useUrlEnum('libraryView', defaultView, VIEWS.map((item) => item.value))
   const setView = (v: View) => { setViewState(v); localStorage.setItem(viewStorageKey, v) }
   const [tableCompact, setTableCompactState] = useState<boolean>(() => localStorage.getItem('sm:table-compact') === '1')
   const setTableCompact = (next: boolean) => {
@@ -89,9 +88,17 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     setTableHiddenColumns([])
     localStorage.setItem('sm:table-hidden-columns', '[]')
   }
-  const [tableSort, setTableSort] = useState<{ key: TableKey; dir: 1 | -1 }>({
-    key: defaults.library_sort, dir: defaults.library_sort === 'title' ? 1 : -1,
-  })
+  const [tableSortParam, setTableSortParam] = useUrlString('libraryTableSort')
+  const tableKeys: TableKey[] = ['title', 'composer', 'status', 'difficulty', 'rating', 'pages', 'practiced', 'recent']
+  const [tableKey, tableDirection] = tableSortParam.split(':')
+  const validTableKey = tableKeys.find((key) => key === tableKey)
+  const tableSort: { key: TableKey; dir: 1 | -1 } = validTableKey && (tableDirection === 'asc' || tableDirection === 'desc')
+    ? { key: validTableKey, dir: tableDirection === 'asc' ? 1 : -1 }
+    : { key: defaults.library_sort, dir: defaults.library_sort === 'title' ? 1 : -1 }
+  const setTableSort = (next: { key: TableKey; dir: 1 | -1 } | ((current: { key: TableKey; dir: 1 | -1 }) => { key: TableKey; dir: 1 | -1 })) => {
+    const value = typeof next === 'function' ? next(tableSort) : next
+    setTableSortParam(`${value.key}:${value.dir === 1 ? 'asc' : 'desc'}`)
+  }
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
   const [editingComposerId, setEditingComposerId] = useState<string | null>(null)
@@ -105,16 +112,16 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
   const toastSeq = useRef(0)
   const deleteTimers = useRef(new Map<string, number>())
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<string>(defaults.library_filter)
-  const [missingDataFilter, setMissingDataFilter] = useState<MissingDataFilter>('all')
-  const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>(defaults.library_instrument)
+  const [search, setSearch] = useUrlString('librarySearch')
+  const [filter, setFilter] = useUrlEnum('libraryFilter', defaults.library_filter, FILTERS.map((item) => item.value))
+  const [missingDataFilter, setMissingDataFilter] = useUrlEnum<MissingDataFilter>('libraryMissing', 'all', MISSING_DATA_FILTERS.map((item) => item.value))
+  const [instrumentFilter, setInstrumentFilter] = useUrlEnum<'all' | Instrument>('libraryInstrument', defaults.library_instrument, ['all', 'piano', 'guitar'])
   const [newScoreTags, setNewScoreTags] = useState<string[]>(['piano'])
   const [newComposerIds, setNewComposerIds] = useState<string[]>([])
   const [newTags, setNewTags] = useState<string[]>([])
   const [newSubtitle, setNewSubtitle] = useState('')
   const [newMusicalKey, setNewMusicalKey] = useState('')
-  const [tagFilter, setTagFilter] = useState<string | null>(null)
+  const [tagFilter, setTagFilter] = useUrlOptional('libraryTag')
   const [composerName, setComposerName] = useState('')
   const [composerSaving, setComposerSaving] = useState(false)
   const composerSavingRef = useRef(false)

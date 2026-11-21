@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { PDF_STORAGE_BUCKET } from '../config'
 import type { Library } from '../hooks/useLibrary'
+import { useUrlOptional, useUrlString } from '../hooks/useUrlState'
 import { todayISO } from '../lib/dates'
 import { confirmDelete } from '../lib/confirmDelete'
 import { Markdown } from '../lib/markdown'
@@ -23,7 +24,7 @@ type LibraryData = Pick<Library, 'pieces' | 'hiddenIds' | 'composerNamesOf' | 'o
 export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyChange: (dirty: boolean) => void }) {
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [groups, setGroups] = useState<LessonGroup[]>([])
-  const [groupFilter, setGroupFilter] = useState('all')
+  const [groupFilter, setGroupFilter] = useUrlString('lessonGroup', 'all')
   const [newLessonGroup, setNewLessonGroup] = useState('')
   const [teacherName, setTeacherName] = useState('')
   const [instrument, setInstrument] = useState<Instrument>('guitar')
@@ -32,7 +33,9 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [materials, setMaterials] = useState<TeachingMaterial[]>([])
   const [lessonPieces, setLessonPieces] = useState<LessonPiece[]>([])
   const [lessonMaterials, setLessonMaterials] = useState<LessonMaterial[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedIdState] = useState<string | null>(null)
+  const [requestedLessonId, setRequestedLessonId] = useUrlOptional('lesson')
+  const setSelectedId = useCallback((id: string | null) => { setSelectedIdState(id); setRequestedLessonId(id) }, [setRequestedLessonId])
   const [draft, setDraft] = useState<Lesson | null>(null)
   const [openPieceId, setOpenPieceId] = useState<string | null>(null)
   const [newDate, setNewDate] = useState(todayISO)
@@ -41,7 +44,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [materialDraft, setMaterialDraft] = useState<{ id: string; title: string } | null>(null)
   const [materialError, setMaterialError] = useState('')
   const [newMaterialTags, setNewMaterialTags] = useState<string[]>([])
-  const [materialTagFilter, setMaterialTagFilter] = useState<string | null>(null)
+  const [materialTagFilter, setMaterialTagFilter] = useUrlOptional('materialTag')
   const [file, setFile] = useState<File | null>(null)
   const [fileKey, setFileKey] = useState(0)
   const [processingPhotos, setProcessingPhotos] = useState(false)
@@ -85,8 +88,18 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
         setMaterials((m.data ?? []) as TeachingMaterial[])
         setLessonPieces((p.data ?? []) as LessonPiece[])
         setLessonMaterials((lm.data ?? []) as LessonMaterial[])
-        setSelectedId(loaded[0]?.id ?? null)
-        setDraft(loaded[0] ?? null)
+        const params = new URLSearchParams(window.location.search)
+        const requestedGroup = params.get('lessonGroup') ?? 'all'
+        const requestedLesson = params.get('lesson')
+        const validGroup = requestedGroup === 'all' || requestedGroup === 'unassigned' || loadedGroups.some((group) => group.id === requestedGroup)
+        const selectedGroup = validGroup ? requestedGroup : 'all'
+        if (!validGroup) setGroupFilter('all')
+        const matching = loaded.filter((lesson) => selectedGroup === 'all' || (selectedGroup === 'unassigned' ? !lesson.group_id : lesson.group_id === selectedGroup))
+        const initial = matching.find((lesson) => lesson.id === requestedLesson) ?? matching[0] ?? null
+        setGroupDraft(loadedGroups.find((group) => group.id === selectedGroup) ?? null)
+        if (selectedGroup !== 'all' && selectedGroup !== 'unassigned') setNewLessonGroup(selectedGroup)
+        setSelectedId(initial?.id ?? null)
+        setDraft(initial)
       } catch (reason) {
         if (active) {
           setLoadFailed(true)
@@ -97,7 +110,31 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       }
     })()
     return () => { active = false }
-  }, [])
+  }, [setGroupFilter, setSelectedId])
+
+  const previousUrlSelection = useRef({ group: groupFilter, lesson: requestedLessonId })
+  useEffect(() => {
+    if (loading || loadFailed) return
+    const previous = previousUrlSelection.current
+    if (previous.group === groupFilter && previous.lesson === requestedLessonId) return
+    previousUrlSelection.current = { group: groupFilter, lesson: requestedLessonId }
+    const validGroup = groupFilter === 'all' || groupFilter === 'unassigned' || groups.some((group) => group.id === groupFilter)
+    const selectedGroup = validGroup ? groupFilter : 'all'
+    if (!validGroup) setGroupFilter('all')
+    if (previous.group !== groupFilter) {
+      setGroupDraft(groups.find((group) => group.id === selectedGroup) ?? null)
+      if (selectedGroup !== 'all' && selectedGroup !== 'unassigned') setNewLessonGroup(selectedGroup)
+    }
+    const matching = lessons.filter((item) => selectedGroup === 'all' ||
+      (selectedGroup === 'unassigned' ? !item.group_id : item.group_id === selectedGroup))
+    const lesson = matching.find((item) => item.id === requestedLessonId) ?? matching[0] ?? null
+    if (requestedLessonId !== (lesson?.id ?? null)) setRequestedLessonId(lesson?.id ?? null)
+    if ((lesson?.id ?? null) !== selectedId) {
+      setSelectedIdState(lesson?.id ?? null)
+      setDraft(lesson ?? null)
+      setOpenPieceId(null)
+    }
+  }, [groupFilter, requestedLessonId, loading, loadFailed, groups, lessons, selectedId, setGroupFilter, setRequestedLessonId])
 
   const perform = async (action: () => Promise<void>, onError?: (message: string) => void) => {
     if (busyRef.current) return
