@@ -36,6 +36,10 @@ describe('PDF viewer', () => {
     render(<PdfViewer url="https://example.test/a.pdf" onLoad={onLoad} />)
 
     await waitFor(() => expect(mocks.renderPage).toHaveBeenCalledTimes(2))
+    expect(mocks.getDocument).toHaveBeenCalledWith({
+      url: 'https://example.test/a.pdf',
+      wasmUrl: new URL(`${import.meta.env.BASE_URL}pdfjs-wasm/`, document.baseURI).href,
+    })
     expect(onLoad).toHaveBeenCalledWith(2)
     expect((screen.getByLabelText('Page 1') as HTMLCanvasElement).width).toBe(780)
     expect((screen.getByLabelText('Page 2') as HTMLCanvasElement).width).toBe(780)
@@ -91,7 +95,7 @@ describe('PDF viewer', () => {
     vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })
     const createObjectURL = vi.fn((_blob: Blob) => 'blob:score')
     const revokeObjectURL = vi.fn()
-    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL, revokeObjectURL }))
     const imageBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,

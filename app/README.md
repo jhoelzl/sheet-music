@@ -68,6 +68,8 @@ PDFs and existing image scores open in a full-screen viewer over the library.
 Pages and images fit the available width and can be scrolled; use **Library**
 (or Escape on a keyboard) to return to the same library view. White margins
 that are part of the score remain visible.
+The build includes PDF.js WebAssembly decoders for scanned PDF images. Keep the
+`pdfjs-wasm` directory alongside the deployed app when hosting the build.
 
 Currently, two official plugins are available:
 
