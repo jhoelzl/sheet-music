@@ -253,16 +253,49 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .open-pdf-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; margin-right: 6px; padding: 0 14px; color: #fff; background: var(--accent); border: 0; border-radius: 99px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
 .open-pdf-btn:hover { filter: brightness(1.1); }
 .open-pdf-btn svg { width: 16px; height: 16px; }
-.piece-scores { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; border-top: 1px dashed var(--line); }
-.piece-scores-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.piece-scores { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 14px; border-top: 1px dashed var(--line); }
+.piece-scores-heading { display: flex; align-items: center; gap: 8px; }
+.piece-scores-label { color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.piece-scores-count { min-width: 22px; padding: 2px 6px; color: var(--muted); background: var(--hover); border-radius: 99px; font-size: 11px; font-weight: 700; text-align: center; }
 .piece-scores .muted { font-size: 12px; }
-.score-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.score-row, .score-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.score-add [role="status"], .score-add [role="alert"] { flex-basis: 100%; }
-.score-row select, .score-add select { width: 130px; height: 28px; padding: 0 8px; font-size: 12px; }
+.score-list { display: flex; flex-direction: column; align-self: stretch; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.score-row { padding: 12px; background: var(--subtle); border: 1px solid var(--line); border-radius: 12px; }
+.score-row-heading { display: flex; align-items: center; gap: 9px; }
+.score-row-icon { display: grid; flex: 0 0 34px; width: 34px; height: 34px; place-items: center; color: var(--muted); background: var(--hover); border-radius: 9px; }
+.score-row-icon svg { width: 19px; height: 19px; }
+.score-row-title { display: grid; flex: 1; min-width: 0; gap: 2px; }
+.score-row-title strong { font-size: 13px; }
+.score-row-title span { color: var(--muted); font-size: 11px; }
+.score-row-actions { display: flex; align-items: center; }
+.score-row-actions .icon-btn { width: 36px; height: 36px; }
+.score-row-details, .score-add-details { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 18px; margin-top: 10px; }
+.score-field { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.score-field > span { color: var(--muted); font-size: 11px; font-weight: 600; }
+.score-row select, .score-add select { width: 130px; max-width: 100%; height: 36px; padding: 0 8px; font-size: 12px; }
 .score-tags, .score-instruments { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .score-instruments .chip, .score-tags .tag-input .chip { min-height: 36px; padding: 0 8px; }
-.score-add input[type="file"] { width: auto; height: auto; padding: 6px 10px; font-size: 12px; }
+.score-add { align-self: stretch; display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px; background: var(--accent-soft); border: 1px solid var(--accent-line); border-radius: 14px; }
+.score-add-heading { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
+.score-add-icon { display: grid; flex: 0 0 38px; width: 38px; height: 38px; place-items: center; color: #fff; background: var(--accent); border-radius: 11px; font-size: 22px; line-height: 1; }
+.score-add-heading > div { min-width: 0; }
+.score-add-kicker { color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.score-add-heading h4 { margin: 3px 0 0; font-size: 16px; overflow-wrap: anywhere; }
+.score-add-heading p { margin-top: 4px; color: var(--muted); font-size: 12px; }
+.score-add .upload-status { margin: 0; background: var(--surface); }
+.score-add .upload-status--error { background: var(--upload-bg); }
+.score-add-file { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--accent-line); border-radius: 10px; font-size: 12px; overflow-wrap: anywhere; }
+.score-add-file span { color: var(--muted); }
+.score-add-file strong { min-width: 0; }
+.score-add-section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.score-add-section[hidden] { display: none; }
+.score-add-step { display: flex; align-items: center; gap: 7px; color: var(--accent); font-size: 12px; font-weight: 700; }
+.score-add-step span { color: var(--text); }
+.score-add .document-input { min-width: 0; max-width: 100%; }
+.score-add .document-input label { min-width: 0; grid-template-columns: minmax(0, 1fr); }
+.score-add .document-input .muted, .score-add .document-input .error { max-width: 100%; overflow-wrap: anywhere; }
+.score-add input[type="file"] { width: 100%; min-width: 0; max-width: 100%; height: auto; padding: 6px 10px; font-size: 12px; }
+.score-add-details { margin-top: 0; }
+.score-add-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .skeleton { display: inline-block; width: 52px; height: 20px; border-radius: 99px; background: linear-gradient(90deg, var(--hover) 25%, var(--track) 50%, var(--hover) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
 .progress { --c: #a8a29a; --pct: 0%; width: 240px; max-width: 100%; }
@@ -544,7 +577,6 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .upload-status-hint { margin-top: 10px; color: var(--muted); }
 .upload-status-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .upload-status-actions .link { color: var(--upload-color); }
-.score-add .upload-status { flex-basis: 100%; }
 @keyframes upload-progress { from { transform: translateX(0); } to { transform: translateX(150%); } }
 @media (prefers-reduced-motion: reduce) { .upload-status-step--active .upload-status-track > span { animation: none; } }
 .material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }

@@ -480,6 +480,31 @@ describe('focused library', () => {
     await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf', upsert: true }))
   })
 
+  it('distinguishes saved scores from a new score and shows upload progress in its form', async () => {
+    let finish!: (result: { error: null }) => void
+    mocks.upload.mockReturnValueOnce(new Promise((resolve) => { finish = resolve }))
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    const saved = screen.getByRole('list', { name: 'Saved scores for Romance' })
+    expect(within(saved).getByText('Score 1')).toBeTruthy()
+    expect(within(saved).getByText('Saved · 2 pages')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: '+ Add score' }))
+    const form = screen.getByRole('form', { name: 'Add a score to Romance' })
+    expect(within(form).getByText('Your saved scores will stay unchanged.')).toBeTruthy()
+    expect(within(form).queryByText('Score 1')).toBeNull()
+    await user.upload(within(form).getByLabelText('PDF for Romance'), new File(['pdf'], 'new-score.pdf', { type: 'application/pdf' }))
+    await user.click(within(form).getByRole('button', { name: 'Add score' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledOnce())
+    expect(within(form).getByRole('status').textContent).toContain('Uploading new score')
+    expect(within(form).getByRole('progressbar').getAttribute('aria-label')).toContain('Uploading PDF')
+    expect(within(form).getByText('“new-score.pdf”')).toBeTruthy()
+    expect(within(saved).getByText('Score 1')).toBeTruthy()
+    await act(async () => finish({ error: null }))
+    expect(await screen.findByText('Score uploaded and saved.')).toBeTruthy()
+    expect(within(saved).getByText('Score 2')).toBeTruthy()
+  })
+
   it('keeps a scanned score and its upload identity on failure and retry', async () => {
     mocks.scannerAvailable.mockReturnValue(true)
     const pdf = new File(['%PDF-'], 'document-scan.pdf', { type: 'application/pdf' })
@@ -499,7 +524,9 @@ describe('focused library', () => {
     await user.click(screen.getByText('Romance', { selector: 'summary strong' }))
     await act(async () => finish({ error: { message: 'Connection lost' } }))
     await user.click(screen.getByText('Romance', { selector: 'summary strong' }))
-    expect((await screen.findByRole('alert')).textContent).toContain('Connection lost')
+    const form = screen.getByRole('form', { name: 'Add a score to Romance' })
+    expect((await within(form).findByRole('alert')).textContent).toContain('Connection lost')
+    expect(within(form).getByRole('button', { name: 'Retry upload' })).toBeTruthy()
     expect(screen.getByText('document-scan.pdf')).toBeTruthy()
     const firstPath = mocks.upload.mock.calls[0][0]
     await user.click(screen.getByRole('button', { name: 'Retry upload' }))
