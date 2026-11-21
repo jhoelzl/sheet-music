@@ -83,11 +83,11 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
         ))}
       </ul>
       {adding ? (
-        <form className="score-add" onSubmit={submit} aria-labelledby={formHeadingId}>
-          <div className="score-add-heading">
-            <span className="score-add-icon" aria-hidden="true">+</span>
+        <form className="document-add" onSubmit={submit} aria-labelledby={formHeadingId}>
+          <div className="document-add-heading">
+            <span className="document-add-icon" aria-hidden="true">+</span>
             <div>
-              <span className="score-add-kicker">New score</span>
+              <span className="document-add-kicker">New score</span>
               <h4 id={formHeadingId}>Add a score to {p.title}</h4>
               <p>Your saved scores will stay unchanged.</p>
             </div>
@@ -100,20 +100,20 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
               clearForm()
             }}>Cancel</button>
           </UploadStatus>}
-          {file && (lib.uploadingId === p.id || uploadError) && <div className="score-add-file"><span>{lib.uploadingId === p.id ? 'Uploading document' : 'Selected document'}</span><strong>“{file.name}”</strong></div>}
-          <div className="score-add-section" hidden={attemptId !== null}>
-            <span className="score-add-step">1 <span>Choose a document</span></span>
+          {file && (lib.uploadingId === p.id || uploadError) && <div className="document-add-file"><span>{lib.uploadingId === p.id ? 'Uploading document' : 'Selected document'}</span><strong>“{file.name}”</strong></div>}
+          <div className="document-add-section" hidden={attemptId !== null}>
+            <span className="document-add-step">1 <span>Choose a document</span></span>
             <DocumentInput label={`PDF for ${p.title}`} file={file} disabled={attemptId !== null} onChange={setFile} onProcessingChange={setProcessingPhotos} />
           </div>
-          <div className="score-add-section" hidden={attemptId !== null}>
-            <span className="score-add-step">2 <span>Score details</span></span>
-            <div className="score-add-details">
+          <div className="document-add-section" hidden={attemptId !== null}>
+            <span className="document-add-step">2 <span>Score details</span></span>
+            <div className="document-add-details">
               <div className="score-field"><span>Key</span><KeySelect label={`Key for new score of ${p.title}`} value={key} onChange={setKey} disabled={attemptId !== null} /></div>
               <div className="score-field"><span>Tags</span><ScoreTags label={`Tags for new score of ${p.title}`} tags={tags} suggestions={lib.allScoreTags}
                 disabled={attemptId !== null} onChange={setTags} /></div>
             </div>
           </div>
-          {!uploadError && <div className="score-add-actions">
+          {!uploadError && <div className="document-add-actions">
             <button type="submit" className="btn primary" disabled={!file || processingPhotos || lib.uploadingId !== null}>{lib.uploadingId === p.id ? 'Uploading…' : 'Add score'}</button>
             <button type="button" className="link" disabled={lib.uploadingId === p.id} onClick={() => {
               if (attemptId && !window.confirm('The previous request may still complete. Check the score list before starting over. Discard this upload?')) return
