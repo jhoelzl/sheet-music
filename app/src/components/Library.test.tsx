@@ -229,6 +229,48 @@ describe('focused library', () => {
     expect(screen.getByText('No match', { selector: 'summary strong' })).toBeTruthy()
   })
 
+  it('filters missing links, scores, score keys and score tags independently', async () => {
+    mocks.pieces = [
+      { id: 'p1', composer_id: 'c1', title: 'No score or music', play_progress: 0, links: [] },
+      { id: 'p2', composer_id: 'c1', title: 'YouTube only', play_progress: 0, links: [{ type: 'youtube', url: 'https://youtube.com/watch?v=1' }] },
+      { id: 'p3', composer_id: 'c1', title: 'Spotify complete', play_progress: 0, links: [{ type: 'spotify', url: 'https://open.spotify.com/track/1' }] },
+      { id: 'p4', composer_id: 'c1', title: 'Missing key', play_progress: 0, links: [{ type: 'instagram', url: 'https://instagram.com/example' }] },
+      { id: 'p5', composer_id: 'c1', title: 'Missing tags', play_progress: 0, links: [{ type: 'youtube', url: 'https://youtube.com/watch?v=2' }] },
+      { id: 'p6', composer_id: 'c1', title: 'Mixed scores', play_progress: 100, links: [{ type: 'spotify', url: 'https://open.spotify.com/track/2' }] },
+      { id: 'p7', composer_id: 'c1', title: 'Invalid music link', play_progress: 0, links: [{ type: 'youtube', url: 'javascript:alert(1)' }] },
+    ]
+    mocks.scores = [
+      { id: 's3', piece_id: 'p3', pdf_path: '3.pdf', musical_key: 'C major', tags: ['piano'], position: 0 },
+      { id: 's4', piece_id: 'p4', pdf_path: '4.pdf', musical_key: ' ', tags: ['guitar'], position: 0 },
+      { id: 's5', piece_id: 'p5', pdf_path: '5.pdf', musical_key: 'C major', tags: [], position: 0 },
+      { id: 's6a', piece_id: 'p6', pdf_path: '6a.pdf', musical_key: 'C major', tags: ['piano'], position: 0 },
+      { id: 's6b', piece_id: 'p6', pdf_path: '6b.pdf', musical_key: null, tags: [], position: 1 },
+      { id: 's7', piece_id: 'p7', pdf_path: '7.pdf', musical_key: 'C major', tags: ['piano'], position: 0 },
+    ]
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('No score or music', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Filters' }))
+    const missing = screen.getByRole('group', { name: 'Filter missing data' })
+    const shown = () => screen.queryAllByText(/.*/, { selector: 'summary strong' }).map((element) => element.textContent).sort()
+
+    await user.click(within(missing).getByRole('button', { name: 'No YouTube or Spotify' }))
+    expect(shown()).toEqual(['Invalid music link', 'Missing key', 'No score or music'])
+    expect(screen.getByRole('button', { name: 'Filters (1)' })).toBeTruthy()
+    await user.click(within(missing).getByRole('button', { name: 'No scores' }))
+    expect(shown()).toEqual(['No score or music', 'YouTube only'])
+    await user.click(within(missing).getByRole('button', { name: 'Score missing key' }))
+    expect(shown()).toEqual(['Missing key', 'Mixed scores'])
+    await user.click(within(missing).getByRole('button', { name: 'Score missing tags' }))
+    expect(shown()).toEqual(['Missing tags', 'Mixed scores'])
+    await user.click(within(screen.getByRole('group', { name: 'Filter pieces' })).getByRole('button', { name: 'Can fully play (100%)' }))
+    expect(shown()).toEqual(['Mixed scores'])
+    expect(screen.getByRole('button', { name: 'Filters (2)' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(shown()).toHaveLength(7)
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeTruthy()
+  })
+
   it('finds pieces by a substring and ignores accents', async () => {
     const user = userEvent.setup()
     render(<TestLibrary />)

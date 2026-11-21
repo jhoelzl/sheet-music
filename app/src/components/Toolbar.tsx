@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import type { Library } from '../hooks/useLibrary'
 import { INSTRUMENTS } from '../lib/instruments'
-import { FILTERS, SORTS, VIEWS } from '../lib/sorting'
+import { FILTERS, MISSING_DATA_FILTERS, SORTS, VIEWS } from '../lib/sorting'
 import type { SortKey, View } from '../lib/sorting'
 
 export function Toolbar({ lib }: { lib: Library }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const { search, setSearch, view, setView, sort, setSort, filtering, clearFilters } = lib
-  const { instrumentFilter, setInstrumentFilter, filter, setFilter, filterTags, tagFilter, setTagFilter } = lib
-  const activeFilters = Number(instrumentFilter !== 'all') + Number(filter !== 'all') + Number(tagFilter !== null)
+  const { instrumentFilter, setInstrumentFilter, filter, setFilter, missingDataFilter, setMissingDataFilter, filterTags, tagFilter, setTagFilter } = lib
+  const activeFilters = Number(instrumentFilter !== 'all') + Number(filter !== 'all') + Number(missingDataFilter !== 'all') + Number(tagFilter !== null)
   return (
     <>
       <div className="toolbar">
@@ -45,6 +45,13 @@ export function Toolbar({ lib }: { lib: Library }) {
           <div className="filter-bar" role="group" aria-label="Filter pieces">
             {FILTERS.map((f) => (
               <button key={f.value} type="button" className={`filter-pill${filter === f.value ? ' active' : ''}`} aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>{f.label}</button>
+            ))}
+          </div>
+          <div className="filter-bar" role="group" aria-label="Filter missing data">
+            <span className="filter-label">Missing data</span>
+            {MISSING_DATA_FILTERS.map((item) => (
+              <button key={item.value} type="button" className={`filter-pill${missingDataFilter === item.value ? ' active' : ''}`}
+                aria-pressed={missingDataFilter === item.value} onClick={() => setMissingDataFilter(item.value)}>{item.label}</button>
             ))}
           </div>
           {filterTags.length > 0 && (

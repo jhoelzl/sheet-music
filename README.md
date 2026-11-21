@@ -10,6 +10,7 @@ When adding a piece, a score to an existing piece, or teaching material, choose 
 
 For score tags, use **Choose existing tag** to reuse a custom tag, or type a new one.
 The Library tag filter matches tags on pieces as well as tags on any of their scores.
+Missing-data filters find pieces with neither a YouTube nor a Spotify link, without scores, or with at least one score missing a key or tags. Pieces with no scores are listed only by the missing-scores filter, not by the score key or tag filters.
 
 The **Videos** page shows YouTube links from the library. Turn on random order to shuffle the feed, shuffle again for a new order, or turn it off to return to the original order.
 
