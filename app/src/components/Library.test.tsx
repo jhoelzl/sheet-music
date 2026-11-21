@@ -363,7 +363,106 @@ describe('focused library', () => {
     fireEvent.change(screen.getByLabelText('Camera photo'), { target: { files: [new File(['photo'], 'one.jpg', { type: 'image/jpeg' })] } })
     await screen.findByText('1 photo in PDF')
     await user.click(screen.getByRole('button', { name: 'Add piece' }))
-    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf', upsert: true }))
+  })
+
+  it('retains the document and retries a new piece score without creating another piece', async () => {
+    mocks.scannerAvailable.mockReturnValue(true)
+    mocks.scanDocument.mockResolvedValueOnce(new File(['pdf'], 'scan.pdf', { type: 'application/pdf' }))
+    mocks.upload.mockResolvedValueOnce({ error: { message: 'Connection lost' } })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search composers for new piece' }), 'clara{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'New scan')
+    await user.click(screen.getByRole('button', { name: 'Scan document' }))
+    await screen.findByText('scan.pdf')
+    await user.click(screen.getByRole('button', { name: 'Add piece' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('The piece was saved')
+    expect(screen.getByText('scan.pdf')).toBeTruthy()
+    expect((screen.getByLabelText('Title') as HTMLInputElement).disabled).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }))
+    expect((await screen.findByRole('status')).textContent).toContain('Piece and score saved')
+    expect(mocks.insert.mock.calls.filter(([table]) => table === 'sm_pieces')).toHaveLength(1)
+    expect(mocks.upload.mock.calls[0][0]).toBe(mocks.upload.mock.calls[1][0])
+    expect(mocks.scanDocument).toHaveBeenCalledOnce()
+    expect(screen.queryByLabelText('Title')).toBeNull()
+  })
+
+  it('reports a composer link failure even when the new score is saved', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search composers for new piece' }), 'clara{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'Partial save')
+    await user.upload(screen.getByLabelText('PDF score (optional)'), new File(['pdf'], 'score.pdf', { type: 'application/pdf' }))
+    const from = mocks.from.getMockImplementation()!
+    mocks.from.mockImplementation((table: string) => {
+      const source = from(table)
+      return table === 'sm_piece_composers' ? { ...source, insert: () => Promise.resolve({ error: { message: 'Link failed' } }) } : source
+    })
+    await user.click(screen.getByRole('button', { name: 'Add piece' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Piece and score saved, but composer links need attention')
+    expect(alert.textContent).toContain('Link failed')
+    expect(screen.queryByText('Piece and score saved', { exact: true })).toBeNull()
+    expect(screen.queryByLabelText('Title')).toBeNull()
+  })
+
+  it('retries an unconfirmed new piece score save using the same identity', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search composers for new piece' }), 'clara{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'Unconfirmed score')
+    await user.upload(screen.getByLabelText('PDF score (optional)'), new File(['pdf'], 'score.pdf', { type: 'application/pdf' }))
+    mocks.holdScoreSave = true
+    vi.useFakeTimers()
+    await act(async () => {
+      fireEvent.submit(screen.getByLabelText('Title').closest('form')!)
+      await vi.dynamicImportSettled()
+      for (let i = 0; i < 10; i++) await Promise.resolve()
+    })
+    expect(screen.getByRole('progressbar').getAttribute('aria-label')).toContain('Saving score')
+    await act(async () => { await vi.advanceTimersByTimeAsync(90_000) })
+    vi.useRealTimers()
+    expect(screen.getByRole('alert').textContent).toContain('timed out')
+    expect(mocks.remove).not.toHaveBeenCalled()
+    mocks.holdScoreSave = false
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }))
+    expect((await screen.findByRole('status')).textContent).toContain('Piece and score saved')
+    expect(mocks.pieces.filter((piece) => piece.id === 'p-new')).toHaveLength(1)
+    expect(mocks.scores.filter((score) => score.piece_id === 'p-new')).toHaveLength(1)
+    expect(mocks.upload.mock.calls[0][0]).toBe(mocks.upload.mock.calls[1][0])
+  })
+
+  it('prevents an automatic retry when creating the piece times out', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search composers for new piece' }), 'clara{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'Unconfirmed piece')
+    await user.upload(screen.getByLabelText('PDF score (optional)'), new File(['pdf'], 'score.pdf', { type: 'application/pdf' }))
+    mocks.from.mockImplementationOnce(() => ({
+      insert: (values: unknown) => {
+        mocks.insert('sm_pieces', values)
+        return { select: () => ({ single: () => new Promise(() => {}) }) }
+      },
+    }))
+    vi.useFakeTimers()
+    await act(async () => {
+      fireEvent.submit(screen.getByLabelText('Title').closest('form')!)
+      await vi.advanceTimersByTimeAsync(90_000)
+    })
+    vi.useRealTimers()
+    expect(screen.getByRole('alert').textContent).toContain('Check the library before starting over')
+    expect(screen.queryByRole('button', { name: 'Retry upload' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Start over' })).toBeTruthy()
+    expect(mocks.insert.mock.calls.filter(([table]) => table === 'sm_pieces')).toHaveLength(1)
   })
 
   it('uploads a scanned PDF as a score for an existing piece', async () => {

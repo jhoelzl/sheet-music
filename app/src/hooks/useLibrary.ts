@@ -5,6 +5,7 @@ import { supabase } from '../supabase'
 import type { Composer, Instrument, Piece, PieceLink, PiecePatch, PieceScore, PracticeLog, TeachingMaterial } from '../supabase'
 import { countPdfPages } from '../lib/pdf'
 import { saveUploadRecord, UploadCleanupError, uploadDocument, uploadErrorMessage, uploadStep } from '../lib/documentUpload'
+import type { UploadStage } from '../lib/documentUpload'
 import { backupFileName, buildBackup, downloadBlob, materialFileName, scoreFileName } from '../lib/backup'
 import { createZip } from '../lib/zip'
 import type { ZipEntry } from '../lib/zip'
@@ -22,6 +23,8 @@ export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?
 export type Panel = 'composer' | 'piece' | null
 export type Preview = { id: string; pieceId: string | null; title: string; url: string | null; pages: number | null; error: string | null }
 export type BrowseScore = { pieceId: string; scoreId: string }
+type PieceUploadStatus = { state: 'pending' | 'success' | 'error'; stage: UploadStage; title: string; detail?: string }
+type PieceScoreAttempt = { pieceId: string; scoreId: string; linkError: string | null }
 export const TABLE_COLUMNS = ['composer', 'instruments', 'tags', 'status', 'difficulty', 'rating', 'pages', 'practiced'] as const
 export type TableColumnId = (typeof TABLE_COLUMNS)[number]
 export type Library = ReturnType<typeof useLibrary>
@@ -106,7 +109,6 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [draftComposer, setDraftComposer] = useState('')
   const [openLink, setOpenLink] = useState<string | null>(null)
   const [uploadingId, setUploadingId] = useState<string | null>(null)
-  const [scoreUploadStage, setScoreUploadStage] = useState('')
   const uploadingScore = useRef(false)
   const uncertainScoreUploads = useRef(new Set<string>())
   const [savingScoreIds, setSavingScoreIds] = useState<Set<string>>(new Set())
@@ -133,6 +135,11 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [file, setFile] = useState<File | null>(null)
   const [pieceSaving, setPieceSaving] = useState(false)
   const pieceSavingRef = useRef(false)
+  const [pieceUploadStatus, setPieceUploadStatus] = useState<PieceUploadStatus | null>(null)
+  const pieceUploadStage = useRef<UploadStage>({ phase: 'prepare', message: 'Saving piece…' })
+  const [pieceScoreAttempt, setPieceScoreAttempt] = useState<PieceScoreAttempt | null>(null)
+  const [pieceSaveUncertain, setPieceSaveUncertain] = useState(false)
+  const uncertainNewPieceScores = useRef(new Set<string>())
   const [panel, setPanel] = useState<Panel>(null)
 
   const applyDefaults = (next: UserSettings, previous: UserSettings) => {
@@ -181,6 +188,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     // Missing table (migration 0010 not run yet) just leaves the calendar empty.
     const l = await supabase.from('sm_practice_log').select('id, piece_id, practiced_on').order('practiced_on', { ascending: false }).limit(5000)
     setLogs(l.data ?? [])
+    return !(c.error || p.error || pc.error || sc.error)
   }, [notify])
 
   useEffect(() => { void load() }, [load])
@@ -221,63 +229,105 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     }
   }
 
-  /** Upload the add-form's optional PDF and store it as the piece's first score. */
-  const saveNewScore = async (pieceId: string): Promise<{ error: string | null }> => {
-    if (!file) return { error: null }
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return { error: 'You must be signed in to upload a score.' }
-    const pdf_pages = await countPdfPages(file)
-    const pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
-    const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, file, { contentType: 'application/pdf' })
-    if (up.error) return { error: up.error.message }
-    const { error } = await supabase.from('sm_piece_scores').insert({
-      piece_id: pieceId,
-      pdf_path,
-      pdf_pages,
-      musical_key: newMusicalKey.trim() || null,
-      tags: newScoreTags,
-      position: 0,
-    })
-    if (error) {
-      await supabase.storage.from(PDF_STORAGE_BUCKET).remove([pdf_path])
-      return { error: error.message }
-    }
-    return { error: null }
-  }
-
   const addPiece = async (e: FormEvent) => {
     e.preventDefault()
     if (!newComposerIds.length) { notify('Select at least one composer.'); return }
-    if (pieceSavingRef.current) return
+    if (pieceSavingRef.current || pieceSaveUncertain) return
     pieceSavingRef.current = true
     setPieceSaving(true)
+    let attempt = pieceScoreAttempt
+    pieceUploadStage.current = { phase: 'prepare', message: attempt ? 'Reading PDF…' : 'Saving piece…' }
+    const reportStage = (next: UploadStage) => {
+      pieceUploadStage.current = next
+      setPieceUploadStatus({ state: 'pending', stage: next, title: 'Saving piece and score' })
+    }
+    if (file) reportStage(pieceUploadStage.current)
     try {
-      const { data, error } = await supabase.from('sm_pieces').insert({
-        title: title.trim(),
-        subtitle: newSubtitle.trim() || null,
-        composer_id: newComposerIds[0],
-        ...(newTags.length ? { tags: newTags } : {}),
-      }).select('id').single()
-      if (error || !data) {
-        notify(error?.message ?? 'Could not add piece.')
-        return
+      if (!attempt) {
+        const scoreId = file ? crypto.randomUUID() : ''
+        const request = supabase.from('sm_pieces').insert({
+          title: title.trim(),
+          subtitle: newSubtitle.trim() || null,
+          composer_id: newComposerIds[0],
+          ...(newTags.length ? { tags: newTags } : {}),
+        }).select('id').single()
+        let result
+        try {
+          result = file ? await uploadStep(request, 'Saving the piece') : await request
+        } catch (reason) {
+          if (file) setPieceSaveUncertain(true)
+          throw reason
+        }
+        if (result.error || !result.data) {
+          const message = result.error?.message ?? 'Could not add piece.'
+          if (file) {
+            const confirmedFailure = Boolean(result.error && /^\d{5}$/.test(result.error.code ?? ''))
+            if (!confirmedFailure) setPieceSaveUncertain(true)
+            setPieceUploadStatus({
+              state: 'error', stage: pieceUploadStage.current, title: confirmedFailure ? 'Piece not saved' : 'Piece save could not be confirmed',
+              detail: confirmedFailure ? message : `${message} Check the library before starting over; the request may still complete.`,
+            })
+          }
+          else notify(message)
+          return
+        }
+        const pieceId = result.data.id
+        if (file) {
+          attempt = { pieceId, scoreId, linkError: null }
+          setPieceScoreAttempt(attempt)
+          reportStage({ phase: 'prepare', message: 'Saving composers…' })
+        }
+        try {
+          const request = supabase.from('sm_piece_composers').insert(
+            newComposerIds.map((composer_id, position) => ({ piece_id: pieceId, composer_id, position })),
+          )
+          const { error } = file ? await uploadStep(request, 'Saving the composer list') : await request
+          if (error) throw error
+        } catch (reason) {
+          const linkError = uploadErrorMessage(reason)
+          if (attempt) {
+            attempt = { ...attempt, linkError }
+            setPieceScoreAttempt(attempt)
+          } else notify(`Piece saved, but its composer list could not be saved: ${linkError}`)
+        }
       }
-      const { error: linkError } = await supabase.from('sm_piece_composers').insert(
-        newComposerIds.map((composer_id, position) => ({ piece_id: data.id, composer_id, position })),
-      )
-      const { error: scoreError } = await saveNewScore(data.id)
-      await load()
-      // The piece exists now, so always reset the form even if a child insert failed;
-      // otherwise a second submit would create a duplicate.
+      if (file && attempt) {
+        reportStage({ phase: 'prepare', message: 'Reading PDF…' })
+        const pdf_pages = await uploadStep(countPdfPages(file), 'Reading the PDF')
+        const pdf_path = await uploadDocument(file, attempt.scoreId, '', reportStage)
+        reportStage({ phase: 'save', message: 'Saving score…' })
+        await saveUploadRecord(supabase.from('sm_piece_scores').upsert({
+          id: attempt.scoreId, piece_id: attempt.pieceId, pdf_path, pdf_pages,
+          musical_key: newMusicalKey.trim() || null, tags: newScoreTags, position: 0,
+        }, { onConflict: 'id', ignoreDuplicates: true }), pdf_path, attempt.scoreId, uncertainNewPieceScores.current, 'Saving the score')
+        reportStage({ phase: 'save', message: 'Refreshing library…' })
+        if (!await uploadStep(load(), 'Refreshing the library')) throw new Error('The score was saved, but the library could not be refreshed. Retry to confirm.')
+        uncertainNewPieceScores.current.delete(attempt.scoreId)
+        setPieceUploadStatus(attempt.linkError
+          ? { state: 'error', stage: pieceUploadStage.current, title: 'Piece and score saved, but composer links need attention', detail: `${attempt.linkError} Check the piece's composers in the library.` }
+          : { state: 'success', stage: pieceUploadStage.current, title: 'Piece and score saved', detail: `“${title.trim()}” is ready in your library.` })
+      } else {
+        await load()
+      }
       setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewScoreTags(['piano']); setNewTags([]); setPanel(null)
-      if (linkError) notify(`Piece saved, but its composer list could not be saved: ${linkError.message}`)
-      else if (scoreError) notify(`Piece saved, but its score could not be saved: ${scoreError}`)
+      setPieceScoreAttempt(null)
     } catch (error) {
-      notify(error instanceof Error ? error.message : 'Could not add piece.')
+      if (file) {
+        if (error instanceof UploadCleanupError && attempt) setPieceScoreAttempt({ ...attempt, scoreId: crypto.randomUUID() })
+        const prefix = attempt ? 'The piece was saved, but the score could not be confirmed. Retry without scanning again.' : 'The piece could not be confirmed. Check the library before starting over; the request may still complete.'
+        setPieceUploadStatus({ state: 'error', stage: pieceUploadStage.current, title: 'Save needs attention', detail: `${prefix} ${uploadErrorMessage(error)}${attempt?.linkError ? ` Composer links also need attention: ${attempt.linkError}` : ''}` })
+      } else notify(uploadErrorMessage(error))
     } finally {
       pieceSavingRef.current = false
       setPieceSaving(false)
     }
+
+  }
+
+  const discardPieceUpload = () => {
+    if (!window.confirm('The previous request may still complete. Check the library before starting over. Discard this upload?')) return
+    setPieceScoreAttempt(null); setPieceSaveUncertain(false); setPieceUploadStatus(null)
+    setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewScoreTags(['piano']); setNewTags([]); setPanel(null)
   }
 
   const practicedToday = new Set(logs.filter((l) => l.practiced_on === todayISO()).map((l) => l.piece_id))
@@ -392,22 +442,22 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   }
 
   /** Upload a PDF and add it as a new score of the piece. */
-  const addScore = async (p: Piece, f: File, musical_key: string | null, tags: string[], id: string): Promise<{ error: string | null; newAttempt?: boolean }> => {
+  const addScore = async (p: Piece, f: File, musical_key: string | null, tags: string[], id: string, onStage: (stage: UploadStage) => void): Promise<{ error: string | null; newAttempt?: boolean }> => {
     if (uploadingScore.current) return { error: 'Another score is being uploaded. Please wait.' }
     uploadingScore.current = true
     setUploadingId(p.id)
     try {
-      setScoreUploadStage('Reading PDF…')
+      onStage({ phase: 'prepare', message: 'Reading PDF…' })
       const pdf_pages = await uploadStep(countPdfPages(f), 'Reading the PDF')
-      const pdf_path = await uploadDocument(f, id, '', setScoreUploadStage)
+      const pdf_path = await uploadDocument(f, id, '', onStage)
       const position = scoresOf(p).reduce((max, score) => Math.max(max, score.position), -1) + 1
-      setScoreUploadStage('Saving score…')
+      onStage({ phase: 'save', message: 'Saving score…' })
       await saveUploadRecord(supabase.from('sm_piece_scores').upsert(
         { id, piece_id: p.id, pdf_path, pdf_pages, musical_key, tags, position },
         { onConflict: 'id', ignoreDuplicates: true },
       ), pdf_path, id, uncertainScoreUploads.current, 'Saving the score')
-      setScoreUploadStage('Refreshing library…')
-      await uploadStep(load(), 'Refreshing the library')
+      onStage({ phase: 'save', message: 'Refreshing library…' })
+      if (!await uploadStep(load(), 'Refreshing the library')) throw new Error('The score was saved, but the library could not be refreshed. Retry to confirm.')
       uncertainScoreUploads.current.delete(id)
       return { error: null }
     } catch (reason) {
@@ -415,7 +465,6 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     } finally {
       uploadingScore.current = false
       setUploadingId(null)
-      setScoreUploadStage('')
     }
   }
 
@@ -689,12 +738,12 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     // data
     composers, pieces, logs, toasts, preview, browseScores, browseMaterials, visible, flat, tableRows, allTags, allScoreTags, filterTags, practicedToday,
     // ui state
-    sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, scoreUploadStage, savingScoreIds, hiddenIds,
+    sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, savingScoreIds, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
     search, setSearch, filter, setFilter, missingDataFilter, setMissingDataFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, applyDefaults, composerNameOf, composerIdsOf, composerNamesOf,
     // new-item form state
-    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreTags, setNewScoreTags, newTags, setNewTags, pieceSaving,
+    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreTags, setNewScoreTags, newTags, setNewTags, pieceSaving, pieceUploadStatus, setPieceUploadStatus, pieceScoreAttempt, pieceSaveUncertain, discardPieceUpload,
     // actions
     dismissToast, closePdf, pdfUrl, openMaterialPdf, openBrowseMaterialPdf, openBrowsePdf, startScoreBrowse, recordPdfPages, recordMaterialPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, addScore, updateScore, removeScore, removeComposer, startEditComposer, commitComposerEdit, openPdf,

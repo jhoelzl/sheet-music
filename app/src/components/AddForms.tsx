@@ -19,28 +19,29 @@ export function AddForms({ lib }: { lib: Library }) {
   }
   if (panel === 'piece') {
     const { newComposerIds, setNewComposerIds, pieceSaving } = lib
+    const locked = pieceSaving || Boolean(lib.pieceScoreAttempt) || lib.pieceSaveUncertain
     return (
-      <form className="panel piece-add-form" onSubmit={(e) => { if (processingPhotos) e.preventDefault(); else void lib.addPiece(e) }} aria-busy={pieceSaving || processingPhotos}>
+      <form id="piece-add-form" className="panel piece-add-form" onSubmit={(e) => { if (processingPhotos) e.preventDefault(); else void lib.addPiece(e) }} aria-busy={pieceSaving || processingPhotos}>
         <div className="field-group">
           <span>Composers</span>
-          <ComposerPicker composers={composers} selectedIds={newComposerIds} label="Composers for new piece" disabled={pieceSaving} onChange={setNewComposerIds} />
+          <ComposerPicker composers={composers} selectedIds={newComposerIds} label="Composers for new piece" disabled={locked} onChange={setNewComposerIds} />
         </div>
-        <label className="grow">Title<input autoFocus placeholder="Piece title" value={lib.title} onChange={(e) => lib.setTitle(e.target.value)} disabled={pieceSaving} required /></label>
-        <label>Subtitle<input placeholder="Optional subtitle" value={lib.newSubtitle} onChange={(e) => lib.setNewSubtitle(e.target.value)} disabled={pieceSaving} /></label>
+        <label className="grow">Title<input autoFocus placeholder="Piece title" value={lib.title} onChange={(e) => lib.setTitle(e.target.value)} disabled={locked} required /></label>
+        <label>Subtitle<input placeholder="Optional subtitle" value={lib.newSubtitle} onChange={(e) => lib.setNewSubtitle(e.target.value)} disabled={locked} /></label>
         <div className="field-group">
           <span>Tags</span>
-          <TagInput tags={lib.newTags} suggestions={lib.allTags} label="Tags for new piece" disabled={pieceSaving} onChange={lib.setNewTags} />
+          <TagInput tags={lib.newTags} suggestions={lib.allTags} label="Tags for new piece" disabled={locked} onChange={lib.setNewTags} />
         </div>
-        <DocumentInput label="PDF score (optional)" file={lib.file} disabled={pieceSaving} onChange={lib.setFile} onProcessingChange={setProcessingPhotos} />
+        <DocumentInput label="PDF score (optional)" file={lib.file} disabled={locked} onChange={lib.setFile} onProcessingChange={setProcessingPhotos} />
         {lib.file && <>
-          <label>Key<KeySelect value={lib.newMusicalKey} onChange={lib.setNewMusicalKey} disabled={pieceSaving} /></label>
+          <label>Key<KeySelect value={lib.newMusicalKey} onChange={lib.setNewMusicalKey} disabled={locked} /></label>
           <div className="field-group">
             <span>Score tags</span>
             <ScoreTags label="Tags for the new score" tags={lib.newScoreTags} suggestions={lib.allScoreTags}
-              disabled={pieceSaving} onChange={lib.setNewScoreTags} />
+              disabled={locked} onChange={lib.setNewScoreTags} />
           </div>
         </>}
-        <button className="btn primary" type="submit" disabled={pieceSaving || processingPhotos}>{pieceSaving ? 'Saving…' : 'Add piece'}</button>
+        {!lib.pieceSaveUncertain && (!lib.pieceScoreAttempt || pieceSaving) && <button className="btn primary" type="submit" disabled={pieceSaving || processingPhotos}>{pieceSaving ? 'Saving…' : 'Add piece'}</button>}
       </form>
     )
   }

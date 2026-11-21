@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { Piece } from '../supabase'
+import type { UploadStage } from '../lib/documentUpload'
 import type { Library } from '../hooks/useLibrary'
 import { PdfIcon } from './icons'
 import { KeySelect } from './KeySelect'
@@ -19,6 +20,7 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
   const [tags, setTags] = useState<string[]>(['piano'])
   const [attemptId, setAttemptId] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState('')
+  const [uploadStage, setUploadStage] = useState<UploadStage | null>(null)
   const [uploaded, setUploaded] = useState(false)
 
   const clearForm = () => {
@@ -32,7 +34,7 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
     setAttemptId(id)
     setUploadError('')
     setUploaded(false)
-    void lib.addScore(p, file, key.trim() || null, tags, id).then((result) => {
+    void lib.addScore(p, file, key.trim() || null, tags, id, setUploadStage).then((result) => {
       if (result.error) {
         if (result.newAttempt) setAttemptId(crypto.randomUUID())
         setUploadError(result.error)
@@ -44,7 +46,7 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
   return (
     <div className="piece-scores">
       <span className="piece-scores-label">Scores</span>
-      {uploaded && <p role="status">Score uploaded and saved.</p>}
+      {uploaded && <UploadStatus state="success" title="Score uploaded and saved." />}
       {scores.length === 0 && <p className="muted">No PDFs attached yet.</p>}
       <ul className="score-list">
         {scores.map((score, index) => (
@@ -68,13 +70,19 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
           <KeySelect label={`Key for new score of ${p.title}`} value={key} onChange={setKey} disabled={attemptId !== null} />
           <ScoreTags label={`Tags for new score of ${p.title}`} tags={tags} suggestions={lib.allScoreTags}
             disabled={attemptId !== null} onChange={setTags} />
-          <button type="submit" className="btn" disabled={!file || processingPhotos || lib.uploadingId !== null}>{lib.uploadingId === p.id ? 'Uploading…' : uploadError ? 'Retry upload' : 'Add score'}</button>
-          <button type="button" className="link" disabled={lib.uploadingId === p.id} onClick={() => {
+          {!uploadError && <button type="submit" className="btn" disabled={!file || processingPhotos || lib.uploadingId !== null}>{lib.uploadingId === p.id ? 'Uploading…' : 'Add score'}</button>}
+          {!uploadError && <button type="button" className="link" disabled={lib.uploadingId === p.id} onClick={() => {
             if (attemptId && !window.confirm('The previous request may still complete. Check the score list before starting over. Discard this upload?')) return
             clearForm()
-          }}>Cancel</button>
-          {lib.uploadingId === p.id && <UploadStatus key={lib.scoreUploadStage} message={lib.scoreUploadStage} />}
-          {uploadError && <p className="material-upload-error" role="alert">Upload failed: {uploadError} Your document is still selected; retry without scanning again.</p>}
+          }}>Cancel</button>}
+          {lib.uploadingId === p.id && <UploadStatus key={uploadStage?.message} state="pending" stage={uploadStage} title="Uploading score" />}
+          {uploadError && <UploadStatus state="error" stage={uploadStage} title="Upload failed" detail={`${uploadError} Your document is still selected; retry without scanning again.`}>
+            <button type="submit" className="btn primary" disabled={lib.uploadingId !== null}>Retry upload</button>
+            <button type="button" className="link" onClick={() => {
+              if (!window.confirm('The previous request may still complete. Check the score list before starting over. Discard this upload?')) return
+              clearForm()
+            }}>Cancel</button>
+          </UploadStatus>}
         </form>
       ) : (
         <button type="button" className="btn" onClick={() => { setUploaded(false); setAdding(true) }}>+ Add score</button>

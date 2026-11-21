@@ -522,10 +522,31 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .teaching-materials-heading p { font-size: 13px; }
 .materials-count { margin-left: 5px; color: var(--muted); font-size: 12px; font-weight: 500; }
 .teaching-materials .panel { margin: 0 0 14px; padding: 14px; flex-wrap: wrap; }
-.document-upload-status, .material-upload-error, .material-upload-confirmation { margin: 0 0 14px; font-size: 13px; overflow-wrap: anywhere; }
-.document-upload-status { color: var(--muted); }
-.material-upload-error { color: var(--danger); }
-.material-upload-confirmation { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--accent); }
+.upload-status { --upload-color: var(--accent); --upload-bg: var(--accent-soft); --upload-border: var(--accent-line); width: 100%; margin: 0 0 16px; padding: 16px; overflow-wrap: anywhere; background: var(--upload-bg); border: 1px solid var(--upload-border); border-radius: 14px; }
+.upload-status--success { --upload-color: #167347; --upload-bg: #eaf8ef; --upload-border: #b6e2c6; }
+.upload-status--error { --upload-color: #b42332; --upload-bg: #fff0f1; --upload-border: #f3bfc5; }
+:root[data-theme="dark"] .upload-status--success { --upload-color: #70daa0; --upload-bg: #153429; --upload-border: #286849; }
+:root[data-theme="dark"] .upload-status--error { --upload-color: #ff9ea9; --upload-bg: #3b2027; --upload-border: #803c49; }
+.upload-status-heading { display: flex; align-items: flex-start; gap: 12px; }
+.upload-status-icon { display: grid; flex: 0 0 36px; width: 36px; height: 36px; place-items: center; border-radius: 11px; color: var(--upload-bg); background: var(--upload-color); font-size: 19px; font-weight: 800; }
+.upload-status-copy { min-width: 0; padding-top: 1px; }
+.upload-status-copy strong { color: var(--upload-color); font-size: 15px; }
+.upload-status-copy p, .upload-status-hint { margin-top: 4px; color: var(--text); font-size: 13px; line-height: 1.45; }
+.upload-status-steps { display: flex; gap: 6px; margin-top: 14px; }
+.upload-status-step { flex: 1; min-width: 0; color: var(--muted); font-size: 11px; font-weight: 600; }
+.upload-status-track { display: block; height: 7px; margin-bottom: 5px; overflow: hidden; border-radius: 99px; background: color-mix(in srgb, var(--upload-color) 20%, var(--surface)); }
+.upload-status-track > span { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--upload-color); }
+.upload-status-step--waiting .upload-status-track > span { display: none; }
+.upload-status-step--active .upload-status-track > span { width: 40%; animation: upload-progress 1.4s ease-in-out infinite alternate; }
+.upload-status-step--done, .upload-status-step--active, .upload-status-step--failed { color: var(--upload-color); }
+.upload-status--error .upload-status-step--done { color: var(--muted); }
+.upload-status--error .upload-status-step--done .upload-status-track > span { background: var(--muted); }
+.upload-status-hint { margin-top: 10px; color: var(--muted); }
+.upload-status-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.upload-status-actions .link { color: var(--upload-color); }
+.score-add .upload-status { flex-basis: 100%; }
+@keyframes upload-progress { from { transform: translateX(0); } to { transform: translateX(150%); } }
+@media (prefers-reduced-motion: reduce) { .upload-status-step--active .upload-status-track > span { animation: none; } }
 .material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }
 .material-content { min-width: 0; flex: 1; }
 .material-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }

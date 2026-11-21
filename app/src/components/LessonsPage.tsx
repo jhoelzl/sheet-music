@@ -6,6 +6,7 @@ import { useUrlOptional, useUrlString } from '../hooks/useUrlState'
 import { todayISO } from '../lib/dates'
 import { confirmDelete } from '../lib/confirmDelete'
 import { saveUploadRecord, UploadCleanupError, uploadDocument, uploadStep } from '../lib/documentUpload'
+import type { UploadStage } from '../lib/documentUpload'
 import { Markdown } from '../lib/markdown'
 import { supabase } from '../supabase'
 import type { Instrument, Lesson, LessonGroup, TeachingMaterial } from '../supabase'
@@ -51,7 +52,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [fileKey, setFileKey] = useState(0)
   const [processingPhotos, setProcessingPhotos] = useState(false)
   const [uploadingMaterial, setUploadingMaterial] = useState(false)
-  const [materialUploadStage, setMaterialUploadStage] = useState('')
+  const [materialUploadStage, setMaterialUploadStage] = useState<UploadStage | null>(null)
   const [materialAttemptId, setMaterialAttemptId] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState('')
   const [uploadedMaterialId, setUploadedMaterialId] = useState<string | null>(null)
@@ -320,7 +321,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       setUploadedMaterialId(null)
       try {
         const path = await uploadDocument(file, id, 'materials', setMaterialUploadStage)
-        setMaterialUploadStage('Saving teaching material…')
+        setMaterialUploadStage({ phase: 'save', message: 'Saving teaching material…' })
         let material = await saveUploadRecord(supabase.from('sm_teaching_materials')
           .upsert({ id, title: materialTitle.trim(), pdf_path: path, tags: newMaterialTags }, { onConflict: 'id', ignoreDuplicates: true })
           .select('id, title, pdf_path, tags').maybeSingle(), path, id, uncertainMaterialUploads.current, 'Saving the teaching material') as TeachingMaterial | null
@@ -344,7 +345,6 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
         throw reason
       } finally {
         setUploadingMaterial(false)
-        setMaterialUploadStage('')
       }
     }, setUploadError)
   }
@@ -446,24 +446,27 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               <button type="button" className="btn" disabled={!visibleMaterials.length || busy}
                 onClick={() => void lib.openMaterialPdf(visibleMaterials[0], visibleMaterials)}>Browse materials</button>
             </div>
-            <form className="panel" onSubmit={uploadMaterial}>
+            <form id="material-upload-form" className="panel" onSubmit={uploadMaterial}>
               <label className="grow">Material title<input required value={materialTitle} disabled={busy || materialAttemptId !== null} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
               <DocumentInput key={fileKey} label="PDF file" file={file} disabled={busy || materialAttemptId !== null} onChange={setFile} onProcessingChange={setProcessingPhotos} />
               <div className="field-group"><span>Tags</span>
                 <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy || materialAttemptId !== null} onChange={setNewMaterialTags} />
               </div>
-              <button type="submit" className="btn" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : uploadError && materialAttemptId ? 'Retry upload' : 'Upload PDF'}</button>
-              {materialAttemptId && !uploadingMaterial && <button type="button" className="link" onClick={() => {
-                if (!window.confirm('The previous request may still complete. Check the material list before starting over. Discard this upload?')) return
-                setMaterialAttemptId(null); setUploadError('')
-              }}>Start over</button>}
+              {(!uploadError || !materialAttemptId) && <button type="submit" className="btn" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : 'Upload PDF'}</button>}
             </form>
-            {uploadingMaterial && <UploadStatus key={materialUploadStage} message={`Uploading teaching material: ${materialUploadStage}`} />}
-            {uploadError && <p className="material-upload-error" role="alert">{uploadError} Your document is still selected; retry without scanning again.</p>}
-            {uploadedMaterial && <div className="material-upload-confirmation">
-              <p role="status">Uploaded “{uploadedMaterial.title}”.{materialTagFilter && !uploadedMaterial.tags.includes(materialTagFilter) ? ' Hidden by the current tag filter.' : ''}</p>
+            {uploadingMaterial && <UploadStatus key={materialUploadStage?.message} state="pending" stage={materialUploadStage} title="Uploading teaching material" />}
+            {uploadError && <UploadStatus state="error" stage={materialAttemptId ? materialUploadStage : null} title="Upload failed" detail={`${uploadError}${materialAttemptId ? ' Your document is still selected; retry without scanning again.' : ''}`}>
+              {materialAttemptId && <>
+                <button type="submit" form="material-upload-form" className="btn primary" disabled={busy}>Retry upload</button>
+                <button type="button" className="link" onClick={() => {
+                  if (!window.confirm('The previous request may still complete. Check the material list before starting over. Discard this upload?')) return
+                  setMaterialAttemptId(null); setUploadError('')
+                }}>Start over</button>
+              </>}
+            </UploadStatus>}
+            {uploadedMaterial && <UploadStatus state="success" title="Upload complete" detail={`Uploaded “${uploadedMaterial.title}”.${materialTagFilter && !uploadedMaterial.tags.includes(materialTagFilter) ? ' Hidden by the current tag filter.' : ''}`}>
               <button type="button" className="link" onClick={() => void lib.openMaterialPdf(uploadedMaterial, materials)}>Open material</button>
-            </div>}
+            </UploadStatus>}
             {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
               <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} disabled={Boolean(materialDraft)} onClick={() => setMaterialTagFilter(null)}>All tags</button>
               {filterTags.map((tag) => <button key={tag} type="button" className={`filter-pill${materialTagFilter === tag ? ' active' : ''}`}
