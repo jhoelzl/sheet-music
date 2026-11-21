@@ -3,8 +3,9 @@ import type { FormEvent } from 'react'
 import type { Instrument, Piece } from '../supabase'
 import type { Library } from '../hooks/useLibrary'
 import { INSTRUMENTS } from '../lib/instruments'
-import { CloseIcon, PdfIcon } from './icons'
+import { PdfIcon } from './icons'
 import { KeySelect } from './KeySelect'
+import { DeleteButton } from './DeleteButton'
 
 const labelOf = (value: Instrument | null) => INSTRUMENTS.find((item) => item.value === value)
 
@@ -51,8 +52,8 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
             {score.pdf_pages ? <span className="page-count">{score.pdf_pages} {score.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
             <button type="button" className="icon-btn" aria-label={`Open score ${index + 1} for ${p.title}`} title="Open this score"
               onClick={() => void lib.openPdf(p, score)}>{PdfIcon}</button>
-            <button type="button" className="icon-btn" aria-label={`Remove score ${index + 1} for ${p.title}`} title="Remove this score"
-              disabled={lib.uploadingId === p.id} onClick={() => lib.removeScore(p, score)}>{CloseIcon}</button>
+            <DeleteButton label={`Remove score ${index + 1} for ${p.title}`}
+              disabled={lib.uploadingId === p.id} onClick={() => lib.removeScore(p, score)} />
           </li>
         ))}
       </ul>

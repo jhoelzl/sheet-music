@@ -177,6 +177,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .meter.stars .rate.on { color: #f59e0b; }
 .icon-btn { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; padding: 0; width: 28px; height: 28px; margin: 0; color: var(--icon); background: none; border: 0; border-radius: 8px; }
 .icon-btn:hover { color: var(--danger); background: var(--danger-soft); }
+.delete-btn { min-width: 36px; min-height: 36px; }
 .icon-btn.edit:hover { color: var(--accent); background: var(--accent-soft); }
 
 /* Empty / error / auth */
@@ -493,7 +494,11 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .materials-count { margin-left: 5px; color: var(--muted); font-size: 12px; font-weight: 500; }
 .teaching-materials .panel { margin: 0 0 14px; padding: 14px; flex-wrap: wrap; }
 .material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }
+.material-content { min-width: 0; flex: 1; }
 .material-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.material-lessons { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 0 8px 8px; color: var(--muted); font-size: 12px; }
+.material-lessons ul { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0; margin: 0; list-style: none; }
+.material-lessons li { overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .lessons-layout { grid-template-columns: 1fr; }
   .lesson-groups-toolbar { align-items: flex-end; }

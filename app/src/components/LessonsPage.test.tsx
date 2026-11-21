@@ -325,6 +325,10 @@ describe('lessons', () => {
     await user.click(screen.getByRole('button', { name: 'Add lesson' }))
     await waitFor(() => expect(mocks.tables.sm_lessons).toHaveLength(2))
     expect((screen.getByLabelText('Title') as HTMLInputElement).value).toBe('Scales')
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await user.click(screen.getByRole('button', { name: 'Delete lesson' }))
+    expect(window.confirm).toHaveBeenCalledWith('Delete lesson "Scales" and its notes and links? Teaching materials and tunes will be kept.')
+    expect(mocks.tables.sm_lessons).toHaveLength(2)
     await user.click(screen.getByRole('button', { name: 'Delete lesson' }))
     await waitFor(() => expect(mocks.tables.sm_lessons).toHaveLength(1))
     expect(mocks.remove).not.toHaveBeenCalled()
@@ -337,13 +341,47 @@ describe('lessons', () => {
     const user = userEvent.setup()
     render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
     expect(await screen.findByRole('button', { name: 'Remove material Scales' })).toBeTruthy()
+    expect(screen.getByLabelText('Lessons using Scales').textContent).toContain('Guitar · 2026-11-18')
     await user.click(screen.getByRole('button', { name: /Previous/ }))
     await user.type(screen.getByRole('searchbox', { name: 'Search materials for previous' }), 'scale{Enter}')
     await waitFor(() => expect(mocks.tables.sm_lesson_materials).toHaveLength(2))
+    expect(screen.getByLabelText('Lessons using Scales').textContent).toContain('Previous · 2026-11-11')
     await user.click(screen.getByRole('button', { name: /Guitar/ }))
     await user.click(screen.getByRole('button', { name: 'Remove material Scales' }))
     await waitFor(() => expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l2', material_id: 'm1' }]))
+    expect(screen.getByLabelText('Lessons using Scales').textContent).not.toContain('Guitar')
+    expect(screen.getByLabelText('Lessons using Scales').textContent).toContain('Previous')
     expect(mocks.remove).not.toHaveBeenCalled()
+  })
+
+  it('shows material references even when their lessons are filtered out', async () => {
+    mocks.tables.sm_lessons[0].group_id = 'g1'
+    mocks.tables.sm_lesson_groups.push({ id: 'g2', teacher_name: 'Blair', instrument: 'piano' })
+    mocks.tables.sm_lessons.push({ id: 'l2', lesson_date: '2026-11-11', title: 'Piano', notes: '', group_id: 'g2' })
+    mocks.tables.sm_teaching_materials.push({ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: [] })
+    mocks.tables.sm_lesson_materials.push({ lesson_id: 'l2', material_id: 'm1' })
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await screen.findByLabelText('Notes (Markdown)')
+    await user.selectOptions(screen.getByLabelText('Show lessons for'), 'g1')
+    expect(screen.getByLabelText('Lessons using Scales').textContent).toContain('Piano · 2026-11-11')
+  })
+
+  it('asks before deleting teaching material and preserves it when cancelled', async () => {
+    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: [] }]
+    mocks.tables.sm_lesson_materials = [{ lesson_id: 'l1', material_id: 'm1' }]
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const remove = await screen.findByRole('button', { name: 'Delete teaching material Scales' })
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await user.click(remove)
+    expect(window.confirm).toHaveBeenCalledWith('Delete teaching material "Scales" and its PDF? It will also be removed from all lessons.')
+    expect(mocks.tables.sm_teaching_materials).toHaveLength(1)
+    expect(mocks.tables.sm_lesson_materials).toHaveLength(1)
+    expect(mocks.remove).not.toHaveBeenCalled()
+    await user.click(remove)
+    await waitFor(() => expect(mocks.tables.sm_teaching_materials).toHaveLength(0))
+    expect(mocks.remove).toHaveBeenCalledWith(['u1/scales.pdf'])
   })
 
   it('searches and links multiple materials, opens each, and unlinks only the chosen one', async () => {
