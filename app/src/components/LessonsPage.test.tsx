@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   photosToPdf: vi.fn(),
   scannerAvailable: vi.fn(),
   scanDocument: vi.fn(),
+  holdMaterialSave: false,
 }))
 vi.mock('../lib/photoPdf', () => ({ preparePhoto: mocks.preparePhoto, photosToPdf: mocks.photosToPdf }))
 vi.mock('../lib/documentScanner', () => ({ hasDocumentScanner: mocks.scannerAvailable, scanDocument: mocks.scanDocument }))
@@ -30,12 +31,14 @@ vi.mock('../supabase', () => ({
       let action = 'select'
       let values: Row = {}
       let returning = false
+      let ignoreDuplicates = false
       const filters: Record<string, unknown> = {}
       const execute = () => {
-        if (mocks.fail === `${table}:${action}`) return { data: null, error: { message: 'Database unavailable' } }
+        if (mocks.fail === `${table}:${action}`) return { data: null, error: { message: 'Database unavailable', code: '23514' } }
         const rows = mocks.tables[table]
         const matches = (row: Row) => Object.entries(filters).every(([key, value]) => row[key] === value)
         if (action === 'insert') {
+          if (ignoreDuplicates && rows.some((row) => row.id === values.id)) return { data: null, error: null }
           const row = { ...values, ...(!values.id && table !== 'sm_lesson_pieces' && table !== 'sm_lesson_materials' ? { id: `id-${rows.length + 1}` } : {}) }
           rows.push(row)
           return { data: row, error: null }
@@ -46,16 +49,25 @@ vi.mock('../supabase', () => ({
           return { data: returning ? updated[0] ?? null : null, error: null }
         }
         if (action === 'delete') mocks.tables[table] = rows.filter((row) => !matches(row))
-        return { data: action === 'select' ? rows.map((row) => ({ ...row })) : null, error: null }
+        return { data: action === 'select' ? rows.filter(matches).map((row) => ({ ...row })) : null, error: null }
       }
       const query = {
         select: () => { returning = true; return query },
         order: () => query,
         insert: (row: Row) => { action = 'insert'; values = row; return query },
+        upsert: (row: Row) => { action = 'insert'; values = row; ignoreDuplicates = true; return query },
         update: (row: Row) => { action = 'update'; values = row; return query },
         delete: () => { action = 'delete'; return query },
         eq: (key: string, value: unknown) => { filters[key] = value; return query },
-        single: async () => execute(),
+        single: async () => {
+          const result = execute()
+          return action === 'select' && Array.isArray(result.data) ? { ...result, data: result.data[0] ?? null } : result
+        },
+        maybeSingle: async () => {
+          const result = execute()
+          if (table === 'sm_teaching_materials' && action === 'insert' && mocks.holdMaterialSave) return new Promise<typeof result>(() => {})
+          return result
+        },
         then: (resolve: (result: ReturnType<typeof execute>) => unknown) => Promise.resolve(execute()).then(resolve),
       }
       return query
@@ -82,11 +94,12 @@ describe('lessons', () => {
       sm_teaching_materials: [], sm_lesson_pieces: [], sm_lesson_materials: [],
     }
     mocks.fail = ''
+    mocks.holdMaterialSave = false
     mocks.upload.mockResolvedValue({ error: null })
     mocks.remove.mockResolvedValue({ error: null })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals() })
+  afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals() })
 
   it('restores the selected group, lesson and material filter from the URL', async () => {
     mocks.tables.sm_lessons[0].group_id = 'g1'
@@ -236,7 +249,7 @@ describe('lessons', () => {
     await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
     const materialSearch = await screen.findByRole('searchbox', { name: 'Search materials for guitar' })
     await user.type(materialSearch, 'chord{Enter}')
-    await waitFor(() => expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l1', material_id: 'id-1' }]))
+    await waitFor(() => expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l1', material_id: mocks.tables.sm_teaching_materials[0].id }]))
     expect(mocks.upload.mock.calls[0][0]).toMatch(/^u1\/materials\/.+\.pdf$/)
     rendered.unmount()
 
@@ -259,7 +272,7 @@ describe('lessons', () => {
     fireEvent.change(screen.getByLabelText('Camera photo'), { target: { files: [new File(['photo'], 'one.jpg', { type: 'image/jpeg' })] } })
     await screen.findByText('1 photo in PDF')
     await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
-    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf', upsert: true }))
     expect(await screen.findByRole('button', { name: 'Delete teaching material Camera material' })).toBeTruthy()
     expect(screen.queryByText('1 photo in PDF')).toBeNull()
   })
@@ -278,7 +291,7 @@ describe('lessons', () => {
     await user.click(screen.getByRole('button', { name: 'Scan document' }))
     await screen.findByText('document-scan.pdf')
     await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
-    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf', upsert: true }))
     expect(screen.getByRole('status').textContent).toContain('Uploading teaching material')
     expect((screen.getByRole('button', { name: 'Uploading…' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByText(/Uploaded “Scanned material”/)).toBeNull()
@@ -289,6 +302,58 @@ describe('lessons', () => {
     expect(screen.getByRole('button', { name: '#technique', pressed: true })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Open material' }))
     expect(mocks.openMaterialPdf).toHaveBeenCalledWith(expect.objectContaining({ title: 'Scanned material' }), expect.arrayContaining([expect.objectContaining({ title: 'Scales' })]))
+  })
+
+  it('keeps a scanned material and its upload identity on failure and retry', async () => {
+    mocks.scannerAvailable.mockReturnValue(true)
+    const pdf = new File(['%PDF-'], 'document-scan.pdf', { type: 'application/pdf' })
+    mocks.scanDocument.mockResolvedValueOnce(pdf)
+    let finish!: (result: { error: { message: string } }) => void
+    mocks.upload.mockReturnValueOnce(new Promise((resolve) => { finish = resolve }))
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.type(await screen.findByLabelText('Material title'), 'Scanned material')
+    await user.click(screen.getByRole('button', { name: 'Scan document' }))
+    await screen.findByText('document-scan.pdf')
+    await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledOnce())
+    expect(screen.getByRole('status').textContent).toContain('Uploading PDF')
+    await act(async () => finish({ error: { message: 'Connection lost' } }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Connection lost')
+    expect(screen.getByText('document-scan.pdf')).toBeTruthy()
+    const firstPath = mocks.upload.mock.calls[0][0]
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }))
+    expect((await screen.findByRole('status')).textContent).toContain('Uploaded “Scanned material”')
+    expect(mocks.upload.mock.calls[1][0]).toBe(firstPath)
+    expect(mocks.scanDocument).toHaveBeenCalledOnce()
+    expect(mocks.tables.sm_teaching_materials).toHaveLength(1)
+  })
+
+  it('retries an unconfirmed database save without creating a duplicate material', async () => {
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.type(await screen.findByLabelText('Material title'), 'Theory')
+    await user.upload(screen.getByLabelText('PDF file'), new File(['pdf'], 'theory.pdf', { type: 'application/pdf' }))
+    mocks.holdMaterialSave = true
+    vi.useFakeTimers()
+    await act(async () => {
+      fireEvent.submit(screen.getByLabelText('Material title').closest('form')!)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(mocks.tables.sm_teaching_materials).toHaveLength(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+    expect(screen.getByRole('status').textContent).toContain('taking longer than usual')
+    await act(async () => { await vi.advanceTimersByTimeAsync(75_000) })
+    vi.useRealTimers()
+    expect(screen.getByRole('alert').textContent).toContain('timed out')
+    expect(mocks.remove).not.toHaveBeenCalled()
+    mocks.holdMaterialSave = false
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }))
+    expect((await screen.findByRole('status')).textContent).toContain('Uploaded “Theory”')
+    expect(mocks.tables.sm_teaching_materials).toHaveLength(1)
+    expect(mocks.upload.mock.calls[0][0]).toBe(mocks.upload.mock.calls[1][0])
   })
 
   it('opens the correct linked tune, including tunes without a score', async () => {
@@ -729,9 +794,25 @@ describe('lessons', () => {
     expect(screen.getByText('theory.pdf')).toBeTruthy()
     expect(screen.queryByText(/Uploaded “Theory”/)).toBeNull()
     mocks.fail = ''
-    await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }))
     expect((await screen.findByRole('status')).textContent).toContain('Uploaded “Theory”')
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('uses a new storage path if cleanup after a failed save is unconfirmed', async () => {
+    mocks.fail = 'sm_teaching_materials:insert'
+    mocks.remove.mockResolvedValueOnce({ error: { message: 'Cleanup unavailable' } })
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.type(await screen.findByLabelText('Material title'), 'Theory')
+    await user.upload(screen.getByLabelText('PDF file'), new File(['pdf'], 'theory.pdf', { type: 'application/pdf' }))
+    await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Cleanup could not be confirmed')
+    const oldPath = mocks.upload.mock.calls[0][0]
+    mocks.fail = ''
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }))
+    expect((await screen.findByRole('status')).textContent).toContain('Uploaded “Theory”')
+    expect(mocks.upload.mock.calls[1][0]).not.toBe(oldPath)
   })
 
   it('does not discard unsaved notes when lesson switching is cancelled', async () => {

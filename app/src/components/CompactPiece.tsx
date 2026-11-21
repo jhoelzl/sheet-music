@@ -6,10 +6,10 @@ import { PieceCard } from './PieceCard'
 import { ScoreCount } from './PieceParts'
 
 export function CompactPiece({ lib, p }: { lib: Library; p: Piece }) {
-  const [open, setOpen] = useState(false)
+  const [opened, setOpened] = useState(false)
   const keys = lib.keysOf(p)
   return (
-    <details className="compact-piece" onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <details className="compact-piece" onToggle={(event) => { if (event.currentTarget.open) setOpened(true) }}>
       <summary className="compact-piece-summary">
         <span className="compact-piece-icon" aria-hidden="true">♪</span>
         <span className="compact-piece-info">
@@ -23,7 +23,7 @@ export function CompactPiece({ lib, p }: { lib: Library; p: Piece }) {
         <span className="compact-piece-progress">{statusOf(p)}%</span>
         <span className="compact-piece-chevron" aria-hidden="true">⌄</span>
       </summary>
-      {open && <PieceCard lib={lib} p={p} />}
+      {opened && <PieceCard lib={lib} p={p} />}
     </details>
   )
 }

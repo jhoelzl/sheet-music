@@ -7,6 +7,7 @@ import { KeySelect } from './KeySelect'
 import { DeleteButton } from './DeleteButton'
 import { DocumentInput } from './DocumentInput'
 import { ScoreTags } from './ScoreTags'
+import { UploadStatus } from './UploadStatus'
 
 /** The piece's scores: one row per PDF, each with its own key and tags. */
 export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
@@ -16,21 +17,34 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
   const [processingPhotos, setProcessingPhotos] = useState(false)
   const [key, setKey] = useState('')
   const [tags, setTags] = useState<string[]>(['piano'])
+  const [attemptId, setAttemptId] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState('')
+  const [uploaded, setUploaded] = useState(false)
 
   const clearForm = () => {
-    setFile(null); setKey(''); setTags(['piano']); setAdding(false)
+    setFile(null); setKey(''); setTags(['piano']); setAttemptId(null); setUploadError(''); setAdding(false)
   }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!file || processingPhotos || lib.uploadingId === p.id) return
-    void lib.addScore(p, file, key.trim() || null, tags)
-    clearForm()
+    const id = attemptId ?? crypto.randomUUID()
+    setAttemptId(id)
+    setUploadError('')
+    setUploaded(false)
+    void lib.addScore(p, file, key.trim() || null, tags, id).then((result) => {
+      if (result.error) {
+        if (result.newAttempt) setAttemptId(crypto.randomUUID())
+        setUploadError(result.error)
+      }
+      else { clearForm(); setUploaded(true) }
+    })
   }
 
   return (
     <div className="piece-scores">
       <span className="piece-scores-label">Scores</span>
+      {uploaded && <p role="status">Score uploaded and saved.</p>}
       {scores.length === 0 && <p className="muted">No PDFs attached yet.</p>}
       <ul className="score-list">
         {scores.map((score, index) => (
@@ -50,15 +64,20 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
       </ul>
       {adding ? (
         <form className="score-add" onSubmit={submit}>
-          <DocumentInput label={`PDF for ${p.title}`} file={file} disabled={lib.uploadingId === p.id} onChange={setFile} onProcessingChange={setProcessingPhotos} />
-          <KeySelect label={`Key for new score of ${p.title}`} value={key} onChange={setKey} disabled={lib.uploadingId === p.id} />
+          <DocumentInput label={`PDF for ${p.title}`} file={file} disabled={attemptId !== null} onChange={setFile} onProcessingChange={setProcessingPhotos} />
+          <KeySelect label={`Key for new score of ${p.title}`} value={key} onChange={setKey} disabled={attemptId !== null} />
           <ScoreTags label={`Tags for new score of ${p.title}`} tags={tags} suggestions={lib.allScoreTags}
-            disabled={lib.uploadingId === p.id} onChange={setTags} />
-          <button type="submit" className="btn" disabled={!file || processingPhotos || lib.uploadingId === p.id}>{lib.uploadingId === p.id ? 'Uploading…' : 'Add score'}</button>
-          <button type="button" className="link" onClick={clearForm}>Cancel</button>
+            disabled={attemptId !== null} onChange={setTags} />
+          <button type="submit" className="btn" disabled={!file || processingPhotos || lib.uploadingId !== null}>{lib.uploadingId === p.id ? 'Uploading…' : uploadError ? 'Retry upload' : 'Add score'}</button>
+          <button type="button" className="link" disabled={lib.uploadingId === p.id} onClick={() => {
+            if (attemptId && !window.confirm('The previous request may still complete. Check the score list before starting over. Discard this upload?')) return
+            clearForm()
+          }}>Cancel</button>
+          {lib.uploadingId === p.id && <UploadStatus key={lib.scoreUploadStage} message={lib.scoreUploadStage} />}
+          {uploadError && <p className="material-upload-error" role="alert">Upload failed: {uploadError} Your document is still selected; retry without scanning again.</p>}
         </form>
       ) : (
-        <button type="button" className="btn" onClick={() => setAdding(true)}>+ Add score</button>
+        <button type="button" className="btn" onClick={() => { setUploaded(false); setAdding(true) }}>+ Add score</button>
       )}
     </div>
   )

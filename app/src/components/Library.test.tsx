@@ -31,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   photosToPdf: vi.fn(),
   scannerAvailable: vi.fn(),
   scanDocument: vi.fn(),
+  holdScoreSave: false,
 }))
 vi.mock('../lib/photoPdf', () => ({ preparePhoto: mocks.preparePhoto, photosToPdf: mocks.photosToPdf }))
 vi.mock('../lib/documentScanner', () => ({ hasDocumentScanner: mocks.scannerAvailable, scanDocument: mocks.scanDocument }))
@@ -94,6 +95,7 @@ describe('focused library', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/')
     mocks.scannerAvailable.mockReturnValue(false)
+    mocks.holdScoreSave = false
     vi.stubGlobal('confirm', vi.fn(() => true))
     localStorage.clear()
     mocks.pieces = [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', tags: ['calm'], play_progress: 50, links: [] }]
@@ -114,7 +116,7 @@ describe('focused library', () => {
         mocks.pieces.push({ ...rows[0], id })
         return id
       }
-      if (table === 'sm_piece_scores') mocks.scores.push(...rows.map((row, index) => ({ id: `sc-new-${mocks.scores.length + index}`, ...row })))
+      if (table === 'sm_piece_scores') mocks.scores.push(...rows.filter((row) => !row.id || !mocks.scores.some((score) => score.id === row.id)).map((row, index) => ({ id: `sc-new-${mocks.scores.length + index}`, ...row })))
       if (table === 'sm_piece_composers') mocks.composerLinks.push(...rows as { piece_id: string; composer_id: string; position: number }[])
       return null
     })
@@ -184,10 +186,15 @@ describe('focused library', () => {
           select: () => ({ single: () => Promise.resolve({ data: id ? { id } : null, error: null }) }),
         })
       },
+      upsert: (values: unknown) => {
+        mocks.insert(table, values)
+        if (table === 'sm_piece_scores' && mocks.holdScoreSave) return new Promise<{ error: null }>(() => {})
+        return Promise.resolve({ error: null })
+      },
     }))
   })
 
-  afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); localStorage.clear() })
+  afterEach(() => { cleanup(); vi.useRealTimers(); vi.clearAllMocks(); vi.unstubAllGlobals(); localStorage.clear() })
 
   it('reveals piece controls and practice activity only when requested', async () => {
     const user = userEvent.setup()
@@ -365,12 +372,67 @@ describe('focused library', () => {
     mocks.scanDocument.mockResolvedValueOnce(pdf)
     const user = userEvent.setup()
     render(<TestLibrary />)
+    const summary = (await screen.findByText('Romance', { selector: 'summary strong' })).closest('summary')!
+    await user.click(summary)
+    await user.click(screen.getByRole('button', { name: '+ Add score' }))
+    await user.click(screen.getByRole('button', { name: 'Scan document' }))
+    await screen.findByText('document-scan.pdf')
+    await user.click(screen.getByRole('button', { name: 'Add score' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf', upsert: true }))
+  })
+
+  it('keeps a scanned score and its upload identity on failure and retry', async () => {
+    mocks.scannerAvailable.mockReturnValue(true)
+    const pdf = new File(['%PDF-'], 'document-scan.pdf', { type: 'application/pdf' })
+    mocks.scanDocument.mockResolvedValueOnce(pdf)
+    let finish!: (result: { error: { message: string } }) => void
+    mocks.upload.mockReturnValueOnce(new Promise((resolve) => { finish = resolve }))
+    const user = userEvent.setup()
+    render(<TestLibrary />)
     await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
     await user.click(screen.getByRole('button', { name: '+ Add score' }))
     await user.click(screen.getByRole('button', { name: 'Scan document' }))
     await screen.findByText('document-scan.pdf')
     await user.click(screen.getByRole('button', { name: 'Add score' }))
-    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledOnce())
+    expect(screen.getByRole('status').textContent).toContain('Uploading PDF')
+    expect((screen.getByRole('button', { name: 'Cancel' }) as HTMLButtonElement).disabled).toBe(true)
+    await user.click(screen.getByText('Romance', { selector: 'summary strong' }))
+    await act(async () => finish({ error: { message: 'Connection lost' } }))
+    await user.click(screen.getByText('Romance', { selector: 'summary strong' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Connection lost')
+    expect(screen.getByText('document-scan.pdf')).toBeTruthy()
+    const firstPath = mocks.upload.mock.calls[0][0]
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledTimes(2))
+    expect(mocks.upload.mock.calls[1][0]).toBe(firstPath)
+    expect(await screen.findByText('Score uploaded and saved.')).toBeTruthy()
+    expect(mocks.scanDocument).toHaveBeenCalledOnce()
+  })
+
+  it('retries an unconfirmed score save without creating a duplicate', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: '+ Add score' }))
+    await user.upload(screen.getByLabelText('PDF for Romance'), new File(['pdf'], 'score.pdf', { type: 'application/pdf' }))
+    mocks.holdScoreSave = true
+    vi.useFakeTimers()
+    await act(async () => {
+      fireEvent.submit(screen.getByLabelText('PDF for Romance').closest('form')!)
+      await vi.dynamicImportSettled()
+      for (let i = 0; i < 10; i++) await Promise.resolve()
+    })
+    expect(mocks.scores).toHaveLength(2)
+    await act(async () => { await vi.advanceTimersByTimeAsync(90_000) })
+    vi.useRealTimers()
+    expect(screen.getByRole('alert').textContent).toContain('timed out')
+    expect(mocks.remove).not.toHaveBeenCalled()
+    mocks.holdScoreSave = false
+    await user.click(screen.getByRole('button', { name: 'Retry upload' }))
+    expect(await screen.findByText('Score uploaded and saved.')).toBeTruthy()
+    expect(mocks.scores).toHaveLength(2)
+    expect(mocks.upload.mock.calls[0][0]).toBe(mocks.upload.mock.calls[1][0])
   })
 
   it('saves a new piece only once while the save is pending', async () => {
@@ -1164,10 +1226,10 @@ describe('focused library', () => {
 
     vi.mocked(window.confirm).mockReturnValueOnce(false)
     await user.click(screen.getByRole('button', { name: 'Delete score 2 for Romance' }))
-    expect(mocks.delete).not.toHaveBeenCalledWith('sm_piece_scores', 'id', 'sc-new-1')
+    expect(mocks.delete).not.toHaveBeenCalledWith('sm_piece_scores', 'id', 'uuid-2')
     await user.click(screen.getByRole('button', { name: 'Delete score 2 for Romance' }))
     expect(window.confirm).toHaveBeenLastCalledWith('Delete this score for "Romance"? Its PDF will also be deleted. Setlists using it will no longer reference it.')
-    await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith('sm_piece_scores', 'id', 'sc-new-1'))
+    await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith('sm_piece_scores', 'id', 'uuid-2'))
     await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Key for score 2 of Romance' })).toBeNull())
     expect(within(summary).getByText('1 score')).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Key for score 1 of Romance' })).toBeTruthy()
@@ -1198,7 +1260,7 @@ describe('focused library', () => {
     await screen.findByText('2 photos in PDF')
     expect(mocks.photosToPdf).toHaveBeenLastCalledWith([first, second])
     await user.click(button)
-    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf', upsert: true }))
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_piece_scores', expect.objectContaining({ piece_id: 'p1' })))
   })
 

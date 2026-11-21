@@ -4,6 +4,7 @@ import { PDF_SIGNED_URL_TTL_SECONDS, PDF_STORAGE_BUCKET } from '../config'
 import { supabase } from '../supabase'
 import type { Composer, Instrument, Piece, PieceLink, PiecePatch, PieceScore, PracticeLog, TeachingMaterial } from '../supabase'
 import { countPdfPages } from '../lib/pdf'
+import { saveUploadRecord, UploadCleanupError, uploadDocument, uploadErrorMessage, uploadStep } from '../lib/documentUpload'
 import { backupFileName, buildBackup, downloadBlob, materialFileName, scoreFileName } from '../lib/backup'
 import { createZip } from '../lib/zip'
 import type { ZipEntry } from '../lib/zip'
@@ -105,6 +106,9 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [draftComposer, setDraftComposer] = useState('')
   const [openLink, setOpenLink] = useState<string | null>(null)
   const [uploadingId, setUploadingId] = useState<string | null>(null)
+  const [scoreUploadStage, setScoreUploadStage] = useState('')
+  const uploadingScore = useRef(false)
+  const uncertainScoreUploads = useRef(new Set<string>())
   const [savingScoreIds, setSavingScoreIds] = useState<Set<string>>(new Set())
   const savingScores = useRef(new Set<string>())
   const [backingUp, setBackingUp] = useState(false)
@@ -388,21 +392,31 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   }
 
   /** Upload a PDF and add it as a new score of the piece. */
-  const addScore = async (p: Piece, f: File, musical_key: string | null, tags: string[]) => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+  const addScore = async (p: Piece, f: File, musical_key: string | null, tags: string[], id: string): Promise<{ error: string | null; newAttempt?: boolean }> => {
+    if (uploadingScore.current) return { error: 'Another score is being uploaded. Please wait.' }
+    uploadingScore.current = true
     setUploadingId(p.id)
-    const pdf_pages = await countPdfPages(f)
-    const pdf_path = `${user.id}/${crypto.randomUUID()}.pdf`
-    const up = await supabase.storage.from(PDF_STORAGE_BUCKET).upload(pdf_path, f, { contentType: 'application/pdf' })
-    if (up.error) {
-      notify(`Upload failed: ${up.error.message}`)
-    } else {
+    try {
+      setScoreUploadStage('Reading PDF…')
+      const pdf_pages = await uploadStep(countPdfPages(f), 'Reading the PDF')
+      const pdf_path = await uploadDocument(f, id, '', setScoreUploadStage)
       const position = scoresOf(p).reduce((max, score) => Math.max(max, score.position), -1) + 1
-      const ok = await run(supabase.from('sm_piece_scores').insert({ piece_id: p.id, pdf_path, pdf_pages, musical_key, tags, position }))
-      if (!ok) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([pdf_path])
+      setScoreUploadStage('Saving score…')
+      await saveUploadRecord(supabase.from('sm_piece_scores').upsert(
+        { id, piece_id: p.id, pdf_path, pdf_pages, musical_key, tags, position },
+        { onConflict: 'id', ignoreDuplicates: true },
+      ), pdf_path, id, uncertainScoreUploads.current, 'Saving the score')
+      setScoreUploadStage('Refreshing library…')
+      await uploadStep(load(), 'Refreshing the library')
+      uncertainScoreUploads.current.delete(id)
+      return { error: null }
+    } catch (reason) {
+      return { error: uploadErrorMessage(reason), newAttempt: reason instanceof UploadCleanupError }
+    } finally {
+      uploadingScore.current = false
+      setUploadingId(null)
+      setScoreUploadStage('')
     }
-    setUploadingId(null)
   }
 
   /** Change a score's key or tags. */
@@ -675,7 +689,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     // data
     composers, pieces, logs, toasts, preview, browseScores, browseMaterials, visible, flat, tableRows, allTags, allScoreTags, filterTags, practicedToday,
     // ui state
-    sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, savingScoreIds, hiddenIds,
+    sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, scoreUploadStage, savingScoreIds, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
     search, setSearch, filter, setFilter, missingDataFilter, setMissingDataFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, applyDefaults, composerNameOf, composerIdsOf, composerNamesOf,

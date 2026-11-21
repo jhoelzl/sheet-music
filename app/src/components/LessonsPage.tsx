@@ -5,6 +5,7 @@ import type { Library } from '../hooks/useLibrary'
 import { useUrlOptional, useUrlString } from '../hooks/useUrlState'
 import { todayISO } from '../lib/dates'
 import { confirmDelete } from '../lib/confirmDelete'
+import { saveUploadRecord, UploadCleanupError, uploadDocument, uploadStep } from '../lib/documentUpload'
 import { Markdown } from '../lib/markdown'
 import { supabase } from '../supabase'
 import type { Instrument, Lesson, LessonGroup, TeachingMaterial } from '../supabase'
@@ -15,6 +16,7 @@ import { TagInput } from './TagInput'
 import { ActivityCalendar } from './ActivityCalendar'
 import { DeleteButton } from './DeleteButton'
 import { DocumentInput } from './DocumentInput'
+import { UploadStatus } from './UploadStatus'
 import { EditIcon } from './icons'
 
 type LessonPiece = { lesson_id: string; piece_id: string }
@@ -49,6 +51,8 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [fileKey, setFileKey] = useState(0)
   const [processingPhotos, setProcessingPhotos] = useState(false)
   const [uploadingMaterial, setUploadingMaterial] = useState(false)
+  const [materialUploadStage, setMaterialUploadStage] = useState('')
+  const [materialAttemptId, setMaterialAttemptId] = useState<string | null>(null)
   const [uploadError, setUploadError] = useState('')
   const [uploadedMaterialId, setUploadedMaterialId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -57,6 +61,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
+  const uncertainMaterialUploads = useRef(new Set<string>())
   const selected = lessons.find((lesson) => lesson.id === selectedId)
   const dirty = Boolean(draft && selected && (draft.title !== selected.title || draft.lesson_date !== selected.lesson_date || draft.notes !== selected.notes || draft.group_id !== selected.group_id))
   const savedGroup = groups.find((group) => group.id === groupDraft?.id)
@@ -308,37 +313,38 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       return
     }
     void perform(async () => {
+      const id = materialAttemptId ?? crypto.randomUUID()
+      setMaterialAttemptId(id)
       setUploadingMaterial(true)
       setUploadError('')
       setUploadedMaterialId(null)
       try {
-        const { data: { user }, error: authError } = await supabase.auth.getUser()
-        if (authError) throw authError
-        if (!user) throw new Error('Sign in to upload teaching materials.')
-        const path = `${user.id}/materials/${crypto.randomUUID()}.pdf`
-        const storage = supabase.storage.from(PDF_STORAGE_BUCKET)
-        const upload = await storage.upload(path, file, { contentType: 'application/pdf' })
-        if (upload.error) throw upload.error
-        let material: TeachingMaterial
-        try {
-          const result = await supabase.from('sm_teaching_materials').insert({ title: materialTitle.trim(), pdf_path: path, tags: newMaterialTags })
-            .select('id, title, pdf_path, tags').single()
-          if (result.error) throw result.error
-          if (!result.data) throw new Error('Could not save material.')
-          material = result.data as TeachingMaterial
-        } catch (reason) {
-          const cleanup = await storage.remove([path])
-          if (cleanup.error) throw new Error(`Could not save material; cleanup also failed for ${path}: ${cleanup.error.message}`)
-          throw reason
+        const path = await uploadDocument(file, id, 'materials', setMaterialUploadStage)
+        setMaterialUploadStage('Saving teaching material…')
+        let material = await saveUploadRecord(supabase.from('sm_teaching_materials')
+          .upsert({ id, title: materialTitle.trim(), pdf_path: path, tags: newMaterialTags }, { onConflict: 'id', ignoreDuplicates: true })
+          .select('id, title, pdf_path, tags').maybeSingle(), path, id, uncertainMaterialUploads.current, 'Saving the teaching material') as TeachingMaterial | null
+        if (!material) {
+          const existing = await uploadStep(supabase.from('sm_teaching_materials')
+            .select('id, title, pdf_path, tags').eq('id', id).single(), 'Checking the saved material')
+          if (existing.error) throw existing.error
+          material = existing.data as TeachingMaterial | null
         }
-        setMaterials((current) => [...current, material].sort((a, b) => a.title.localeCompare(b.title)))
+        if (!material) throw new Error('Could not confirm the saved material. Please retry.')
+        uncertainMaterialUploads.current.delete(id)
+        setMaterials((current) => [...current.filter((item) => item.id !== material.id), material].sort((a, b) => a.title.localeCompare(b.title)))
         setMaterialTitle('')
         setNewMaterialTags([])
         setFile(null)
         setFileKey((current) => current + 1)
         setUploadedMaterialId(material.id)
+        setMaterialAttemptId(null)
+      } catch (reason) {
+        if (reason instanceof UploadCleanupError) setMaterialAttemptId(crypto.randomUUID())
+        throw reason
       } finally {
         setUploadingMaterial(false)
+        setMaterialUploadStage('')
       }
     }, setUploadError)
   }
@@ -441,15 +447,19 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
                 onClick={() => void lib.openMaterialPdf(visibleMaterials[0], visibleMaterials)}>Browse materials</button>
             </div>
             <form className="panel" onSubmit={uploadMaterial}>
-              <label className="grow">Material title<input required value={materialTitle} disabled={busy} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
-              <DocumentInput key={fileKey} label="PDF file" file={file} disabled={busy} onChange={setFile} onProcessingChange={setProcessingPhotos} />
+              <label className="grow">Material title<input required value={materialTitle} disabled={busy || materialAttemptId !== null} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
+              <DocumentInput key={fileKey} label="PDF file" file={file} disabled={busy || materialAttemptId !== null} onChange={setFile} onProcessingChange={setProcessingPhotos} />
               <div className="field-group"><span>Tags</span>
-                <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy} onChange={setNewMaterialTags} />
+                <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy || materialAttemptId !== null} onChange={setNewMaterialTags} />
               </div>
-              <button type="submit" className="btn" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : 'Upload PDF'}</button>
+              <button type="submit" className="btn" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : uploadError && materialAttemptId ? 'Retry upload' : 'Upload PDF'}</button>
+              {materialAttemptId && !uploadingMaterial && <button type="button" className="link" onClick={() => {
+                if (!window.confirm('The previous request may still complete. Check the material list before starting over. Discard this upload?')) return
+                setMaterialAttemptId(null); setUploadError('')
+              }}>Start over</button>}
             </form>
-            {uploadingMaterial && <p className="material-upload-status" role="status">Uploading teaching material…</p>}
-            {uploadError && <p className="material-upload-error" role="alert">{uploadError}</p>}
+            {uploadingMaterial && <UploadStatus key={materialUploadStage} message={`Uploading teaching material: ${materialUploadStage}`} />}
+            {uploadError && <p className="material-upload-error" role="alert">{uploadError} Your document is still selected; retry without scanning again.</p>}
             {uploadedMaterial && <div className="material-upload-confirmation">
               <p role="status">Uploaded “{uploadedMaterial.title}”.{materialTagFilter && !uploadedMaterial.tags.includes(materialTagFilter) ? ' Hidden by the current tag filter.' : ''}</p>
               <button type="button" className="link" onClick={() => void lib.openMaterialPdf(uploadedMaterial, materials)}>Open material</button>
