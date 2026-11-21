@@ -2,12 +2,14 @@ import { act, cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import { DEFAULT_USER_SETTINGS } from './lib/userSettings'
 
 const mocks = vi.hoisted(() => ({
   getPlatform: vi.fn(),
   getSession: vi.fn(),
   onAuthStateChange: vi.fn(),
   signOut: vi.fn(),
+  theme: 'system' as 'system' | 'light' | 'dark',
 }))
 
 vi.mock('@capacitor/core', () => ({ Capacitor: { getPlatform: mocks.getPlatform } }))
@@ -24,16 +26,21 @@ vi.mock('./components/Login', () => ({ Login: () => <div>Login content</div> }))
 vi.mock('./components/Toasts', () => ({ Toasts: () => null }))
 vi.mock('./components/PdfPreview', () => ({ PdfPreview: () => null }))
 vi.mock('./hooks/useLibrary', () => ({ useLibrary: () => ({}) }))
+vi.mock('./hooks/useUserSettings', () => ({
+  useUserSettings: () => ({ state: { status: 'ready', settings: { ...DEFAULT_USER_SETTINGS, theme: mocks.theme } }, save: vi.fn(), retry: vi.fn() }),
+}))
 
 describe('app navigation', () => {
   beforeEach(() => {
-    mocks.getSession.mockResolvedValue({ data: { session: {} }, error: null })
+    mocks.getSession.mockResolvedValue({ data: { session: { user: { id: 'u1' } } }, error: null })
     mocks.onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    mocks.theme = 'system'
   })
 
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it('uses a bottom navigation on iOS and switches pages', async () => {
@@ -54,6 +61,9 @@ describe('app navigation', () => {
     await user.click(within(navigation).getByRole('button', { name: 'Lessons' }))
     expect(screen.getByText('Lessons content')).toBeTruthy()
     expect(within(navigation).getByRole('button', { name: 'Lessons' }).getAttribute('aria-current')).toBe('page')
+    await user.click(within(navigation).getByRole('button', { name: 'Settings' }))
+    expect(screen.getByRole('heading', { name: 'Settings' })).toBeTruthy()
+    expect(within(navigation).getByRole('button', { name: 'Settings' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('keeps browser navigation in the header and switches to Composers', async () => {
@@ -79,6 +89,22 @@ describe('app navigation', () => {
     expect(await screen.findByText('Login content')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reload app' })).toBeTruthy()
     expect(screen.queryByRole('navigation', { name: 'Pages' })).toBeNull()
+  })
+
+  it('uses the selected theme and follows device changes in system mode', async () => {
+    let onChange = () => {}
+    const preference = { matches: false, addEventListener: (_event: string, handler: () => void) => { onChange = handler }, removeEventListener: vi.fn() }
+    vi.stubGlobal('matchMedia', () => preference)
+    mocks.theme = 'dark'
+    const { rerender } = render(<App />)
+    await screen.findByText('Library content')
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    mocks.theme = 'system'
+    rerender(<App />)
+    expect(document.documentElement.dataset.theme).toBe('light')
+    preference.matches = true
+    act(() => onChange())
+    expect(document.documentElement.dataset.theme).toBe('dark')
   })
 
   it('protects unsaved lesson notes when changing pages', async () => {
@@ -154,9 +180,9 @@ describe('app navigation', () => {
     render(<App />)
 
     act(() => { authChange('SIGNED_OUT', null) })
-    await act(async () => { resolveSession({ data: { session: {} }, error: null }) })
+    await act(async () => { resolveSession({ data: { session: { user: { id: 'u1' } } }, error: null }) })
     expect(await screen.findByText('Login content')).toBeTruthy()
-    act(() => { authChange('SIGNED_IN', {}) })
+    act(() => { authChange('SIGNED_IN', { user: { id: 'u1' } }) })
     expect(screen.getByText('Library content')).toBeTruthy()
   })
 })

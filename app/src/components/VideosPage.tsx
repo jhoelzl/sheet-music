@@ -6,7 +6,7 @@ import { youtubeId } from '../lib/youtube'
 import { VideoFeed } from './VideoFeed'
 import type { Video } from './VideoFeed'
 
-export function VideosPage() {
+export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean }) {
   const [videos, setVideos] = useState<Video[] | null>(null)
   const [shuffledVideos, setShuffledVideos] = useState<Video[] | null>(null)
   const [error, setError] = useState('')
@@ -39,8 +39,9 @@ export function VideosPage() {
         }
       }
       setVideos(out)
+      if (defaultRandom) setShuffledVideos(shuffle(out))
     })()
-  }, [])
+  }, [defaultRandom])
 
   if (error) return <div className="empty"><h3>Could not load videos</h3><p>{error}</p></div>
   if (!videos) return <p>Loading…</p>

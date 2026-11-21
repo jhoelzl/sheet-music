@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,6 +8,9 @@ import { ComposersPage } from './ComposersPage'
 import { ComposerPicker } from './ComposerPicker'
 import { PdfPreview } from './PdfPreview'
 import { Toasts } from './Toasts'
+import { SettingsPage } from './SettingsPage'
+import { DEFAULT_USER_SETTINGS } from '../lib/userSettings'
+import type { UserSettings } from '../lib/userSettings'
 
 const mocks = vi.hoisted(() => ({
   from: vi.fn(),
@@ -44,6 +48,26 @@ function TestLibrary() {
 function TestComposers() {
   const lib = useLibrary()
   return <ComposersPage lib={lib} />
+}
+
+function TestBackup() {
+  const lib = useLibrary()
+  return <><Toasts lib={lib} /><SettingsPage lib={lib} settings={DEFAULT_USER_SETTINGS} loadError={null} onRetry={() => {}} onSave={async () => {}} /></>
+}
+
+function TestSettings({ save }: { save: (settings: UserSettings) => Promise<void> }) {
+  const [settings, setSettings] = useState(DEFAULT_USER_SETTINGS)
+  const lib = useLibrary(settings)
+  return <><SettingsPage lib={lib} settings={settings} loadError={null} onRetry={() => {}} onSave={async (next) => {
+    await save(next)
+    lib.applyDefaults(next, settings)
+    setSettings(next)
+  }} /><Library lib={lib} /></>
+}
+
+function TestRememberedView({ userId }: { userId: string }) {
+  const lib = useLibrary(DEFAULT_USER_SETTINGS, userId)
+  return <Library lib={lib} />
 }
 
 describe('focused library', () => {
@@ -453,8 +477,8 @@ describe('focused library', () => {
     vi.stubGlobal('URL', { createObjectURL, revokeObjectURL })
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     const user = userEvent.setup()
-    render(<TestLibrary />)
-    await screen.findByText('Romance', { selector: 'summary strong' })
+    render(<TestBackup />)
+    await screen.findByRole('heading', { name: 'Settings' })
     await user.click(screen.getByRole('button', { name: 'Download backup' }))
 
     await waitFor(() => expect(mocks.download).toHaveBeenCalledWith('romance.pdf'))
@@ -470,6 +494,53 @@ describe('focused library', () => {
     expect(text).toContain('Guitar lesson')
     expect(text).toContain('"teacher_name": "Alex"')
     expect(await screen.findByText('Backup downloaded.')).toBeTruthy()
+  })
+
+  it('applies saved library defaults without preventing temporary filter changes', async () => {
+    mocks.pieces = [
+      { id: 'p1', composer_id: 'c1', title: 'Older', play_progress: 100, difficulty: 4, created_at: '2025-01-01', links: [] },
+      { id: 'p2', composer_id: 'c1', title: 'Newer', play_progress: 100, difficulty: 5, created_at: '2026-01-01', links: [] },
+      { id: 'p3', composer_id: 'c1', title: 'Excluded', play_progress: 0, difficulty: 5, created_at: '2026-02-01', links: [] },
+    ]
+    mocks.scores = mocks.pieces.map((piece) => ({ id: `s-${piece.id}`, piece_id: piece.id, pdf_path: 'score.pdf', instrument: 'piano', position: 0 }))
+    const save = vi.fn().mockResolvedValue(undefined)
+    const user = userEvent.setup()
+    render(<TestSettings save={save} />)
+    await screen.findByText('Older', { selector: 'summary strong' })
+    await user.selectOptions(screen.getByLabelText('Default view'), 'table')
+    await user.selectOptions(screen.getByLabelText('Default sort'), 'recent')
+    await user.selectOptions(screen.getByLabelText('Default filter'), 'can_play')
+    await user.selectOptions(screen.getByLabelText('Default instrument'), 'piano')
+    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    await screen.findByText('Settings saved.')
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ library_view: 'table', library_sort: 'recent', library_filter: 'can_play', library_instrument: 'piano' }))
+    const rows = within(screen.getByRole('table')).getAllByRole('row')
+    expect(rows).toHaveLength(3)
+    expect(rows[1].textContent).toContain('Newer')
+    expect(rows[2].textContent).toContain('Older')
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(4)
+  })
+
+  it('reports a failed settings save without applying its defaults', async () => {
+    const user = userEvent.setup()
+    render(<TestSettings save={vi.fn().mockRejectedValue(new Error('Offline'))} />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.selectOptions(screen.getByLabelText('Default view'), 'table')
+    await user.click(screen.getByRole('button', { name: 'Save settings' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Offline')
+    expect(screen.getByLabelText('View')).toHaveProperty('value', 'list')
+  })
+
+  it('remembers each user’s last library view separately on the device', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<TestRememberedView key="user-1" userId="user-1" />)
+    await user.selectOptions(await screen.findByLabelText('View'), 'grid')
+    rerender(<TestRememberedView key="user-2" userId="user-2" />)
+    expect(screen.getByLabelText('View')).toHaveProperty('value', 'list')
+    await user.selectOptions(screen.getByLabelText('View'), 'table')
+    rerender(<TestRememberedView key="user-1" userId="user-1" />)
+    expect(screen.getByLabelText('View')).toHaveProperty('value', 'grid')
   })
 
   it('marks a score as a lead sheet and back to an instrument', async () => {

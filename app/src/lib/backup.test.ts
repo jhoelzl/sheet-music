@@ -12,7 +12,7 @@ describe('backup helpers', () => {
   })
 
   it('stamps the payload with the app, version and time', () => {
-    const payload = buildBackup({ composers: [], pieces: [], piece_composers: [], scores: [], setlists: [], setlist_pieces: [], practice_log: [], lesson_groups: [], lessons: [], teaching_materials: [], lesson_pieces: [], lesson_materials: [] })
+    const payload = buildBackup({ composers: [], pieces: [], piece_composers: [], scores: [], setlists: [], setlist_pieces: [], practice_log: [], lesson_groups: [], lessons: [], teaching_materials: [], lesson_pieces: [], lesson_materials: [], user_settings: [] })
     expect(payload.app).toBe('sheet-music')
     expect(payload.version).toBe(1)
     expect(payload.exported_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)

@@ -18,6 +18,7 @@ export type BackupPayload = {
   teaching_materials: unknown[]
   lesson_pieces: unknown[]
   lesson_materials: unknown[]
+  user_settings: unknown[] | null
 }
 
 export type BackupTables = Omit<BackupPayload, 'app' | 'version' | 'exported_at'>

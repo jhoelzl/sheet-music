@@ -72,6 +72,17 @@ describe('video feed', () => {
     expect(titles()).toEqual(['Romance', 'Nocturne'])
   })
 
+  it('opens in random order when configured, while allowing the user to turn it off', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0)
+    const user = userEvent.setup()
+    render(<VideosPage defaultRandom />)
+    await screen.findByRole('button', { name: 'Play Romance' })
+    expect(screen.getAllByRole('article').map((card) => card.querySelector('strong')?.textContent)).toEqual(['Nocturne', 'Romance'])
+    expect(screen.getByRole('button', { name: 'Random order' }).getAttribute('aria-pressed')).toBe('true')
+    await user.click(screen.getByRole('button', { name: 'Random order' }))
+    expect(screen.getAllByRole('article').map((card) => card.querySelector('strong')?.textContent)).toEqual(['Romance', 'Nocturne'])
+  })
+
   it('shows composer details and keeps video playback and source links accessible', async () => {
     const user = userEvent.setup()
     render(<VideosPage />)
