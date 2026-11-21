@@ -1,6 +1,7 @@
 import type { Library } from '../hooks/useLibrary'
 import type { Composer } from '../supabase'
-import { CloseIcon, EditIcon } from './icons'
+import { EditIcon } from './icons'
+import { DeleteButton } from './DeleteButton'
 
 export function ComposerHeading({ lib, composer, countLabel }: { lib: Library; composer: Composer; countLabel: string }) {
   return (
@@ -18,7 +19,7 @@ export function ComposerHeading({ lib, composer, countLabel }: { lib: Library; c
       </div>
       <div className="piece-actions">
         <button className="icon-btn edit" aria-label={`Rename ${composer.name}`} title="Rename" onClick={() => lib.startEditComposer(composer)}>{EditIcon}</button>
-        <button className="icon-btn" aria-label={`Delete ${composer.name}`} title="Delete composer and their solo pieces; shared pieces are kept" onClick={() => lib.removeComposer(composer)}>{CloseIcon}</button>
+        <DeleteButton label={`Delete ${composer.name}`} onClick={() => lib.removeComposer(composer)} />
       </div>
     </div>
   )

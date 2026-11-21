@@ -2,7 +2,8 @@ import type { Piece } from '../supabase'
 import type { Library } from '../hooks/useLibrary'
 import { INSTRUMENTS } from '../lib/instruments'
 import { nextStatus, statusLabel, statusOf, statusPatch } from '../lib/status'
-import { CloseIcon, EditIcon, OpenIcon } from './icons'
+import { EditIcon, OpenIcon } from './icons'
+import { DeleteButton } from './DeleteButton'
 
 type Props = { lib: Library; p: Piece }
 
@@ -33,7 +34,7 @@ export function EditDeleteButtons({ lib, p }: Props) {
   return (
     <>
       {p.pdf_path && <button type="button" className="open-pdf-btn" aria-label={`Open PDF for ${p.title}`} title="Open PDF in full screen" onClick={() => void lib.openPdf(p)}>{OpenIcon} Open PDF</button>}
-      <button className="icon-btn" aria-label={`Remove ${p.title} from library`} title="Remove from library" onClick={() => lib.remove(p)}>{CloseIcon}</button>
+      <DeleteButton label={`Remove ${p.title} from library`} onClick={() => lib.remove(p)} />
     </>
   )
 }

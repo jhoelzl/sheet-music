@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLibrary } from '../hooks/useLibrary'
 import { Library } from './Library'
+import { ComposersPage } from './ComposersPage'
 import { ComposerPicker } from './ComposerPicker'
 import { PdfPreview } from './PdfPreview'
 import { Toasts } from './Toasts'
@@ -37,8 +38,14 @@ function TestLibrary() {
   return <><Toasts lib={lib} /><PdfPreview lib={lib} /><Library lib={lib} /></>
 }
 
+function TestComposers() {
+  const lib = useLibrary()
+  return <ComposersPage lib={lib} />
+}
+
 describe('focused library', () => {
   beforeEach(() => {
+    vi.stubGlobal('confirm', vi.fn(() => true))
     localStorage.clear()
     mocks.pieces = [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', tags: ['calm'], play_progress: 50, links: [] }]
     mocks.scores = [{ id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', lead_sheet: false, position: 0 }]
@@ -472,7 +479,11 @@ describe('focused library', () => {
     })))
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Key for score 2 of Romance' })).toBeTruthy())
 
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
     await user.click(screen.getByRole('button', { name: 'Remove score 2 for Romance' }))
+    expect(mocks.delete).not.toHaveBeenCalledWith('sm_piece_scores', 'id', 'sc-new-1')
+    await user.click(screen.getByRole('button', { name: 'Remove score 2 for Romance' }))
+    expect(window.confirm).toHaveBeenLastCalledWith('Delete this score for "Romance" and its PDF? Setlists using it will no longer reference it.')
     await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith('sm_piece_scores', 'id', 'sc-new-1'))
     await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Key for score 2 of Romance' })).toBeNull())
     expect(screen.getByRole('combobox', { name: 'Key for score 1 of Romance' })).toBeTruthy()
@@ -482,12 +493,27 @@ describe('focused library', () => {
     const user = userEvent.setup()
     render(<TestLibrary />)
     await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
     await user.click(screen.getByRole('button', { name: 'Remove Romance from library' }))
+    expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Remove Romance from library' }))
+    expect(window.confirm).toHaveBeenLastCalledWith('Delete "Romance" from your library? Its scores, practice history, and links to lessons and setlists will also be removed.')
 
     expect(screen.queryByText('Romance', { selector: 'summary strong' })).toBeNull()
     expect(screen.getByText('Removed "Romance" from your library')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
+  })
+
+  it('asks before deleting a composer and describes the effect on pieces', async () => {
+    const user = userEvent.setup()
+    render(<TestComposers />)
+    const remove = await screen.findByRole('button', { name: 'Delete Clara Schumann' })
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await user.click(remove)
+    expect(window.confirm).toHaveBeenCalledWith('Delete composer "Clara Schumann"? 1 piece with no other composer and their scores will also be deleted. Shared pieces will be kept.')
+    expect(screen.getByRole('heading', { name: 'Clara Schumann' })).toBeTruthy()
+    expect(mocks.delete).not.toHaveBeenCalledWith('sm_composers', 'id', 'c1')
   })
 
   it('does not reopen the viewer when a signed URL arrives after closing', async () => {

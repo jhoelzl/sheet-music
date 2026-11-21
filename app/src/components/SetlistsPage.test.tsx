@@ -67,6 +67,7 @@ async function openComment(user: ReturnType<typeof userEvent.setup>, title: stri
 
 describe('setlists page', () => {
   beforeEach(() => {
+    vi.stubGlobal('confirm', vi.fn(() => true))
     mocks.setlists = []
     mocks.members = []
     mocks.fail = ''
@@ -144,7 +145,7 @@ describe('setlists page', () => {
     })
   })
 
-  afterEach(() => { cleanup(); vi.clearAllMocks(); localStorage.clear() })
+  afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); localStorage.clear() })
 
   it('creates a named setlist and adds a tune to it', async () => {
     const user = userEvent.setup()
@@ -187,8 +188,25 @@ describe('setlists page', () => {
     await tuneSearch()
     const picker = screen.getByRole('group', { name: 'Tunes in Gig' })
     expect(await within(picker).findByText('Moanin’')).toBeTruthy()
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await user.click(within(picker).getByRole('button', { name: 'Remove Moanin’ from Gig' }))
+    expect(window.confirm).toHaveBeenCalledWith('Remove "Moanin’" from the setlist? Its setlist comment will also be deleted. The tune and its scores will be kept.')
+    expect(mocks.members).toHaveLength(1)
     await user.click(within(picker).getByRole('button', { name: 'Remove Moanin’ from Gig' }))
     await waitFor(() => expect(mocks.members).toHaveLength(0))
+  })
+
+  it('confirms deletion of a setlist and preserves it when cancelled', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await user.click(screen.getByRole('button', { name: 'Delete setlist' }))
+    expect(window.confirm).toHaveBeenCalledWith('Delete setlist "Gig" and its entries and comments? The tunes and their scores will be kept.')
+    expect(mocks.setlists).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Delete setlist' }))
+    await waitFor(() => expect(mocks.setlists).toHaveLength(0))
   })
 
   it('filters the tune picker by title, composer and key', async () => {

@@ -10,6 +10,7 @@ import { SetlistPlayer } from './SetlistPlayer'
 import type { PlayerEntry } from './SetlistPlayer'
 import { SetlistTuneDetails } from './SetlistTuneDetails'
 import { SetlistTunePicker } from './SetlistTunePicker'
+import { DeleteButton } from './DeleteButton'
 import { ArchiveIcon, GripIcon, InfoIcon, PauseIcon, PdfIcon, PlayIcon } from './icons'
 
 type Setlist = { id: string; name: string; position: number; archived_at: string | null }
@@ -177,7 +178,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   }
 
   const removeSetlist = (setlist: Setlist) => {
-    if (!window.confirm(`Delete "${setlist.name}" and its tune selection?`)) return
+    if (!window.confirm(`Delete setlist "${setlist.name}" and its entries and comments? The tunes and their scores will be kept.`)) return
     void perform(async () => {
       const { error: deleteError } = await supabase.from('sm_setlists').delete().eq('id', setlist.id)
       if (deleteError) { setError(deleteError.message); return }
@@ -226,6 +227,8 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
 
   const removeEntry = (entry: SetlistEntry) => {
     if (!selectedId) return
+    const title = lib.pieces.find((piece) => piece.id === entry.piece_id)?.title ?? entry.placeholder ?? 'this entry'
+    if (!window.confirm(`Remove "${title}" from the setlist? Its setlist comment will also be deleted. The tune and its scores will be kept.`)) return
     void perform(async () => {
       const { error: removeError } = await supabase.from('sm_setlist_pieces').delete().eq('setlist_id', selectedId).eq('id', entry.id)
       if (removeError) { setError(removeError.message); return }
@@ -458,7 +461,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                   {isArchived
                     ? <button type="button" className="link" disabled={busy} onClick={() => setArchived(selected, false)}>Restore</button>
                     : <button type="button" className="link" disabled={busy} onClick={() => setArchived(selected, true)}>Archive</button>}
-                  <button type="button" className="link danger" disabled={busy} onClick={() => removeSetlist(selected)}>Delete setlist</button>
+                  <DeleteButton label="Delete setlist" disabled={busy} onClick={() => removeSetlist(selected)} />
                 </div>
               </div>
               {isArchived && <p className="setlist-archived-note" role="status">Archived setlists are read-only. Restore this one to change its tunes.</p>}
@@ -513,7 +516,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                         )}
                         <button type="button" className="icon-btn" aria-label={`Move ${title} up`} disabled={entriesDisabled || row === 0} onClick={() => moveEntry(index, -1)}>↑</button>
                         <button type="button" className="icon-btn" aria-label={`Move ${title} down`} disabled={entriesDisabled || row === visibleRows.length - 1} onClick={() => moveEntry(index, 1)}>↓</button>
-                        <button type="button" className="link danger" aria-label={`Remove ${title} from ${selected.name}`} disabled={entriesDisabled} onClick={() => removeEntry(entry)}>Remove</button>
+                        <DeleteButton label={`Remove ${title} from ${selected.name}`} disabled={entriesDisabled} onClick={() => removeEntry(entry)} />
                       </div>
                       {showingDetails && piece && (
                         <SetlistTuneDetails piece={piece} composerNamesOf={lib.composerNamesOf} onOpenPdf={(target) => void lib.openPdf(target)} />

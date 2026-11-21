@@ -11,6 +11,7 @@ import { SetlistTuneDetails } from './SetlistTuneDetails'
 import { SearchPicker } from './SearchPicker'
 import { TagInput } from './TagInput'
 import { ActivityCalendar } from './ActivityCalendar'
+import { DeleteButton } from './DeleteButton'
 
 type LessonPiece = { lesson_id: string; piece_id: string }
 type LessonMaterial = { lesson_id: string; material_id: string }
@@ -155,7 +156,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       setError('Move or delete this group’s lessons before deleting the group.')
       return
     }
-    if (!window.confirm(`Delete the group for ${groupDraft.teacher_name}?`)) return
+    if (!window.confirm(`Delete the lesson group for "${groupDraft.teacher_name}"?`)) return
     void perform(async () => {
       const { error: failure } = await supabase.from('sm_lesson_groups').delete().eq('id', groupDraft.id)
       if (failure) throw failure
@@ -204,7 +205,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   }
 
   const deleteLesson = () => {
-    if (!selected || !window.confirm(`Delete "${selected.title}" and its links? Teaching materials and tunes will be kept.`)) return
+    if (!selected || !window.confirm(`Delete lesson "${selected.title}" and its notes and links? Teaching materials and tunes will be kept.`)) return
     void perform(async () => {
       const { error: failure } = await supabase.from('sm_lessons').delete().eq('id', selected.id)
       if (failure) throw failure
@@ -283,7 +284,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   }
 
   const deleteMaterial = (material: TeachingMaterial) => {
-    if (!window.confirm(`Delete "${material.title}" and remove it from all lessons?`)) return
+    if (!window.confirm(`Delete teaching material "${material.title}" and its PDF? It will also be removed from all lessons.`)) return
     void perform(async () => {
       const { error: failure } = await supabase.from('sm_teaching_materials').delete().eq('id', material.id)
       if (failure) throw failure
@@ -332,7 +333,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               <label>Edit instrument<select value={groupDraft.instrument} disabled={busy} onChange={(event) => setGroupDraft({ ...groupDraft, instrument: event.target.value as Instrument })}><option value="guitar">Guitar</option><option value="piano">Piano</option></select></label>
               <button className="btn" type="submit" disabled={busy || !groupDirty || !groupDraft.teacher_name.trim()}>Save group</button>
               {groupDirty && <span className="muted">Unsaved group changes</span>}
-              <button className="link danger" type="button" disabled={busy} onClick={deleteGroup}>Delete group</button>
+              <DeleteButton label="Delete group" disabled={busy} onClick={deleteGroup} />
             </form>}
           </section>
           <section className="practice-summary" aria-label="Lesson activity">
@@ -365,13 +366,24 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
                 aria-pressed={materialTagFilter === tag} onClick={() => setMaterialTagFilter(materialTagFilter === tag ? null : tag)}>#{tag}</button>)}
             </div>}
             {materialTagFilter && visibleMaterials.length === 0 && <p className="muted">No materials with this tag.</p>}
-            {visibleMaterials.map((material) => <div className="material-row" key={material.id}>
-              <div className="material-info">
-                <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>
-                <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy} onChange={(tags) => saveMaterialTags(material, tags)} />
+            {visibleMaterials.map((material) => {
+              const linkedIds = new Set(lessonMaterials.filter((link) => link.material_id === material.id).map((link) => link.lesson_id))
+              const linkedLessons = lessons.filter((lesson) => linkedIds.has(lesson.id))
+                .sort((a, b) => b.lesson_date.localeCompare(a.lesson_date) || a.title.localeCompare(b.title))
+              return <div className="material-row" key={material.id}>
+                <div className="material-content">
+                  <div className="material-info">
+                    <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>
+                    <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy} onChange={(tags) => saveMaterialTags(material, tags)} />
+                  </div>
+                  {linkedLessons.length > 0 && <div className="material-lessons" aria-label={`Lessons using ${material.title}`}>
+                    <span>Used in:</span>
+                    <ul>{linkedLessons.map((lesson) => <li key={lesson.id}>{lesson.title} · {lesson.lesson_date}</li>)}</ul>
+                  </div>}
+                </div>
+                <DeleteButton label={`Delete teaching material ${material.title}`} disabled={busy} onClick={() => deleteMaterial(material)} />
               </div>
-              <button type="button" className="link danger" disabled={busy} onClick={() => deleteMaterial(material)}>Delete</button>
-            </div>)}
+            })}
             {!materials.length && <p className="muted">No teaching materials yet.</p>}
           </section>
           <form className="panel lesson-create" onSubmit={createLesson}>
@@ -401,7 +413,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
                 <label>Notes (Markdown)<textarea rows={10} disabled={busy} value={draft.notes} placeholder="What did you work on?" onChange={(event) => setDraft({ ...draft, notes: event.target.value })} /></label>
                 <div className="lesson-actions"><button type="submit" className="btn primary" disabled={busy || !dirty || !draft.title.trim()}>Save lesson</button>
                   {dirty && <span className="muted">Unsaved changes</span>}
-                  <button type="button" className="link danger" disabled={busy} onClick={deleteLesson}>Delete lesson</button></div>
+                  <DeleteButton label="Delete lesson" disabled={busy} onClick={deleteLesson} /></div>
               </form>
               {draft.notes && <section className="lesson-preview" aria-label="Notes preview"><h3>Notes preview</h3><Markdown text={draft.notes} /></section>}
               <section className="lesson-section"><h3>Tunes</h3>

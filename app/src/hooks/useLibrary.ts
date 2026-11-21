@@ -314,6 +314,7 @@ export function useLibrary() {
 
   // Hide the piece right away and only delete it for real once the undo window has passed.
   const remove = (p: Piece) => {
+    if (!window.confirm(`Delete "${p.title}" from your library? Its scores, practice history, and links to lessons and setlists will also be removed.`)) return
     setHiddenIds((h) => new Set(h).add(p.id))
     const unhide = () => setHiddenIds((h) => { const n = new Set(h); n.delete(p.id); return n })
     const toastId = notify(`Removed "${p.title}" from your library`, 'info', () => {
@@ -352,8 +353,10 @@ export function useLibrary() {
     update(p, { links: [...links, { type: detectLinkType(url), url }] })
     setOpenLink(null)
   }
-  const removeLink = (p: Piece, link: PieceLink) =>
+  const removeLink = (p: Piece, link: PieceLink) => {
+    if (!window.confirm(`Remove this link from "${p.title}"?`)) return
     update(p, { links: (p.links ?? []).filter((l) => l.url !== link.url) })
+  }
 
   /** Upload a PDF and add it as a new score of the piece. A null instrument marks it a lead sheet. */
   const addScore = async (p: Piece, f: File, musical_key: string | null, instrument: Instrument | null) => {
@@ -381,7 +384,8 @@ export function useLibrary() {
     void run(supabase.from('sm_piece_scores').update(patch).eq('id', score.id))
   }
 
-  const removeScore = (_p: Piece, score: PieceScore) => {
+  const removeScore = (p: Piece, score: PieceScore) => {
+    if (!window.confirm(`Delete this score for "${p.title}" and its PDF? Setlists using it will no longer reference it.`)) return
     void (async () => {
       const ok = await run(supabase.from('sm_piece_scores').delete().eq('id', score.id))
       if (ok) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([score.pdf_path])
@@ -393,6 +397,7 @@ export function useLibrary() {
     const key = `composer:${c.id}`
     const related = pieces.filter((p) => composerIdsOf(p).includes(c.id))
     const count = related.filter((p) => composerIdsOf(p).length === 1).length
+    if (!window.confirm(`Delete composer "${c.name}"? ${count} ${count === 1 ? 'piece' : 'pieces'} with no other composer and their scores will also be deleted. Shared pieces will be kept.`)) return
     setHiddenIds((h) => new Set(h).add(key))
     const unhide = () => setHiddenIds((h) => { const n = new Set(h); n.delete(key); return n })
     const toastId = notify(`Deleted "${c.name}"${count ? ` and ${count} ${count === 1 ? 'piece' : 'pieces'}` : ''}`, 'info', () => {
