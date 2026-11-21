@@ -471,7 +471,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
 
   return (
     <>
-      <div className="library-intro"><div><span className="library-kicker">Plan your music</span><h2>Setlists</h2><p>Collect and order tunes for gigs and jam sessions.</p></div></div>
+      <div className="library-intro"><div><h2>Setlists</h2><p>Collect and order tunes for gigs and jam sessions.</p></div></div>
       {error && <div className="error" role="alert">{error}</div>}
       {!loading && <section className="practice-summary" aria-label="Setlist activity">
         <button type="button" className="practice-summary-toggle" aria-expanded={showActivity} aria-controls="setlist-activity" onClick={() => setShowActivity(!showActivity)}>

@@ -20,7 +20,6 @@ export function Library({ lib, isIOS = false }: { lib: LibraryState; isIOS?: boo
     <>
       <div className="library-intro">
         <div>
-          <span className="library-kicker">Your music</span>
           <h2>Library</h2>
           <p>{composers.length} {composers.length === 1 ? 'composer' : 'composers'} · {pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'} · {instrumentCount} {instrumentCount === 1 ? 'instrument' : 'instruments'}</p>
         </div>
