@@ -1,11 +1,14 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { MAX_TAGS, MAX_TAG_LENGTH, normalizeTag } from '../lib/tags'
 import { confirmDelete } from '../lib/confirmDelete'
 import { DeleteButton } from './DeleteButton'
 
-export function TagInput({ tags, suggestions, label, disabled = false, onChange }: { tags: string[]; suggestions: string[]; label: string; disabled?: boolean; onChange: (tags: string[]) => void }) {
+export function TagInput({ tags, suggestions, label, disabled = false, selectSuggestions = false, onChange }: { tags: string[]; suggestions: string[]; label: string; disabled?: boolean; selectSuggestions?: boolean; onChange: (tags: string[]) => void }) {
   const [draft, setDraft] = useState('')
   const listId = useId()
+  const selectRef = useRef<HTMLSelectElement>(null)
+  const choosingSuggestion = useRef(false)
+  const available = suggestions.filter((s) => !tags.includes(s))
   const add = (raw: string) => {
     if (disabled) return
     const t = normalizeTag(raw)
@@ -23,7 +26,19 @@ export function TagInput({ tags, suggestions, label, disabled = false, onChange 
           <DeleteButton compact label={`Delete tag ${t}`} disabled={disabled} onClick={() => remove(t)} />
         </span>
       ))}
-      <input list={listId} aria-label="Add tag" placeholder="+ tag" maxLength={MAX_TAG_LENGTH} value={draft} disabled={disabled}
+      {selectSuggestions && available.length > 0 && (
+        <select ref={selectRef} aria-label={`Choose existing tag for ${label}`} value="" disabled={disabled}
+          onPointerDown={() => { choosingSuggestion.current = true }}
+          onBlur={() => { choosingSuggestion.current = false }}
+          onChange={(event) => {
+            choosingSuggestion.current = false
+            if (event.currentTarget.value) add(event.currentTarget.value)
+          }}>
+          <option value="">Choose existing tag</option>
+          {available.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+        </select>
+      )}
+      <input list={selectSuggestions ? undefined : listId} aria-label="Add tag" placeholder="+ tag" maxLength={MAX_TAG_LENGTH} value={draft} disabled={disabled}
         onChange={(e) => {
           const v = e.target.value
           if (v.includes(',')) {
@@ -41,8 +56,11 @@ export function TagInput({ tags, suggestions, label, disabled = false, onChange 
           if (e.key === 'Enter') { e.preventDefault(); add(draft) }
           else if (e.key === 'Backspace' && !draft && tags.length) remove(tags[tags.length - 1])
         }}
-        onBlur={() => { if (draft.trim()) add(draft) }} />
-      <datalist id={listId}>{suggestions.filter((s) => !tags.includes(s)).map((s) => <option key={s} value={s} />)}</datalist>
+        onBlur={(event) => {
+          if (event.relatedTarget === selectRef.current || choosingSuggestion.current) return
+          if (draft.trim()) add(draft)
+        }} />
+      {!selectSuggestions && <datalist id={listId}>{available.map((s) => <option key={s} value={s} />)}</datalist>}
     </div>
   )
 }

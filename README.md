@@ -8,6 +8,8 @@ Setlists can optionally have a date and time (stored as local calendar values, w
 
 When adding a piece, a score to an existing piece, or teaching material, choose an existing PDF or use **Take photo** to capture pages one at a time. The photos are combined into a PDF on the device without automatic cropping. On supported iPhones and iPads, the installed app also offers **Scan document**: Apple's document scanner detects and crops pages, lets you review them, and combines them into a PDF on the device. The PDF contains scanned page images, without text recognition. The iOS app must be rebuilt and reinstalled to add the native scanner.
 
+For score tags, use **Choose existing tag** to reuse a custom tag, or type a new one.
+
 The **Videos** page shows YouTube links from the library. Turn on random order to shuffle the feed, shuffle again for a new order, or turn it off to return to the original order.
 
 **Settings** stores each user's theme, library defaults (view, sort, filter and instrument), and video order in Supabase so they apply across devices. The default view can instead remember the last view on each device. Changes in the library and video pages are temporary, except for the remembered view. Settings also contains **Download backup**; the export includes saved preferences, or reports an error if they could not be included.
