@@ -56,7 +56,7 @@ export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean 
   if (!videos.length) return <div className="empty"><h3>No videos yet</h3><p>Add a YouTube link to a piece to see it here.</p></div>
   return (
     <>
-      <div className="library-intro video-intro"><div><span className="library-kicker">Your music</span><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'} from your library</p></div></div>
+      <div className="library-intro video-intro"><div><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'} from your library</p></div></div>
       {videos.length > 1 && <div className="video-order" aria-label="Video order">
         <button type="button" className="btn" aria-pressed={shuffledVideos !== null}
           onClick={() => setOrder(shuffledVideos ? 'ordered' : `random:${randomSeed()}`)}>Random order</button>

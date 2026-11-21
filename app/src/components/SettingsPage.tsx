@@ -41,7 +41,7 @@ export function SettingsPage({ lib, settings, loadError, onRetry, onSave }: {
   }
 
   return <div className="settings-page">
-    <div className="library-intro"><div><span className="library-kicker">Your account</span><h2>Settings</h2><p>Preferences sync across your devices.</p></div></div>
+    <div className="library-intro"><div><h2>Settings</h2><p>Preferences sync across your devices.</p></div></div>
     {loadError && <div className="error" role="alert">Could not load your settings: {loadError} <button type="button" className="link" onClick={onRetry}>Try again</button></div>}
     <form className="settings-form" onSubmit={(event) => void submit(event)}>
       <fieldset disabled={saving || Boolean(loadError)}>
