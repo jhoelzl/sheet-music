@@ -23,6 +23,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [newLessonGroup, setNewLessonGroup] = useState('')
   const [teacherName, setTeacherName] = useState('')
   const [instrument, setInstrument] = useState<Instrument>('guitar')
+  const [showGroupForm, setShowGroupForm] = useState(false)
   const [groupDraft, setGroupDraft] = useState<LessonGroup | null>(null)
   const [materials, setMaterials] = useState<TeachingMaterial[]>([])
   const [lessonPieces, setLessonPieces] = useState<LessonPiece[]>([])
@@ -131,6 +132,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       setGroups((current) => [...current, group])
       setNewLessonGroup(group.id)
       setTeacherName('')
+      setShowGroupForm(false)
     })
   }
 
@@ -310,17 +312,21 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       {loading ? <p role="status">Loading lessons…</p> : loadFailed ? <p>Reload the app to try again.</p> : (
         <>
           <section className="lesson-groups" aria-label="Lesson groups">
-            <h3>Lesson groups</h3>
-            <p className="muted">Organize lessons by teacher and instrument. Existing lessons remain unassigned until you assign them.</p>
-            <form className="panel lesson-group-form" onSubmit={createGroup}>
+            <div className="lesson-groups-toolbar">
+              <label>Show lessons for<select value={groupFilter} disabled={busy} onChange={(event) => chooseGroup(event.target.value)}>
+                <option value="all">All groups</option><option value="unassigned">Unassigned lessons</option>
+                {groups.map((group) => <option key={group.id} value={group.id}>{group.teacher_name} · {group.instrument}</option>)}
+              </select></label>
+              <button type="button" className="link" aria-expanded={showGroupForm} aria-controls="new-lesson-group"
+                disabled={busy} onClick={() => setShowGroupForm((visible) => !visible)}>
+                {showGroupForm ? 'Cancel' : 'Add group'}
+              </button>
+            </div>
+            {showGroupForm && <form id="new-lesson-group" className="panel lesson-group-form" onSubmit={createGroup}>
               <label className="grow">Teacher name<input required value={teacherName} disabled={busy} onChange={(event) => setTeacherName(event.target.value)} /></label>
               <label>Instrument<select value={instrument} disabled={busy} onChange={(event) => setInstrument(event.target.value as Instrument)}><option value="guitar">Guitar</option><option value="piano">Piano</option></select></label>
-              <button type="submit" className="btn" disabled={busy || !teacherName.trim()}>Add group</button>
-            </form>
-            <label>Show lessons for<select value={groupFilter} disabled={busy} onChange={(event) => chooseGroup(event.target.value)}>
-              <option value="all">All groups</option><option value="unassigned">Unassigned lessons</option>
-              {groups.map((group) => <option key={group.id} value={group.id}>{group.teacher_name} · {group.instrument}</option>)}
-            </select></label>
+              <button type="submit" className="btn" disabled={busy || !teacherName.trim()}>Create group</button>
+            </form>}
             {groupDraft && <form className="panel lesson-group-form" onSubmit={saveGroup}>
               <label className="grow">Edit teacher name<input required value={groupDraft.teacher_name} disabled={busy} onChange={(event) => setGroupDraft({ ...groupDraft, teacher_name: event.target.value })} /></label>
               <label>Edit instrument<select value={groupDraft.instrument} disabled={busy} onChange={(event) => setGroupDraft({ ...groupDraft, instrument: event.target.value as Instrument })}><option value="guitar">Guitar</option><option value="piano">Piano</option></select></label>
@@ -339,6 +345,34 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               <ActivityCalendar kind="lesson" entries={pastLessons.map((lesson) => ({ id: lesson.id, date: lesson.lesson_date, title: lesson.title }))}
                 selectionDisabled={busy} onSelectEntry={(id) => { const lesson = lessons.find((item) => item.id === id); if (lesson) choose(lesson) }} />
             </div>}
+          </section>
+          <section className="teaching-materials" aria-label="Teaching materials">
+            <div className="teaching-materials-heading">
+              <div><h3>Teaching materials <span className="materials-count">{materials.length}</span></h3><p className="muted">Upload PDFs once and reuse them across lessons.</p></div>
+            </div>
+            <form className="panel" onSubmit={uploadMaterial}>
+              <label className="grow">Material title<input required value={materialTitle} disabled={busy} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
+              <label>PDF file<input key={fileKey} type="file" accept="application/pdf,.pdf" disabled={busy}
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
+              <div className="field-group"><span>Tags</span>
+                <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy} onChange={setNewMaterialTags} />
+              </div>
+              <button type="submit" className="btn" disabled={busy || !file || !materialTitle.trim()}>Upload PDF</button>
+            </form>
+            {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
+              <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} onClick={() => setMaterialTagFilter(null)}>All tags</button>
+              {filterTags.map((tag) => <button key={tag} type="button" className={`filter-pill${materialTagFilter === tag ? ' active' : ''}`}
+                aria-pressed={materialTagFilter === tag} onClick={() => setMaterialTagFilter(materialTagFilter === tag ? null : tag)}>#{tag}</button>)}
+            </div>}
+            {materialTagFilter && visibleMaterials.length === 0 && <p className="muted">No materials with this tag.</p>}
+            {visibleMaterials.map((material) => <div className="material-row" key={material.id}>
+              <div className="material-info">
+                <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>
+                <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy} onChange={(tags) => saveMaterialTags(material, tags)} />
+              </div>
+              <button type="button" className="link danger" disabled={busy} onClick={() => deleteMaterial(material)}>Delete</button>
+            </div>)}
+            {!materials.length && <p className="muted">No teaching materials yet.</p>}
           </section>
           <form className="panel lesson-create" onSubmit={createLesson}>
             <label>Date<input type="date" value={newDate} required disabled={busy} onChange={(event) => setNewDate(event.target.value)} /></label>
@@ -381,7 +415,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
                 </section>}
               </section>
               <section className="lesson-section"><h3>Materials in this lesson</h3>
-                {!materials.length && <p className="muted">Upload teaching materials below to link them here.</p>}
+                {!materials.length && <p className="muted">Upload teaching materials to link them here.</p>}
                 <SearchPicker key={selected.id} items={materials.map((material) => ({ id: material.id, name: material.title, keywords: material.tags }))}
                   selectedIds={selectedMaterialIds} label={`Materials for ${selected.title}`} singular="material" plural="materials" disabled={busy}
                   onChange={(ids) => {
@@ -394,31 +428,6 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               </section>
             </section>}
           </div>
-          <section className="teaching-materials" aria-label="Teaching materials">
-            <h3>Teaching materials</h3><p className="muted">Upload PDFs once and reuse them across lessons.</p>
-            <form className="panel" onSubmit={uploadMaterial}>
-              <label className="grow">Material title<input required value={materialTitle} disabled={busy} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
-              <label>PDF file<input key={fileKey} type="file" accept="application/pdf,.pdf" disabled={busy}
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
-              <div className="field-group"><span>Tags</span>
-                <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy} onChange={setNewMaterialTags} />
-              </div>
-              <button type="submit" className="btn" disabled={busy || !file || !materialTitle.trim()}>Upload PDF</button>
-            </form>
-            {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
-              <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} onClick={() => setMaterialTagFilter(null)}>All tags</button>
-              {filterTags.map((tag) => <button key={tag} type="button" className={`filter-pill${materialTagFilter === tag ? ' active' : ''}`}
-                aria-pressed={materialTagFilter === tag} onClick={() => setMaterialTagFilter(materialTagFilter === tag ? null : tag)}>#{tag}</button>)}
-            </div>}
-            {materialTagFilter && visibleMaterials.length === 0 && <p className="muted">No materials with this tag.</p>}
-            {visibleMaterials.map((material) => <div className="material-row" key={material.id}>
-              <div className="material-info">
-                <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>
-                <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy} onChange={(tags) => saveMaterialTags(material, tags)} />
-              </div>
-              <button type="button" className="link danger" disabled={busy} onClick={() => deleteMaterial(material)}>Delete</button>
-            </div>)}
-          </section>
         </>
       )}
     </div>
