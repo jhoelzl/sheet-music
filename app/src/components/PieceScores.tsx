@@ -51,37 +51,6 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
         <span className="piece-scores-count">{scores.length}</span>
       </div>
       {uploaded && <UploadStatus state="success" title="Score uploaded and saved." />}
-      {scores.length === 0 && <p className="muted">No scores saved yet. Add your first score below.</p>}
-      <ul className="score-list" aria-label={`Saved scores for ${p.title}`}>
-        {scores.map((score, index) => (
-          <li className="score-row" key={score.id}>
-            <div className="score-row-heading">
-              <span className="score-row-icon" aria-hidden="true">{PdfIcon}</span>
-              <div className="score-row-title">
-                <strong>Score {index + 1}</strong>
-                <span>Saved{score.pdf_pages ? ` · ${score.pdf_pages} ${score.pdf_pages === 1 ? 'page' : 'pages'}` : ''}</span>
-              </div>
-              <div className="score-row-actions">
-                <button type="button" className="icon-btn" aria-label={`Open score ${index + 1} for ${p.title}`} title="Open this score"
-                  onClick={() => void lib.openPdf(p, score)}>{PdfIcon}</button>
-                <DeleteButton label={`Delete score ${index + 1} for ${p.title}`}
-                  disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id} onClick={() => lib.removeScore(p, score)} />
-              </div>
-            </div>
-            <div className="score-row-details">
-              <div className="score-field"><span>Key</span>
-                <KeySelect label={`Key for score ${index + 1} of ${p.title}`} value={score.musical_key ?? ''}
-                  disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id}
-                  onChange={(value) => lib.updateScore(p, score, { musical_key: value || null })} />
-              </div>
-              <div className="score-field"><span>Tags</span>
-                <ScoreTags label={`Tags for score ${index + 1} of ${p.title}`} tags={score.tags} suggestions={lib.allScoreTags}
-                  disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id} onChange={(next) => lib.updateScore(p, score, { tags: next })} />
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
       {adding ? (
         <form className="document-add" onSubmit={submit} aria-labelledby={formHeadingId}>
           <div className="document-add-heading">
@@ -124,6 +93,37 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
       ) : (
         <button type="button" className="btn" onClick={() => { setUploaded(false); setAdding(true) }}>+ Add score</button>
       )}
+      {scores.length === 0 && <p className="muted">No scores saved yet.</p>}
+      <ul className="score-list" aria-label={`Saved scores for ${p.title}`}>
+        {scores.map((score, index) => (
+          <li className="score-row" key={score.id}>
+            <div className="score-row-heading">
+              <span className="score-row-icon" aria-hidden="true">{PdfIcon}</span>
+              <div className="score-row-title">
+                <strong>Score {index + 1}</strong>
+                <span>Saved{score.pdf_pages ? ` · ${score.pdf_pages} ${score.pdf_pages === 1 ? 'page' : 'pages'}` : ''}</span>
+              </div>
+              <div className="score-row-actions">
+                <button type="button" className="icon-btn" aria-label={`Open score ${index + 1} for ${p.title}`} title="Open this score"
+                  onClick={() => void lib.openPdf(p, score)}>{PdfIcon}</button>
+                <DeleteButton label={`Delete score ${index + 1} for ${p.title}`}
+                  disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id} onClick={() => lib.removeScore(p, score)} />
+              </div>
+            </div>
+            <div className="score-row-details">
+              <div className="score-field"><span>Key</span>
+                <KeySelect label={`Key for score ${index + 1} of ${p.title}`} value={score.musical_key ?? ''}
+                  disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id}
+                  onChange={(value) => lib.updateScore(p, score, { musical_key: value || null })} />
+              </div>
+              <div className="score-field"><span>Tags</span>
+                <ScoreTags label={`Tags for score ${index + 1} of ${p.title}`} tags={score.tags} suggestions={lib.allScoreTags}
+                  disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id} onChange={(next) => lib.updateScore(p, score, { tags: next })} />
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
