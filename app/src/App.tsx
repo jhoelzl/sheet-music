@@ -102,7 +102,7 @@ export default function App() {
   }, [lessonDirty])
   const navigate = (next: Page) => {
     if (next === page) return
-    if (lessonDirty && !window.confirm('Discard unsaved lesson changes?')) return
+    if (lessonDirty && !window.confirm('Discard unsaved changes?')) return
     setLessonDirty(false)
     setPage(next)
   }
@@ -136,7 +136,7 @@ export default function App() {
           {!isIOS && navigation}
           <div className="header-actions">
             <button type="button" className="link" title="Reload the app; unsaved changes will be lost" onClick={() => window.location.reload()}>Reload app</button>
-            {session && <button type="button" className="link" onClick={() => { if (!lessonDirty || window.confirm('Discard unsaved lesson changes?')) void supabase.auth.signOut() }}>Sign out</button>}
+            {session && <button type="button" className="link" onClick={() => { if (!lessonDirty || window.confirm('Discard unsaved changes?')) void supabase.auth.signOut() }}>Sign out</button>}
           </div>
         </div>
       </header>

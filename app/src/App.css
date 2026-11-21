@@ -523,6 +523,11 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }
 .material-content { min-width: 0; flex: 1; }
 .material-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.material-actions { display: flex; align-items: flex-start; }
+.material-actions .edit { width: 36px; height: 36px; }
+.material-rename { display: flex; flex: 1 1 260px; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.material-rename input { flex: 1 1 140px; min-width: 0; }
+.material-rename-error { flex-basis: 100%; color: var(--danger); font-size: 13px; }
 .material-lessons { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 0 8px 8px; color: var(--muted); font-size: 12px; }
 .material-lessons ul { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 0; margin: 0; list-style: none; }
 .material-lessons li { overflow-wrap: anywhere; }
