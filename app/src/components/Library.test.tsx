@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   scannerAvailable: vi.fn(),
   scanDocument: vi.fn(),
   holdScoreSave: false,
+  failDelete: false,
 }))
 vi.mock('../lib/photoPdf', () => ({ preparePhoto: mocks.preparePhoto, photosToPdf: mocks.photosToPdf }))
 vi.mock('../lib/documentScanner', () => ({ hasDocumentScanner: mocks.scannerAvailable, scanDocument: mocks.scanDocument }))
@@ -96,6 +97,7 @@ describe('focused library', () => {
     window.history.replaceState(null, '', '/')
     mocks.scannerAvailable.mockReturnValue(false)
     mocks.holdScoreSave = false
+    mocks.failDelete = false
     vi.stubGlobal('confirm', vi.fn(() => true))
     localStorage.clear()
     mocks.pieces = [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', tags: ['calm'], play_progress: 50, links: [] }]
@@ -121,6 +123,10 @@ describe('focused library', () => {
       return null
     })
     mocks.delete.mockImplementation((table: string, _column: string, value: string, ids?: string[]) => {
+      if (table === 'sm_pieces') {
+        mocks.pieces = mocks.pieces.filter((piece) => piece.id !== value)
+        mocks.scores = mocks.scores.filter((score) => score.piece_id !== value)
+      }
       if (table === 'sm_piece_scores') mocks.scores = mocks.scores.filter((score) => score.id !== value)
       if (table === 'sm_piece_composers' && ids) {
         mocks.composerLinks = mocks.composerLinks.filter((link) => link.piece_id !== value || !ids.includes(link.composer_id))
@@ -150,7 +156,11 @@ describe('focused library', () => {
         const result = { data, error: null }
         const promise = Promise.resolve(result)
         const withLimit = Object.assign(promise, { limit: () => promise })
-        return Object.assign(promise, { order: () => withLimit, limit: () => promise })
+        return Object.assign(promise, {
+          order: () => withLimit,
+          limit: () => promise,
+          in: (column: string, values: string[]) => Promise.resolve({ data: data.filter((row) => values.includes(String((row as Record<string, unknown>)[column]))), error: null }),
+        })
       },
       update: (patch: unknown) => {
         const filters: Record<string, string> = {}
@@ -171,8 +181,9 @@ describe('focused library', () => {
             mocks.delete(table, column, value, inColumn === 'composer_id' ? ids : undefined)
             return Promise.resolve({ error: null })
           },
-          then: (resolve: (result: { error: null }) => unknown) =>
+          then: (resolve: (result: { error: { message: string } | null }) => unknown) =>
             Promise.resolve().then(() => {
+              if (mocks.failDelete) return { error: { message: 'Delete failed' } }
               mocks.delete(table, column, value)
               return { error: null as null }
             }).then(resolve),
@@ -347,6 +358,23 @@ describe('focused library', () => {
       { piece_id: 'p-new', composer_id: 'c1', position: 0 },
       { piece_id: 'p-new', composer_id: 'c2', position: 1 },
     ])
+  })
+
+  it('rejects an oversized score before creating the piece', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search composers for new piece' }), 'clara{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'Large score')
+    const file = new File([], 'large.pdf', { type: 'application/pdf' })
+    Object.defineProperty(file, 'size', { value: 50 * 1024 * 1024 + 1 })
+    await user.upload(screen.getByLabelText('PDF score (optional)'), file)
+    await user.click(screen.getByRole('button', { name: 'Add piece' }))
+    expect(screen.getByRole('alert').textContent).toContain('Piece not saved')
+    expect(screen.getByRole('alert').textContent).toContain('larger than 50 MB')
+    expect(mocks.insert).not.toHaveBeenCalledWith('sm_pieces', expect.anything())
+    expect(mocks.upload).not.toHaveBeenCalled()
   })
 
   it('uploads camera photos as the new piece score PDF', async () => {
@@ -1417,9 +1445,50 @@ describe('focused library', () => {
     expect(window.confirm).toHaveBeenLastCalledWith('Delete "Romance" from your library? Its scores, practice history, and links to lessons and setlists will also be deleted.')
 
     expect(screen.queryByText('Romance', { selector: 'summary strong' })).toBeNull()
-    expect(screen.getByText('Deleted "Romance" from your library')).toBeTruthy()
+    expect(screen.getByText('Removing "Romance" from your library')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
+  })
+
+  it('keeps score files when the piece deletion fails', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    mocks.failDelete = true
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Romance from library' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000) })
+    expect(mocks.remove).not.toHaveBeenCalled()
+    expect(screen.getByText('Delete failed')).toBeTruthy()
+    expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
+  })
+
+  it('offers retry when cleanup fails after a successful deletion', async () => {
+    mocks.remove.mockResolvedValueOnce({ error: { message: 'Storage unavailable' } }).mockResolvedValueOnce({ error: null })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Romance from library' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000) })
+    expect(mocks.delete).toHaveBeenCalledWith('sm_pieces', 'id', 'p1')
+    expect(mocks.remove).toHaveBeenCalledWith(['romance.pdf'])
+    expect(screen.getByText(/Storage unavailable/)).toBeTruthy()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry cleanup' })) })
+    expect(mocks.remove).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('button', { name: 'Retry cleanup' })).toBeNull()
+  })
+
+  it('does not clean up a file still referenced by another material', async () => {
+    mocks.materials = [{ id: 'm1', title: 'Shared', pdf_path: 'romance.pdf', tags: [] }]
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    vi.useFakeTimers()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Romance from library' }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(6000) })
+    expect(mocks.delete).toHaveBeenCalledWith('sm_pieces', 'id', 'p1')
+    expect(mocks.remove).not.toHaveBeenCalled()
   })
 
   it('asks before deleting a composer and describes the effect on pieces', async () => {

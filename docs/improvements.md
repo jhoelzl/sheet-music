@@ -17,8 +17,7 @@ See the [README](../README.md) for the full feature overview.
 
 | Pri | Effort | Item |
 | --- | --- | --- |
-| 🔴 | M | **Upload limits and validation.** Define and enforce size and type limits on the server, not just in the client. Account for existing image scores as well as PDFs, and avoid blocking existing files or backup/restore workflows. Inspect the deployed bucket configuration before changing it. |
-| 🔴 | M | **Test account isolation.** The migrations scope the storage policy to the user's path prefix and enable row-level security. Add integration tests with two users for storage and all linked records, including lessons, materials, scores and setlists; verify the deployed policies match the migrations. |
+| 🔴 | M | **Verify deployed upload limits and isolation.** Migration 0030 configures a 50 MiB limit, MIME allowlist and stricter ownership checks; apply it and verify the live settings. Local two-account tests cover core relationships and storage policies; extend them to all lesson and setlist links. MIME restrictions do not validate file contents. |
 | 🟡 | M | **Bound text and arrays.** Review missing server-side limits for titles, notes, tags, links and instruments; surface validation errors clearly in the app. |
 | 🟡 | M | **Account recovery and authentication.** Review the deployed password and email-confirmation settings, add password reset, and consider MFA. |
 | 🟡 | M | **Hosting security headers.** Evaluate CSP, content-type and referrer protections on the actual hosting layer. Preserve Supabase, document loading, and the YouTube player/referrer requirements. |
@@ -26,7 +25,7 @@ See the [README](../README.md) for the full feature overview.
 
 ## Reliability and data
 
-- 🔴 **Reliable deletion and cleanup.** Piece deletion currently waits through an undo timer and removes score files before the database delete is confirmed; storage errors are not surfaced there. Design recoverable deletion and orphan cleanup for pieces, scores, composers and materials, including reloads and partial failures. (L)
+- 🔴 **Durable deletion and cleanup.** File cleanup now follows a confirmed database deletion, checks for other references, and offers an in-session retry. The retry is lost on reload and the reference check is not atomic with storage deletion. Design a durable server-side cleanup queue that handles reloads, concurrent edits and partial failures. (L)
 - 🔴 **Investigate intermittent scan uploads.** Reproduce failures on physical iPad/iPhone and capture privacy-safe stage, timing and error diagnostics. The timeout and retry UI improve recovery, but do not establish the underlying cause. (M)
 - 🟡 **Recover uploads after navigation or restart.** Persist enough retry identity and draft state to resume safely, without duplicating a record or discarding a request that may still complete. Protect unsaved scans and uploads before leaving or reloading. (L)
 - 🟡 **Consistent practice dates.** The practice log and `last_practiced` are written separately and the latter update's error is not checked. Make them consistent together and report failures. (M)
