@@ -28,12 +28,37 @@ signing in again because the storage origin differs. Capacitor documents
 production setup; only trust the configured site with the native bridge.
 
 In Xcode, select a signing team and a connected device, then build and run the
-app. Run the sync command again after changing the web app.
+app. Run the sync command again when Capacitor configuration, native plugins,
+or bundled web assets change.
 Camera capture requires the updated native camera permission description and a
 rebuilt iOS app; the system will ask for camera access on first use.
 Document scanning uses Apple's native scanner on supported iPhones and iPads.
 Rebuild and reinstall the iOS app after adding or changing the native scanner;
 the browser and older installations can still capture photos as a PDF.
+
+### Update connected iPhone and iPad
+
+After merging an app update, safely update the local default branch and confirm
+that the GitHub Pages deployment has succeeded. Connect and unlock each device,
+and ensure it is paired, has Developer Mode enabled, and is provisioned for the
+signing team configured in Xcode. From the repository root:
+
+```sh
+xcrun devicectl list devices
+
+xcodebuild -project app/ios/App/App.xcodeproj -scheme App \
+  -configuration Debug -destination 'generic/platform=iOS' \
+  -derivedDataPath "$HOME/Library/Developer/Xcode/DerivedData/SheetMusicDevice" \
+  build
+
+xcrun devicectl device install app --device <DEVICE_ID> \
+  "$HOME/Library/Developer/Xcode/DerivedData/SheetMusicDevice/Build/Products/Debug-iphoneos/App.app"
+```
+
+Replace `<DEVICE_ID>` with the iPhone's identifier from the device list, then
+repeat the install command with the iPad's identifier. Installing over the
+existing app does not require uninstalling it. If a device is unavailable,
+update it when it is connected.
 
 On iOS, YouTube videos open in an in-app player. Its WebView uses the app's
 bundle ID as the HTTPS base URL so YouTube receives the required referrer.
