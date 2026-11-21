@@ -53,6 +53,11 @@ function TestMaterialPreview() {
   return <><PdfPreview lib={lib} /><button onClick={() => void lib.openMaterialPdf({ id: 'm1', title: 'Scales', pdf_path: 'scales.pdf', tags: [] })}>Open material</button></>
 }
 
+function TestMaterialBrowser() {
+  const lib = useLibrary()
+  return <><PdfPreview lib={lib} /><button onClick={() => void lib.openMaterialPdf(mocks.materials[0], mocks.materials)}>Browse materials</button></>
+}
+
 function TestComposers() {
   const lib = useLibrary()
   return <ComposersPage lib={lib} />
@@ -490,6 +495,60 @@ describe('focused library', () => {
     const dialog = await screen.findByRole('dialog', { name: 'PDF: Scales' })
     expect(within(dialog).queryByText('Score tags')).toBeNull()
     expect(within(dialog).queryByRole('group', { name: 'Browse scores' })).toBeNull()
+  })
+
+  it('navigates teaching materials using buttons and swipes without affecting scores', async () => {
+    mocks.materials = [
+      { id: 'm1', title: 'Arpeggios', pdf_path: 'arpeggios.pdf', tags: [] },
+      { id: 'm2', title: 'Chords', pdf_path: 'chords.pdf', tags: [] },
+      { id: 'm3', title: 'Scales', pdf_path: 'scales.pdf', tags: [] },
+    ]
+    mocks.signedUrl.mockImplementation(async (path: string) => ({ data: { signedUrl: `https://example.test/${path}` }, error: null }))
+    const user = userEvent.setup()
+    render(<TestMaterialBrowser />)
+    await user.click(screen.getByRole('button', { name: 'Browse materials' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Arpeggios' })
+    const navigation = within(dialog).getByRole('group', { name: 'Browse teaching materials' })
+    expect(within(navigation).getByText('1 / 3')).toBeTruthy()
+    expect((within(navigation).getByRole('button', { name: 'Start' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((within(navigation).getByRole('button', { name: '← Previous' }) as HTMLButtonElement).disabled).toBe(true)
+    await user.click(within(navigation).getByRole('button', { name: 'End' }))
+    expect(await screen.findByRole('dialog', { name: 'PDF: Scales' })).toBeTruthy()
+    expect(await within(dialog).findByText('PDF content: https://example.test/scales.pdf')).toBeTruthy()
+    expect(within(navigation).getByText('3 / 3')).toBeTruthy()
+    expect((within(navigation).getByRole('button', { name: 'End' }) as HTMLButtonElement).disabled).toBe(true)
+    await user.click(within(navigation).getByRole('button', { name: '← Previous' }))
+    expect(await within(dialog).findByText('PDF content: https://example.test/chords.pdf')).toBeTruthy()
+    swipe(within(dialog).getByLabelText('PDF pages'), [100, 100], [250, 100])
+    expect(await within(dialog).findByText('PDF content: https://example.test/arpeggios.pdf')).toBeTruthy()
+    swipe(within(dialog).getByLabelText('PDF pages'), [250, 100], [100, 100])
+    expect(await within(dialog).findByText('PDF content: https://example.test/chords.pdf')).toBeTruthy()
+    await user.click(within(navigation).getByRole('button', { name: 'Start' }))
+    expect(await within(dialog).findByText('PDF content: https://example.test/arpeggios.pdf')).toBeTruthy()
+    await user.click(within(navigation).getByRole('button', { name: 'Next →' }))
+    expect(await within(dialog).findByText('PDF content: https://example.test/chords.pdf')).toBeTruthy()
+    expect(within(dialog).queryByText('Score tags')).toBeNull()
+    expect(mocks.update).not.toHaveBeenCalled()
+    await user.click(within(dialog).getByRole('button', { name: '← Close' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('ignores a stale material URL after navigating to another material', async () => {
+    mocks.materials = [
+      { id: 'm1', title: 'Arpeggios', pdf_path: 'arpeggios.pdf', tags: [] },
+      { id: 'm2', title: 'Chords', pdf_path: 'chords.pdf', tags: [] },
+    ]
+    let resolveFirst!: (value: { data: { signedUrl: string }; error: null }) => void
+    mocks.signedUrl.mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve }))
+    mocks.signedUrl.mockResolvedValueOnce({ data: { signedUrl: 'https://example.test/chords.pdf' }, error: null })
+    const user = userEvent.setup()
+    render(<TestMaterialBrowser />)
+    await user.click(screen.getByRole('button', { name: 'Browse materials' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Arpeggios' })
+    await user.click(within(dialog).getByRole('button', { name: 'Next →' }))
+    expect(await within(dialog).findByText('PDF content: https://example.test/chords.pdf')).toBeTruthy()
+    await act(async () => { resolveFirst({ data: { signedUrl: 'https://example.test/arpeggios.pdf' }, error: null }) })
+    expect(within(dialog).getByText('PDF content: https://example.test/chords.pdf')).toBeTruthy()
   })
 
   it('saves an unfinished custom tag when closing the viewer with Escape', async () => {

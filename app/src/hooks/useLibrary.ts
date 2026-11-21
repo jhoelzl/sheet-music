@@ -54,6 +54,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [toasts, setToasts] = useState<Toast[]>([])
   const [preview, setPreview] = useState<Preview | null>(null)
   const [browseScores, setBrowseScores] = useState<BrowseScore[] | null>(null)
+  const [browseMaterials, setBrowseMaterials] = useState<TeachingMaterial[] | null>(null)
   const previewRequest = useRef(0)
   const [sort, setSort] = useState<SortKey>(defaults.library_sort)
   const [view, setViewState] = useState<View>(() => {
@@ -489,18 +490,23 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
 
   const openPdf = async (p: Piece, score: PieceScore | null = primaryScore(p)) => {
     setBrowseScores(null)
+    setBrowseMaterials(null)
     if (score) await openStoredPdf(score.id, p.id, p.title, score.pdf_path, score.pdf_pages ?? null)
   }
   const openBrowsePdf = (p: Piece, score: PieceScore) =>
     openStoredPdf(score.id, p.id, p.title, score.pdf_path, score.pdf_pages ?? null)
-  const openMaterialPdf = (material: TeachingMaterial) => {
+  const openBrowseMaterialPdf = (material: TeachingMaterial) =>
+    openStoredPdf(material.id, null, material.title, material.pdf_path, null)
+  const openMaterialPdf = (material: TeachingMaterial, selection?: TeachingMaterial[]) => {
     setBrowseScores(null)
-    return openStoredPdf(material.id, null, material.title, material.pdf_path, null)
+    setBrowseMaterials(selection ?? null)
+    return openBrowseMaterialPdf(material)
   }
 
   const closePdf = () => {
     previewRequest.current++
     setBrowseScores(null)
+    setBrowseMaterials(null)
     setPreview(null)
   }
 
@@ -522,6 +528,10 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     } catch (error) {
       notify(error instanceof Error ? error.message : 'Could not save the PDF page count.')
     }
+  }
+
+  const recordMaterialPdfPages = (materialId: string, pages: number) => {
+    setPreview((current) => current?.pieceId === null && current.id === materialId ? { ...current, pages } : current)
   }
 
   /** Download every table plus every score PDF as a single zip. */
@@ -647,6 +657,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     const items = ordered.flatMap((piece) => scoresOf(piece).map((score) => ({ piece, score })))
     const first = items[0]
     if (!first) { notify('No scores in the current selection.', 'info'); return }
+    setBrowseMaterials(null)
     setBrowseScores(items.map(({ piece, score }) => ({ pieceId: piece.id, scoreId: score.id })))
     void openBrowsePdf(first.piece, first.score)
   }
@@ -655,7 +666,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
 
   return {
     // data
-    composers, pieces, logs, toasts, preview, browseScores, visible, flat, tableRows, allTags, allScoreTags, filterTags, practicedToday,
+    composers, pieces, logs, toasts, preview, browseScores, browseMaterials, visible, flat, tableRows, allTags, allScoreTags, filterTags, practicedToday,
     // ui state
     sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, savingScoreIds, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
@@ -664,7 +675,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     // new-item form state
     composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreTags, setNewScoreTags, newTags, setNewTags, pieceSaving,
     // actions
-    dismissToast, closePdf, pdfUrl, openMaterialPdf, openBrowsePdf, startScoreBrowse, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
+    dismissToast, closePdf, pdfUrl, openMaterialPdf, openBrowseMaterialPdf, openBrowsePdf, startScoreBrowse, recordPdfPages, recordMaterialPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, addScore, updateScore, removeScore, removeComposer, startEditComposer, commitComposerEdit, openPdf,
     scoresOf, keysOf, primaryScore, backup, backingUp,
   }
