@@ -9,6 +9,7 @@ import { GroupedView } from './GroupedView'
 import { PracticeCalendar } from './PracticeCalendar'
 import { TableView } from './TableView'
 import { Toolbar } from './Toolbar'
+import { UploadStatus } from './UploadStatus'
 
 export function Library({ lib, isIOS = false }: { lib: LibraryState; isIOS?: boolean }) {
   const [showPractice, setShowPractice] = useState(false)
@@ -24,11 +25,20 @@ export function Library({ lib, isIOS = false }: { lib: LibraryState; isIOS?: boo
           <p>{composers.length} {composers.length === 1 ? 'composer' : 'composers'} · {pieces.length} {pieces.length === 1 ? 'piece' : 'pieces'} · {instrumentCount} {instrumentCount === 1 ? 'instrument' : 'instruments'}</p>
         </div>
         <div className="intro-actions">
-          {!isIOS && <button className={`btn${panel === 'composer' ? ' active' : ''}`} onClick={() => setPanel(panel === 'composer' ? null : 'composer')}>+ Composer</button>}
-          <button className="btn primary" onClick={() => setPanel(panel === 'piece' ? null : 'piece')} disabled={!composers.length} title={composers.length ? '' : 'Add a composer first'}>+ Piece</button>
+          {!isIOS && <button className={`btn${panel === 'composer' ? ' active' : ''}`} disabled={lib.pieceSaving} onClick={() => setPanel(panel === 'composer' ? null : 'composer')}>+ Composer</button>}
+          <button className="btn primary" onClick={() => {
+            if (!lib.pieceScoreAttempt && !lib.pieceSaveUncertain) lib.setPieceUploadStatus(null)
+            setPanel(panel === 'piece' ? null : 'piece')
+          }} disabled={!composers.length || lib.pieceSaving} title={composers.length ? '' : 'Add a composer first'}>+ Piece</button>
         </div>
       </div>
 
+      {lib.pieceUploadStatus && <UploadStatus key={`${lib.pieceUploadStatus.state}-${lib.pieceUploadStatus.stage.message}`} {...lib.pieceUploadStatus}>
+        {!lib.pieceSaving && !lib.pieceScoreAttempt && !lib.pieceSaveUncertain && <button type="button" className="link" onClick={() => lib.setPieceUploadStatus(null)}>Dismiss</button>}
+        {!lib.pieceSaving && (lib.pieceScoreAttempt || lib.pieceSaveUncertain) && panel !== 'piece' && <button type="button" className="btn" onClick={() => setPanel('piece')}>Return to upload</button>}
+        {!lib.pieceSaving && panel === 'piece' && lib.pieceScoreAttempt && <button type="submit" form="piece-add-form" className="btn primary">Retry upload</button>}
+        {!lib.pieceSaving && panel === 'piece' && (lib.pieceScoreAttempt || lib.pieceSaveUncertain) && <button type="button" className="link" onClick={lib.discardPieceUpload}>Start over</button>}
+      </UploadStatus>}
       {(!isIOS || panel === 'piece') && <AddForms lib={lib} />}
       <section className="practice-summary" aria-label="Practice activity">
         <button type="button" className="practice-summary-toggle" aria-expanded={showPractice} aria-controls="practice-activity" onClick={() => setShowPractice(!showPractice)}>

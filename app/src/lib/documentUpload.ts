@@ -2,6 +2,7 @@ import { PDF_STORAGE_BUCKET } from '../config'
 import { supabase } from '../supabase'
 
 const REQUEST_TIMEOUT_MS = 90_000
+export type UploadStage = { phase: 'prepare' | 'upload' | 'save'; message: string }
 
 export async function uploadStep<T>(operation: PromiseLike<T>, stage: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -53,13 +54,13 @@ export async function saveUploadRecord<T>(
   return result.data
 }
 
-export async function uploadDocument(file: File, id: string, folder: '' | 'materials', onStage: (stage: string) => void): Promise<string> {
-  onStage('Checking your account…')
+export async function uploadDocument(file: File, id: string, folder: '' | 'materials', onStage: (stage: UploadStage) => void): Promise<string> {
+  onStage({ phase: 'prepare', message: 'Checking your account…' })
   const { data: { user }, error } = await uploadStep(supabase.auth.getUser(), 'Checking your account')
   if (error) throw error
   if (!user) throw new Error('Sign in before uploading a document.')
   const path = `${user.id}/${folder ? `${folder}/` : ''}${id}.pdf`
-  onStage('Uploading PDF…')
+  onStage({ phase: 'upload', message: 'Uploading PDF…' })
   const uploaded = await uploadStep(
     supabase.storage.from(PDF_STORAGE_BUCKET).upload(path, file, { contentType: 'application/pdf', upsert: true }),
     'Uploading the PDF',
