@@ -227,7 +227,7 @@ describe('lessons', () => {
   })
 
   it('opens the correct linked tune, including tunes without a score', async () => {
-    const first = { ...piece, pdf_path: 'u/a.pdf', scores: [{ id: 's1', piece_id: 'p1', pdf_path: 'u/a.pdf', pdf_pages: 1, musical_key: null, instrument: 'guitar' as const, lead_sheet: false, position: 0 }] }
+    const first = { ...piece, pdf_path: 'u/a.pdf', scores: [{ id: 's1', piece_id: 'p1', pdf_path: 'u/a.pdf', pdf_pages: 1, musical_key: null, instrument: 'guitar' as const, lead_sheet: false, tags: ['guitar'], position: 0 }] }
     const second = { ...piece, id: 'p2', title: 'Blue Bossa', pdf_path: 'u/b.pdf', scores: [{ ...first.scores[0], id: 's2', piece_id: 'p2', pdf_path: 'u/b.pdf' }] }
     const third = { ...piece, id: 'p3', title: 'No score' }
     const user = userEvent.setup()

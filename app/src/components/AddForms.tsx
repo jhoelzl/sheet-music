@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import type { Library } from '../hooks/useLibrary'
-import { INSTRUMENTS } from '../lib/instruments'
 import { KeySelect } from './KeySelect'
 import { ComposerPicker } from './ComposerPicker'
 import { TagInput } from './TagInput'
 import { DocumentInput } from './DocumentInput'
+import { ScoreTags } from './ScoreTags'
 
 export function AddForms({ lib }: { lib: Library }) {
   const [processingPhotos, setProcessingPhotos] = useState(false)
@@ -34,16 +34,10 @@ export function AddForms({ lib }: { lib: Library }) {
         <DocumentInput label="PDF score (optional)" file={lib.file} disabled={pieceSaving} onChange={lib.setFile} onProcessingChange={setProcessingPhotos} />
         {lib.file && <>
           <label>Key<KeySelect value={lib.newMusicalKey} onChange={lib.setNewMusicalKey} disabled={pieceSaving} /></label>
-          <div className="field-group" role="group" aria-label="Type for the new score">
-            <span>Instrument</span>
-            <div className="instrument-toggle">
-              <button type="button" className={`chip${lib.newScoreInstrument === null ? ' on' : ''}`} aria-pressed={lib.newScoreInstrument === null} disabled={pieceSaving}
-                onClick={() => lib.setNewScoreInstrument(null)}>Lead sheet</button>
-              {INSTRUMENTS.map((i) => (
-                <button key={i.value} type="button" className={`chip${lib.newScoreInstrument === i.value ? ' on' : ''}`} aria-pressed={lib.newScoreInstrument === i.value} disabled={pieceSaving}
-                  onClick={() => lib.setNewScoreInstrument(i.value)}>{i.icon} {i.label}</button>
-              ))}
-            </div>
+          <div className="field-group">
+            <span>Score tags</span>
+            <ScoreTags label="Tags for the new score" tags={lib.newScoreTags} suggestions={lib.allScoreTags}
+              disabled={pieceSaving} onChange={lib.setNewScoreTags} />
           </div>
         </>}
         <button className="btn primary" type="submit" disabled={pieceSaving || processingPhotos}>{pieceSaving ? 'Saving…' : 'Add piece'}</button>

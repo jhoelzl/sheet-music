@@ -19,16 +19,16 @@ export type LinkType = 'youtube' | 'spotify' | 'instagram' | 'other'
 
 export type PieceLink = { type: LinkType; url: string }
 
-/** One PDF of a piece, with the key it is written in and the instrument it is for. */
+/** One PDF of a piece, with its musical key and independent tags. */
 export type PieceScore = {
   id: string
   piece_id: string
   pdf_path: string
   pdf_pages: number | null
   musical_key: string | null
-  /** null for a lead sheet (chords only). */
+  tags: string[]
+  /** Legacy fields kept in sync by the database for older clients. */
   instrument: Instrument | null
-  /** Chords only, for no particular instrument. */
   lead_sheet: boolean
   position: number
 }

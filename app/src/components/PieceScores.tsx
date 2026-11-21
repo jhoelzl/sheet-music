@@ -1,35 +1,30 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import type { Instrument, Piece } from '../supabase'
+import type { Piece } from '../supabase'
 import type { Library } from '../hooks/useLibrary'
-import { INSTRUMENTS } from '../lib/instruments'
 import { PdfIcon } from './icons'
 import { KeySelect } from './KeySelect'
 import { DeleteButton } from './DeleteButton'
 import { DocumentInput } from './DocumentInput'
+import { ScoreTags } from './ScoreTags'
 
-const labelOf = (value: Instrument | null) => INSTRUMENTS.find((item) => item.value === value)
-
-/**
- * The piece's scores: one row per PDF, each with its own key and either an
- * instrument or a "lead sheet" (chords only, no particular instrument).
- */
+/** The piece's scores: one row per PDF, each with its own key and tags. */
 export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
   const scores = lib.scoresOf(p)
   const [adding, setAdding] = useState(false)
   const [file, setFile] = useState<File | null>(null)
   const [processingPhotos, setProcessingPhotos] = useState(false)
   const [key, setKey] = useState('')
-  const [instrument, setInstrument] = useState<Instrument | null>('piano')
+  const [tags, setTags] = useState<string[]>(['piano'])
 
   const clearForm = () => {
-    setFile(null); setKey(''); setInstrument('piano'); setAdding(false)
+    setFile(null); setKey(''); setTags(['piano']); setAdding(false)
   }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!file || processingPhotos || lib.uploadingId === p.id) return
-    void lib.addScore(p, file, key.trim() || null, instrument)
+    void lib.addScore(p, file, key.trim() || null, tags)
     clearForm()
   }
 
@@ -40,26 +35,16 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
       <ul className="score-list">
         {scores.map((score, index) => (
           <li className="score-row" key={score.id}>
-            <span className="score-instrument" title={score.lead_sheet ? 'Lead sheet' : labelOf(score.instrument)?.label}>
-              {score.lead_sheet ? '♪' : labelOf(score.instrument)?.icon}
-            </span>
             <KeySelect label={`Key for score ${index + 1} of ${p.title}`} value={score.musical_key ?? ''}
+              disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id}
               onChange={(value) => lib.updateScore(p, score, { musical_key: value || null })} />
-            <div className="score-instruments" role="group" aria-label={`Type for score ${index + 1} of ${p.title}`}>
-              <button type="button" className={`chip${score.lead_sheet ? ' on' : ''}`} aria-pressed={score.lead_sheet}
-                title="Chords only, no particular instrument" disabled={lib.uploadingId === p.id}
-                onClick={() => { if (!score.lead_sheet) lib.updateScore(p, score, { lead_sheet: true, instrument: null }) }}>Lead sheet</button>
-              {INSTRUMENTS.map((item) => (
-                <button key={item.value} type="button" className={`chip${!score.lead_sheet && score.instrument === item.value ? ' on' : ''}`}
-                  aria-pressed={!score.lead_sheet && score.instrument === item.value} aria-label={item.label} title={item.label} disabled={lib.uploadingId === p.id}
-                  onClick={() => { if (score.lead_sheet || score.instrument !== item.value) lib.updateScore(p, score, { instrument: item.value, lead_sheet: false }) }}>{item.icon}</button>
-              ))}
-            </div>
+            <ScoreTags label={`Tags for score ${index + 1} of ${p.title}`} tags={score.tags} suggestions={lib.allScoreTags}
+              disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id} onChange={(next) => lib.updateScore(p, score, { tags: next })} />
             {score.pdf_pages ? <span className="page-count">{score.pdf_pages} {score.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
             <button type="button" className="icon-btn" aria-label={`Open score ${index + 1} for ${p.title}`} title="Open this score"
               onClick={() => void lib.openPdf(p, score)}>{PdfIcon}</button>
             <DeleteButton label={`Delete score ${index + 1} for ${p.title}`}
-              disabled={lib.uploadingId === p.id} onClick={() => lib.removeScore(p, score)} />
+              disabled={lib.savingScoreIds.has(score.id) || lib.uploadingId === p.id} onClick={() => lib.removeScore(p, score)} />
           </li>
         ))}
       </ul>
@@ -67,15 +52,8 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
         <form className="score-add" onSubmit={submit}>
           <DocumentInput label={`PDF for ${p.title}`} file={file} disabled={lib.uploadingId === p.id} onChange={setFile} onProcessingChange={setProcessingPhotos} />
           <KeySelect label={`Key for new score of ${p.title}`} value={key} onChange={setKey} disabled={lib.uploadingId === p.id} />
-          <div className="score-instruments" role="group" aria-label={`Type for new score of ${p.title}`}>
-            <button type="button" className={`chip${instrument === null ? ' on' : ''}`} aria-pressed={instrument === null}
-              disabled={lib.uploadingId === p.id} onClick={() => setInstrument(null)}>Lead sheet</button>
-            {INSTRUMENTS.map((item) => (
-              <button key={item.value} type="button" className={`chip${instrument === item.value ? ' on' : ''}`}
-                aria-pressed={instrument === item.value} disabled={lib.uploadingId === p.id}
-                onClick={() => setInstrument(item.value)}>{item.icon} {item.label}</button>
-            ))}
-          </div>
+          <ScoreTags label={`Tags for new score of ${p.title}`} tags={tags} suggestions={lib.allScoreTags}
+            disabled={lib.uploadingId === p.id} onChange={setTags} />
           <button type="submit" className="btn" disabled={!file || processingPhotos || lib.uploadingId === p.id}>{lib.uploadingId === p.id ? 'Uploading…' : 'Add score'}</button>
           <button type="button" className="link" onClick={clearForm}>Cancel</button>
         </form>
