@@ -4,6 +4,7 @@ import type { Library } from '../hooks/useLibrary'
 import { scoresOf } from '../hooks/useLibrary'
 import { supabase } from '../supabase'
 import { dropIndex, moveItem } from '../lib/reorder'
+import { confirmDelete } from '../lib/confirmDelete'
 import { scoreLabel } from '../lib/scores'
 import { SetlistComment } from './SetlistComment'
 import { SetlistPlayer } from './SetlistPlayer'
@@ -178,7 +179,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   }
 
   const removeSetlist = (setlist: Setlist) => {
-    if (!window.confirm(`Delete setlist "${setlist.name}" and its entries and comments? The tunes and their scores will be kept.`)) return
+    if (!confirmDelete(`setlist "${setlist.name}"`, 'Its entries and comments will also be deleted. The tunes and their scores will be kept.')) return
     void perform(async () => {
       const { error: deleteError } = await supabase.from('sm_setlists').delete().eq('id', setlist.id)
       if (deleteError) { setError(deleteError.message); return }
@@ -228,7 +229,9 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   const removeEntry = (entry: SetlistEntry) => {
     if (!selectedId) return
     const title = lib.pieces.find((piece) => piece.id === entry.piece_id)?.title ?? entry.placeholder ?? 'this entry'
-    if (!window.confirm(`Remove "${title}" from the setlist? Its setlist comment will also be deleted. The tune and its scores will be kept.`)) return
+    if (!confirmDelete(`"${title}" from the setlist`, entry.piece_id
+      ? 'Its setlist comment will also be deleted. The tune and its scores will be kept.'
+      : 'Its setlist comment will also be deleted.')) return
     void perform(async () => {
       const { error: removeError } = await supabase.from('sm_setlist_pieces').delete().eq('setlist_id', selectedId).eq('id', entry.id)
       if (removeError) { setError(removeError.message); return }
@@ -516,7 +519,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                         )}
                         <button type="button" className="icon-btn" aria-label={`Move ${title} up`} disabled={entriesDisabled || row === 0} onClick={() => moveEntry(index, -1)}>↑</button>
                         <button type="button" className="icon-btn" aria-label={`Move ${title} down`} disabled={entriesDisabled || row === visibleRows.length - 1} onClick={() => moveEntry(index, 1)}>↓</button>
-                        <DeleteButton label={`Remove ${title} from ${selected.name}`} disabled={entriesDisabled} onClick={() => removeEntry(entry)} />
+                        <DeleteButton label={`Delete ${title} from ${selected.name}`} disabled={entriesDisabled} onClick={() => removeEntry(entry)} />
                       </div>
                       {showingDetails && piece && (
                         <SetlistTuneDetails piece={piece} composerNamesOf={lib.composerNamesOf} onOpenPdf={(target) => void lib.openPdf(target)} />

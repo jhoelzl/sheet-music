@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { usePickerDismiss } from '../hooks/usePickerDismiss'
-import { CloseIcon } from './icons'
+import { confirmDelete } from '../lib/confirmDelete'
+import { DeleteButton } from './DeleteButton'
 
 export function SearchPicker({ items, selectedIds, label, singular, plural, requireOne = false, disabled = false, onChange, onOpen }: {
   items: { id: string; name: string; keywords?: string[] }[]
@@ -44,9 +45,11 @@ export function SearchPicker({ items, selectedIds, label, singular, plural, requ
           return (
             <span className="tag" key={id}>
               {onOpen && item ? <button type="button" className="picker-item-open" aria-label={`Open ${singular} ${name}`} onClick={() => onOpen(id)}>{name}</button> : name}
-              <button type="button" className="tag-remove" aria-label={`Remove ${singular} ${name}`}
-                title={cannotRemove ? `A piece must have at least one ${singular}` : `Remove ${name}`}
-                disabled={busy || cannotRemove} onClick={() => void change(selectedIds.filter((selected) => selected !== id))}>{CloseIcon}</button>
+              <DeleteButton compact label={`Delete ${singular} ${name}`} title={cannotRemove ? `A piece must have at least one ${singular}` : undefined} disabled={busy || cannotRemove}
+                onClick={() => {
+                  if (confirmDelete(`${singular} "${name}" from ${label}`, `The original ${singular} will be kept.`))
+                    void change(selectedIds.filter((selected) => selected !== id))
+                }} />
             </span>
           )
         })}

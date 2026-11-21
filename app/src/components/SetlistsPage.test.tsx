@@ -189,10 +189,26 @@ describe('setlists page', () => {
     const picker = screen.getByRole('group', { name: 'Tunes in Gig' })
     expect(await within(picker).findByText('Moanin’')).toBeTruthy()
     vi.mocked(window.confirm).mockReturnValueOnce(false)
-    await user.click(within(picker).getByRole('button', { name: 'Remove Moanin’ from Gig' }))
-    expect(window.confirm).toHaveBeenCalledWith('Remove "Moanin’" from the setlist? Its setlist comment will also be deleted. The tune and its scores will be kept.')
+    await user.click(within(picker).getByRole('button', { name: 'Delete Moanin’ from Gig' }))
+    expect(window.confirm).toHaveBeenCalledWith('Delete "Moanin’" from the setlist? Its setlist comment will also be deleted. The tune and its scores will be kept.')
     expect(mocks.members).toHaveLength(1)
-    await user.click(within(picker).getByRole('button', { name: 'Remove Moanin’ from Gig' }))
+    await user.click(within(picker).getByRole('button', { name: 'Delete Moanin’ from Gig' }))
+    await waitFor(() => expect(mocks.members).toHaveLength(0))
+  })
+
+  it('uses the same confirmation for the setlist row and picker', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [{ id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Solo', score_id: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await tuneSearch()
+    const list = screen.getByRole('list', { name: 'Tune order' })
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    await user.click(within(list).getByRole('button', { name: 'Delete Moanin’ from Gig' }))
+    expect(window.confirm).toHaveBeenCalledOnce()
+    expect(window.confirm).toHaveBeenCalledWith('Delete "Moanin’" from the setlist? Its setlist comment will also be deleted. The tune and its scores will be kept.')
+    expect(mocks.members).toHaveLength(1)
+    await user.click(within(list).getByRole('button', { name: 'Delete Moanin’ from Gig' }))
     await waitFor(() => expect(mocks.members).toHaveLength(0))
   })
 
@@ -203,7 +219,7 @@ describe('setlists page', () => {
     await screen.findByRole('heading', { name: 'Gig' })
     vi.mocked(window.confirm).mockReturnValueOnce(false)
     await user.click(screen.getByRole('button', { name: 'Delete setlist' }))
-    expect(window.confirm).toHaveBeenCalledWith('Delete setlist "Gig" and its entries and comments? The tunes and their scores will be kept.')
+    expect(window.confirm).toHaveBeenCalledWith('Delete setlist "Gig"? Its entries and comments will also be deleted. The tunes and their scores will be kept.')
     expect(mocks.setlists).toHaveLength(1)
     await user.click(screen.getByRole('button', { name: 'Delete setlist' }))
     await waitFor(() => expect(mocks.setlists).toHaveLength(0))
@@ -272,7 +288,8 @@ describe('setlists page', () => {
     await waitFor(() => expect(within(list).getAllByRole('listitem')).toHaveLength(3))
     expect(within(list).getAllByRole('listitem').map((item) => item.querySelector('strong')?.textContent)).toEqual(['Break', 'Moanin’', 'Break'])
     expect((await openComment(user, 'Moanin’')).value).toBe('Piano solo')
-    await user.click(screen.getAllByRole('button', { name: 'Remove Break from Gig' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'Delete Break from Gig' })[0])
+    expect(window.confirm).toHaveBeenLastCalledWith('Delete "Break" from the setlist? Its setlist comment will also be deleted.')
     await waitFor(() => expect(mocks.members).toHaveLength(2))
   })
 

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { usePickerDismiss } from '../hooks/usePickerDismiss'
 import type { Piece } from '../supabase'
-import { CloseIcon } from './icons'
+import { DeleteButton } from './DeleteButton'
 
 const MAX_RESULTS = 8
 
@@ -52,8 +52,7 @@ export function SetlistTunePicker({ pieces, selectedIds, setlistName, context = 
           <span className="tag" key={piece.id}>
             {onSelectPiece ? <button type="button" className="picker-item-open" aria-label={`${openPieceId === piece.id ? 'Hide' : 'Show'} details for ${piece.title}`}
               aria-expanded={openPieceId === piece.id} onClick={() => onSelectPiece(piece)}>{piece.title}</button> : piece.title}
-            <button type="button" className="tag-remove" aria-label={`Remove ${piece.title} from ${setlistName}`}
-              title={`Remove ${piece.title}`} disabled={disabled} onClick={() => onRemove(piece.id)}>{CloseIcon}</button>
+            <DeleteButton compact label={`Delete ${piece.title} from ${setlistName}`} disabled={disabled} onClick={() => onRemove(piece.id)} />
           </span>
         ))}
       </div>

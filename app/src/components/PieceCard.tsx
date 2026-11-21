@@ -3,7 +3,7 @@ import type { Library } from '../hooks/useLibrary'
 import { practicedText } from '../lib/dates'
 import { LINK_TYPES, linkLabel, safeUrl } from '../lib/links'
 import { STATUSES, statusOf, statusPatch } from '../lib/status'
-import { CloseIcon } from './icons'
+import { DeleteButton } from './DeleteButton'
 import { EditDeleteButtons, PieceTitle, PracticeButton } from './PieceParts'
 import { PieceScores } from './PieceScores'
 import { ComposerPicker } from './ComposerPicker'
@@ -62,7 +62,7 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
             return (
               <span className={`link-chip ${link.type}`} key={link.url}>
                 <a href={href} target="_blank" rel="noopener noreferrer" title={href}>{LINK_TYPES[link.type].glyph}{label}</a>
-                <button className="link-remove" aria-label={`Remove ${label} link`} title="Remove link" onClick={() => lib.removeLink(p, link)}>{CloseIcon}</button>
+                <DeleteButton compact label={`Delete ${label} link from ${p.title}`} onClick={() => lib.removeLink(p, link)} />
               </span>
             )
           })}
