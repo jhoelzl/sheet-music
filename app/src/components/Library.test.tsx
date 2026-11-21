@@ -513,6 +513,47 @@ describe('focused library', () => {
     expect(screen.getByRole('combobox', { name: 'Key for score 1 of Romance' })).toBeTruthy()
   })
 
+  it('adds a multi-photo PDF to an existing piece and waits for conversion', async () => {
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: vi.fn(() => 'blob:photo'), revokeObjectURL: vi.fn() }))
+    const first = { id: 'one', jpeg: new Blob(['one']), width: 10, height: 20 }
+    const second = { id: 'two', jpeg: new Blob(['two']), width: 10, height: 20 }
+    const pdf = new File(['pdf'], 'camera-scan.pdf', { type: 'application/pdf' })
+    let finish!: (file: File) => void
+    mocks.preparePhoto.mockResolvedValueOnce(first).mockResolvedValueOnce(second)
+    mocks.photosToPdf.mockResolvedValueOnce(pdf).mockImplementationOnce(() => new Promise<File>((resolve) => { finish = resolve }))
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: '+ Add score' }))
+    const camera = screen.getByLabelText('Camera photo')
+    fireEvent.change(camera, { target: { files: [new File(['one'], 'one.jpg', { type: 'image/jpeg' })] } })
+    await screen.findByText('1 photo in PDF')
+    fireEvent.change(camera, { target: { files: [new File(['two'], 'two.jpg', { type: 'image/jpeg' })] } })
+    await screen.findByText('Preparing PDF…')
+    const button = screen.getByRole('button', { name: 'Add score' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.submit(button.closest('form')!)
+    expect(mocks.upload).not.toHaveBeenCalled()
+    await act(async () => finish(pdf))
+    await screen.findByText('2 photos in PDF')
+    expect(mocks.photosToPdf).toHaveBeenLastCalledWith([first, second])
+    await user.click(button)
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf' }))
+    await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_piece_scores', expect.objectContaining({ piece_id: 'p1' })))
+  })
+
+  it('discards the selected score when cancelling the add form', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: '+ Add score' }))
+    await user.upload(screen.getByLabelText('PDF for Romance'), new File(['pdf'], 'score.pdf', { type: 'application/pdf' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: '+ Add score' }))
+    expect((screen.getByRole('button', { name: 'Add score' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByText('score.pdf')).toBeNull()
+  })
+
   it('removes a piece from the library and supports undo', async () => {
     const user = userEvent.setup()
     render(<TestLibrary />)

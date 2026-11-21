@@ -6,6 +6,7 @@ import { INSTRUMENTS } from '../lib/instruments'
 import { PdfIcon } from './icons'
 import { KeySelect } from './KeySelect'
 import { DeleteButton } from './DeleteButton'
+import { DocumentInput } from './DocumentInput'
 
 const labelOf = (value: Instrument | null) => INSTRUMENTS.find((item) => item.value === value)
 
@@ -17,14 +18,19 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
   const scores = lib.scoresOf(p)
   const [adding, setAdding] = useState(false)
   const [file, setFile] = useState<File | null>(null)
+  const [processingPhotos, setProcessingPhotos] = useState(false)
   const [key, setKey] = useState('')
   const [instrument, setInstrument] = useState<Instrument | null>('piano')
 
+  const clearForm = () => {
+    setFile(null); setKey(''); setInstrument('piano'); setAdding(false)
+  }
+
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!file) return
+    if (!file || processingPhotos || lib.uploadingId === p.id) return
     void lib.addScore(p, file, key.trim() || null, instrument)
-    setFile(null); setKey(''); setInstrument('piano'); setAdding(false)
+    clearForm()
   }
 
   return (
@@ -59,8 +65,7 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
       </ul>
       {adding ? (
         <form className="score-add" onSubmit={submit}>
-          <input type="file" accept="application/pdf" aria-label={`PDF for ${p.title}`} disabled={lib.uploadingId === p.id}
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+          <DocumentInput label={`PDF for ${p.title}`} file={file} disabled={lib.uploadingId === p.id} onChange={setFile} onProcessingChange={setProcessingPhotos} />
           <KeySelect label={`Key for new score of ${p.title}`} value={key} onChange={setKey} disabled={lib.uploadingId === p.id} />
           <div className="score-instruments" role="group" aria-label={`Type for new score of ${p.title}`}>
             <button type="button" className={`chip${instrument === null ? ' on' : ''}`} aria-pressed={instrument === null}
@@ -71,8 +76,8 @@ export function PieceScores({ lib, p }: { lib: Library; p: Piece }) {
                 onClick={() => setInstrument(item.value)}>{item.icon} {item.label}</button>
             ))}
           </div>
-          <button type="submit" className="btn" disabled={!file || lib.uploadingId === p.id}>{lib.uploadingId === p.id ? 'Uploading…' : 'Add score'}</button>
-          <button type="button" className="link" onClick={() => setAdding(false)}>Cancel</button>
+          <button type="submit" className="btn" disabled={!file || processingPhotos || lib.uploadingId === p.id}>{lib.uploadingId === p.id ? 'Uploading…' : 'Add score'}</button>
+          <button type="button" className="link" onClick={clearForm}>Cancel</button>
         </form>
       ) : (
         <button type="button" className="btn" onClick={() => setAdding(true)}>+ Add score</button>
