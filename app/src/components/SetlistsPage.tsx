@@ -540,8 +540,15 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                   const chosenScore = scoreOptions.find((score) => score.id === entry.score_id) ?? scoreOptions[0] ?? null
                   return (
                     <li key={entry.id} className={classes || undefined} style={transform ? { transform } : undefined}>
-                      <button type="button" className="setlist-drag-handle" aria-label={`Reorder ${title}`} disabled={entriesDisabled || visibleRows.length < 2}
-                        title="Drag to reorder" onPointerDown={(event) => startDrag(event, row)}
+                      <button type="button" className="setlist-drag-handle" aria-label={`Reorder ${title}`} disabled={isArchived || membersLoading || loadedId !== selectedId || visibleRows.length < 2}
+                        aria-disabled={entriesDisabled || undefined}
+                        aria-keyshortcuts="ArrowUp ArrowDown" title="Drag or use arrow keys to reorder"
+                        onKeyDown={(event) => {
+                          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                            event.preventDefault()
+                            if (!entriesDisabled) moveEntry(index, event.key === 'ArrowUp' ? -1 : 1)
+                          }
+                        }} onPointerDown={(event) => startDrag(event, row)}
                         onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={cancelDrag}>
                         {GripIcon}
                       </button>
@@ -573,8 +580,6 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                           <button type="button" className="icon-btn" aria-label={`${showingDetails ? 'Hide' : 'Show'} details for ${title}`} aria-expanded={showingDetails} title="Tune details"
                             onClick={() => setOpenDetails(showingDetails ? null : entry.id)}>{InfoIcon}</button>
                         )}
-                        <button type="button" className="icon-btn" aria-label={`Move ${title} up`} disabled={entriesDisabled || row === 0} onClick={() => moveEntry(index, -1)}>↑</button>
-                        <button type="button" className="icon-btn" aria-label={`Move ${title} down`} disabled={entriesDisabled || row === visibleRows.length - 1} onClick={() => moveEntry(index, 1)}>↓</button>
                         <DeleteButton label={`Delete ${title} from ${selected.name}`} disabled={entriesDisabled} onClick={() => removeEntry(entry)} />
                       </div>
                       {showingDetails && piece && (
