@@ -259,8 +259,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .score-row, .score-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .score-row select, .score-add select { width: 130px; height: 28px; padding: 0 8px; font-size: 12px; }
 .score-tags, .score-instruments { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.score-instruments .chip { height: 26px; padding: 0 8px; }
-.score-tags .tag-input select { width: auto; max-width: 100%; height: 28px; padding: 0 8px; font-size: 12px; }
+.score-instruments .chip, .score-tags .tag-input .chip { min-height: 36px; padding: 0 8px; }
 .score-add input[type="file"] { width: auto; height: auto; padding: 6px 10px; font-size: 12px; }
 .skeleton { display: inline-block; width: 52px; height: 20px; border-radius: 99px; background: linear-gradient(90deg, var(--hover) 25%, var(--track) 50%, var(--hover) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
@@ -306,8 +305,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .pdf-browse span { text-align: center; }
 .pdf-score-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; max-height: 30vh; overflow-y: auto; padding: 6px max(12px, env(safe-area-inset-right, 0px)) 6px max(12px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--line); }
 .pdf-score-tags > span { color: var(--muted); font-size: 12px; font-weight: 600; }
-.pdf-score-tags .score-instruments .chip, .pdf-score-tags .tag-input select, .pdf-score-tags .tag-input input { min-height: 36px; }
-.pdf-score-tags .tag-input input, .pdf-score-tags .tag-input select { font-size: 16px; }
+.pdf-score-tags .tag-input input { min-height: 36px; font-size: 16px; }
 .pdf-viewer { position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0; }
 .pdf-scroll { flex: 1; min-height: 0; width: 100%; overflow: auto; overscroll-behavior: contain; background: #525659; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .pdf-page { position: relative; width: 100%; background: white; margin: 0 auto 8px; }
