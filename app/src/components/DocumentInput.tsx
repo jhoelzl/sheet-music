@@ -3,6 +3,7 @@ import { confirmDelete } from '../lib/confirmDelete'
 import { photosToPdf, preparePhoto } from '../lib/photoPdf'
 import type { PhotoPage } from '../lib/photoPdf'
 import { DeleteButton } from './DeleteButton'
+import { hasDocumentScanner, scanDocument } from '../lib/documentScanner'
 
 function PhotoPreview({ photo, number, disabled, onDelete }: { photo: PhotoPage; number: number; disabled: boolean; onDelete: () => void }) {
   const image = useRef<HTMLImageElement>(null)
@@ -58,10 +59,34 @@ export function DocumentInput({ label, file, disabled, onChange, onProcessingCha
     }
   }
   const locked = disabled || processing
+  const nativeScanner = hasDocumentScanner()
+
+  const scan = async () => {
+    if (processingRef.current) return
+    if (file && !window.confirm('Replace the selected PDF with a new document scan?')) return
+    processingRef.current = true
+    setProcessing(true)
+    onProcessingChange(true)
+    setError('')
+    try {
+      const pdf = await scanDocument(() => active.current)
+      if (!active.current || !pdf) return
+      if (pdfInput.current) pdfInput.current.value = ''
+      setPhotos([])
+      onChange(pdf)
+    } catch (reason) {
+      if (active.current) setError(reason instanceof Error ? reason.message : 'Could not scan the document.')
+      else console.error('Could not finish document scanning after the form closed', reason)
+    } finally {
+      processingRef.current = false
+      if (active.current) { setProcessing(false); onProcessingChange(false) }
+    }
+  }
 
   return <div className="document-input">
     <label>{label}<input ref={pdfInput} type="file" accept="application/pdf,.pdf" disabled={locked || photos.length > 0}
       onChange={(event) => { setError(''); onChange(event.target.files?.[0] ?? null) }} /></label>
+    {nativeScanner && <button type="button" className="btn" disabled={locked} onClick={() => void scan()}>Scan document</button>}
     <button type="button" className="btn" disabled={locked} onClick={() => {
       if (file && !photos.length && !window.confirm('Replace the selected PDF with camera photos?')) return
       camera.current?.click()

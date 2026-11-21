@@ -4,8 +4,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import { DocumentInput } from './DocumentInput'
 
-const mocks = vi.hoisted(() => ({ prepare: vi.fn(), pdf: vi.fn() }))
+const mocks = vi.hoisted(() => ({ prepare: vi.fn(), pdf: vi.fn(), available: vi.fn(), scan: vi.fn() }))
 vi.mock('../lib/photoPdf', () => ({ preparePhoto: mocks.prepare, photosToPdf: mocks.pdf }))
+vi.mock('../lib/documentScanner', () => ({ hasDocumentScanner: mocks.available, scanDocument: mocks.scan }))
 
 function Form() {
   const [file, setFile] = useState<File | null>(null)
@@ -21,6 +22,9 @@ beforeEach(() => {
   vi.stubGlobal('confirm', vi.fn(() => true))
   mocks.prepare.mockReset()
   mocks.pdf.mockReset()
+  mocks.available.mockReset()
+  mocks.scan.mockReset()
+  mocks.available.mockReturnValue(false)
   mocks.prepare.mockImplementation(async (file: File) => ({ id: file.name, jpeg: file, width: 10, height: 20 }))
   mocks.pdf.mockImplementation(async () => new File(['pdf'], 'camera-scan.pdf', { type: 'application/pdf' }))
 })
@@ -70,4 +74,41 @@ it('blocks submission while a photo is being processed', async () => {
   expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
   finish({ id: 'one', jpeg: new Blob(['photo']), width: 10, height: 20 })
   await waitFor(() => expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false))
+})
+
+it('scans a PDF, blocks saving until it is ready, and preserves the previous file on cancel', async () => {
+  mocks.available.mockReturnValue(true)
+  let finish!: (value: File | null) => void
+  mocks.scan.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+  const user = userEvent.setup()
+  render(<Form />)
+  await user.upload(screen.getByLabelText('PDF file'), new File(['old'], 'original.pdf', { type: 'application/pdf' }))
+  await user.click(screen.getByRole('button', { name: 'Scan document' }))
+  expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true)
+  finish(null)
+  expect(await screen.findByText('original.pdf')).toBeTruthy()
+  expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false)
+  mocks.scan.mockResolvedValueOnce(new File(['%PDF-'], 'document-scan.pdf', { type: 'application/pdf' }))
+  await user.click(screen.getByRole('button', { name: 'Scan document' }))
+  expect(await screen.findByText('document-scan.pdf')).toBeTruthy()
+})
+
+it('confirms replacement of photo pages and preserves them if scanning fails', async () => {
+  mocks.available.mockReturnValue(true)
+  mocks.scan.mockRejectedValueOnce(new Error('Camera access is disabled.'))
+  const user = userEvent.setup()
+  render(<Form />)
+  fireEvent.change(screen.getByLabelText('Camera photo'), { target: { files: [new File(['photo'], 'one.jpg', { type: 'image/jpeg' })] } })
+  await screen.findByText('1 photo in PDF')
+  vi.mocked(window.confirm).mockReturnValueOnce(false)
+  await user.click(screen.getByRole('button', { name: 'Scan document' }))
+  expect(mocks.scan).not.toHaveBeenCalled()
+  await user.click(screen.getByRole('button', { name: 'Scan document' }))
+  expect((await screen.findByRole('alert')).textContent).toContain('Camera access is disabled')
+  expect(screen.getByText('1 photo in PDF')).toBeTruthy()
+  mocks.scan.mockResolvedValueOnce(new File(['%PDF-'], 'document-scan.pdf', { type: 'application/pdf' }))
+  await user.click(screen.getByRole('button', { name: 'Scan document' }))
+  expect(await screen.findByText('document-scan.pdf')).toBeTruthy()
+  expect(screen.queryByText('1 photo in PDF')).toBeNull()
+  expect((screen.getByLabelText('PDF file') as HTMLInputElement).disabled).toBe(false)
 })

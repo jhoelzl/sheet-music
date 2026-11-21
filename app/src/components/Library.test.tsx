@@ -29,8 +29,11 @@ const mocks = vi.hoisted(() => ({
   lessonGroups: [] as { id: string; teacher_name: string; instrument: string }[],
   preparePhoto: vi.fn(),
   photosToPdf: vi.fn(),
+  scannerAvailable: vi.fn(),
+  scanDocument: vi.fn(),
 }))
 vi.mock('../lib/photoPdf', () => ({ preparePhoto: mocks.preparePhoto, photosToPdf: mocks.photosToPdf }))
+vi.mock('../lib/documentScanner', () => ({ hasDocumentScanner: mocks.scannerAvailable, scanDocument: mocks.scanDocument }))
 vi.mock('../supabase', () => ({
   supabase: {
     from: mocks.from,
@@ -72,6 +75,7 @@ function TestRememberedView({ userId }: { userId: string }) {
 
 describe('focused library', () => {
   beforeEach(() => {
+    mocks.scannerAvailable.mockReturnValue(false)
     vi.stubGlobal('confirm', vi.fn(() => true))
     localStorage.clear()
     mocks.pieces = [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', tags: ['calm'], play_progress: 50, links: [] }]
@@ -260,6 +264,20 @@ describe('focused library', () => {
     fireEvent.change(screen.getByLabelText('Camera photo'), { target: { files: [new File(['photo'], 'one.jpg', { type: 'image/jpeg' })] } })
     await screen.findByText('1 photo in PDF')
     await user.click(screen.getByRole('button', { name: 'Add piece' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf' }))
+  })
+
+  it('uploads a scanned PDF as a score for an existing piece', async () => {
+    mocks.scannerAvailable.mockReturnValue(true)
+    const pdf = new File(['%PDF-'], 'document-scan.pdf', { type: 'application/pdf' })
+    mocks.scanDocument.mockResolvedValueOnce(pdf)
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: '+ Add score' }))
+    await user.click(screen.getByRole('button', { name: 'Scan document' }))
+    await screen.findByText('document-scan.pdf')
+    await user.click(screen.getByRole('button', { name: 'Add score' }))
     await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf' }))
   })
 
