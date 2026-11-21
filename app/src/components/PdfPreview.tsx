@@ -24,9 +24,19 @@ export function PdfPreview({ lib }: { lib: Library }) {
   }) ?? []
   const browseIndex = browseScores?.findIndex((item) => item.scoreId === preview?.id && item.pieceId === preview?.pieceId) ?? -1
   const currentPosition = browseItems.findIndex((item) => item.index === browseIndex)
+  const first = browseItems[0]
+  const last = browseItems[browseItems.length - 1]
   const previous = [...browseItems].reverse().find((item) => item.index < browseIndex)
   const next = browseItems.find((item) => item.index > browseIndex)
   const saving = lib.savingScoreIds.size > 0
+
+  const navigateBrowse = (destination: (typeof browseItems)[number] | undefined) => {
+    if (!destination) return
+    if (document.activeElement instanceof HTMLInputElement && dialogRef.current?.contains(document.activeElement)) {
+      document.activeElement.blur()
+    }
+    void openBrowsePdf(destination.piece, destination.score)
+  }
 
   const startSwipe = (event: TouchEvent<HTMLDivElement>) => {
     swipeStart.current = null
@@ -47,12 +57,7 @@ export function PdfPreview({ lib }: { lib: Library }) {
     const dx = touch.clientX - start.x
     const dy = touch.clientY - start.y
     if (Math.abs(dx) < 80 || Math.abs(dx) <= Math.abs(dy) * 1.5) return
-    const destination = dx < 0 ? next : previous
-    if (!destination) return
-    if (document.activeElement instanceof HTMLElement && dialogRef.current?.contains(document.activeElement)) {
-      document.activeElement.blur()
-    }
-    void openBrowsePdf(destination.piece, destination.score)
+    navigateBrowse(dx < 0 ? next : previous)
   }
 
   useEffect(() => {
@@ -114,11 +119,15 @@ export function PdfPreview({ lib }: { lib: Library }) {
         </div>
         {browseScores && browseIndex >= 0 && (
           <div className="pdf-browse" role="group" aria-label="Browse scores">
+            <button type="button" className="btn" disabled={!first || first.index === browseIndex}
+              onClick={() => navigateBrowse(first)}>Start</button>
             <button type="button" className="btn" disabled={!previous}
-              onClick={() => { if (previous) void openBrowsePdf(previous.piece, previous.score) }}>← Previous</button>
+              onClick={() => navigateBrowse(previous)}>← Previous</button>
             <span aria-live="polite">{currentPosition < 0 ? 'Score no longer available' : `${currentPosition + 1} / ${browseItems.length}`}</span>
             <button type="button" className="btn" disabled={!next}
-              onClick={() => { if (next) void openBrowsePdf(next.piece, next.score) }}>Next →</button>
+              onClick={() => navigateBrowse(next)}>Next →</button>
+            <button type="button" className="btn" disabled={!last || last.index === browseIndex}
+              onClick={() => navigateBrowse(last)}>End</button>
           </div>
         )}
         {piece && score && (
