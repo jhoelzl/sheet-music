@@ -259,6 +259,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .score-row select, .score-add select { width: 130px; height: 28px; padding: 0 8px; font-size: 12px; }
 .score-tags, .score-instruments { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .score-instruments .chip { height: 26px; padding: 0 8px; }
+.score-tags .tag-input select { width: auto; max-width: 100%; height: 28px; padding: 0 8px; font-size: 12px; }
 .score-add input[type="file"] { width: auto; height: auto; padding: 6px 10px; font-size: 12px; }
 .skeleton { display: inline-block; width: 52px; height: 20px; border-radius: 99px; background: linear-gradient(90deg, var(--hover) 25%, var(--track) 50%, var(--hover) 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
 @keyframes shimmer { to { background-position: -200% 0; } }
