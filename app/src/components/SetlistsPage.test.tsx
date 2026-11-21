@@ -2,9 +2,10 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Piece, PieceScore } from '../supabase'
+import { isoOf } from '../lib/dates'
 import { SetlistsPage } from './SetlistsPage'
 
-type Setlist = { id: string; name: string; position: number; archived_at: string | null }
+type Setlist = { id: string; name: string; position: number; archived_at: string | null; event_date?: string | null; event_time?: string | null }
 type Entry = { id: string; setlist_id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null; score_id?: string | null }
 
 const mocks = vi.hoisted(() => ({
@@ -74,7 +75,7 @@ describe('setlists page', () => {
     mocks.insert.mockReset()
     mocks.insert.mockImplementation((table: string, values: Record<string, unknown>) => {
       if (table === 'sm_setlists') {
-        const created = { id: `s${mocks.setlists.length + 1}`, name: String(values.name), position: Number(values.position), archived_at: null }
+        const created = { id: `s${mocks.setlists.length + 1}`, name: String(values.name), position: Number(values.position), archived_at: null, event_date: values.event_date as string | null, event_time: values.event_time as string | null }
         mocks.setlists.push(created)
         return created
       }
@@ -92,7 +93,7 @@ describe('setlists page', () => {
         return { error: null }
       }
       if (name === 'sm_duplicate_setlist') {
-        const copy: Setlist = { id: `s${mocks.setlists.length + 1}`, name: String(args.new_name), position: mocks.setlists.length, archived_at: null }
+        const copy: Setlist = { id: `s${mocks.setlists.length + 1}`, name: String(args.new_name), position: mocks.setlists.length, archived_at: null, event_date: null, event_time: null }
         mocks.setlists.push(copy)
         for (const entry of mocks.members.filter((row) => row.setlist_id === args.source_id)) {
           mocks.members.push({ ...entry, id: `e${mocks.members.length + 1}`, setlist_id: copy.id })
@@ -153,12 +154,84 @@ describe('setlists page', () => {
     await user.type(screen.getByRole('textbox', { name: 'Setlist name' }), 'Friday gig')
     await user.click(screen.getByRole('button', { name: 'Create setlist' }))
     await screen.findByRole('heading', { name: 'Friday gig' })
+    expect(mocks.setlists[0]).toMatchObject({ event_date: null, event_time: null })
     await tuneSearch()
     await addTune(user, 'Moanin’', 'Friday gig')
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_setlist_pieces', {
       setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null,
     }))
     expect(await screen.findByRole('button', { name: 'Edit comment for Moanin’' })).toBeTruthy()
+  })
+
+  it('creates, edits, clears and reloads an optional date and time', async () => {
+    const user = userEvent.setup()
+    const rendered = render(<SetlistsPage lib={lib} />)
+    await user.type(screen.getByRole('textbox', { name: 'Setlist name' }), 'Friday gig')
+    expect((screen.getByLabelText('New setlist time') as HTMLInputElement).disabled).toBe(true)
+    fireEvent.change(screen.getByLabelText('New setlist date'), { target: { value: '2026-12-10' } })
+    fireEvent.change(screen.getByLabelText('New setlist time'), { target: { value: '19:30' } })
+    await user.click(screen.getByRole('button', { name: 'Create setlist' }))
+    await screen.findByRole('heading', { name: 'Friday gig' })
+    expect(mocks.setlists[0]).toMatchObject({ event_date: '2026-12-10', event_time: '19:30' })
+    rendered.unmount()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Friday gig' })
+    expect(screen.getByText(/19:30/)).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Edit date' }))
+    fireEvent.change(screen.getByLabelText('Setlist date'), { target: { value: '2026-12-11' } })
+    fireEvent.change(screen.getByLabelText('Setlist time'), { target: { value: '' } })
+    await user.click(screen.getByRole('button', { name: 'Save date' }))
+    await waitFor(() => expect(mocks.setlists[0]).toMatchObject({ event_date: '2026-12-11', event_time: null }))
+    await user.click(screen.getByRole('button', { name: 'Edit date' }))
+    fireEvent.change(screen.getByLabelText('Setlist time'), { target: { value: '20:00' } })
+    fireEvent.change(screen.getByLabelText('Setlist date'), { target: { value: '' } })
+    expect((screen.getByLabelText('Setlist time') as HTMLInputElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Setlist time') as HTMLInputElement).value).toBe('')
+    await user.click(screen.getByRole('button', { name: 'Save date' }))
+    await waitFor(() => expect(mocks.setlists[0]).toMatchObject({ event_date: null, event_time: null }))
+    expect(screen.getByText('No date scheduled')).toBeTruthy()
+  })
+
+  it('keeps schedule edits available when saving fails', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await screen.findByRole('heading', { name: 'Gig' })
+    await user.click(screen.getByRole('button', { name: 'Add date' }))
+    fireEvent.change(screen.getByLabelText('Setlist date'), { target: { value: '2026-12-10' } })
+    mocks.fail = 'update'
+    await user.click(screen.getByRole('button', { name: 'Save date' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('update failed')
+    expect((screen.getByLabelText('Setlist date') as HTMLInputElement).value).toBe('2026-12-10')
+    expect(mocks.setlists[0].event_date).toBeUndefined()
+  })
+
+  it('shows past and future setlists in the calendar and opens archived entries', async () => {
+    const today = new Date()
+    const past = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7)
+    const future = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)
+    const farFuture = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 180)
+    mocks.setlists = [
+      { id: 's1', name: 'Past gig', position: 0, archived_at: '2026-01-01', event_date: isoOf(past), event_time: '20:00:00' },
+      { id: 's2', name: 'Upcoming gig', position: 1, archived_at: null, event_date: isoOf(future), event_time: null },
+      { id: 's3', name: 'Later gig', position: 2, archived_at: null, event_date: isoOf(farFuture), event_time: null },
+    ]
+    const label = (day: Date) => `${day.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}: 1 setlist`
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    await user.click(await screen.findByRole('button', { name: /Your setlists/ }))
+    const calendar = screen.getByRole('region', { name: 'Setlist calendar' })
+    await user.click(within(calendar).getByRole('button', { name: label(future) }))
+    await user.click(within(calendar).getByRole('button', { name: 'Upcoming gig' }))
+    expect(screen.getByRole('heading', { name: 'Upcoming gig' })).toBeTruthy()
+    await user.click(within(calendar).getByRole('button', { name: label(past) }))
+    expect(within(calendar).getByText('20:00')).toBeTruthy()
+    await user.click(within(calendar).getByRole('button', { name: 'Past gig' }))
+    expect(screen.getByRole('heading', { name: 'Past gig' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Edit date' })).toBeNull()
+    await user.click(within(calendar).getByRole('button', { name: 'Next calendar period' }))
+    await user.click(within(calendar).getByRole('button', { name: label(farFuture) }))
+    expect(within(calendar).getByRole('button', { name: 'Later gig' })).toBeTruthy()
   })
 
   it('adds a tune when an iOS tap blurs the search before click', async () => {
@@ -373,7 +446,7 @@ describe('setlists page', () => {
   })
 
   it('duplicates a setlist with its tunes, placeholders, comments and order', async () => {
-    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null, event_date: '2026-12-10', event_time: '19:30' }]
     mocks.members = [
       { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: 'Piano solo' },
       { id: 'e2', setlist_id: 's1', piece_id: null, position: 1, placeholder: 'Break', comment: null },
@@ -390,6 +463,7 @@ describe('setlists page', () => {
     expect((await openComment(user, 'Moanin’')).value).toBe('Piano solo')
     // The copy is a new setlist; the original is untouched.
     expect(mocks.setlists.map((item) => item.name)).toEqual(['Gig', 'Gig (copy)'])
+    expect(mocks.setlists[1]).toMatchObject({ event_date: null, event_time: null })
   })
 
   it('numbers further copies apart', async () => {

@@ -5,16 +5,18 @@ import { CloseIcon } from './icons'
 
 // Show the most recent weeks first when the heatmap overflows (small screens).
 const scrollToEnd = (el: HTMLDivElement | null) => { if (el) el.scrollLeft = el.scrollWidth }
+const scrollToMiddle = (el: HTMLDivElement | null) => { if (el) el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2 }
 
 export type CalendarEntry = { id: string; date: string; title?: string; subtitle?: string }
 
 export function ActivityCalendar({ entries, kind, onSelectEntry, selectionDisabled = false }: {
   entries: CalendarEntry[]
-  kind: 'practice' | 'lesson'
+  kind: 'practice' | 'lesson' | 'setlist'
   onSelectEntry?: (id: string) => void
   selectionDisabled?: boolean
 }) {
   const [selected, setSelected] = useState<string | null>(null)
+  const [windowOffset, setWindowOffset] = useState(0)
   const byDay = new Map<string, CalendarEntry[]>()
   for (const entry of entries) byDay.set(entry.date, [...(byDay.get(entry.date) ?? []), entry])
 
@@ -22,7 +24,8 @@ export function ActivityCalendar({ entries, kind, onSelectEntry, selectionDisabl
   const [ty, tm, td] = todayStr.split('-').map(Number)
   const today = new Date(ty, tm - 1, td)
   const mondayOffset = (today.getDay() + 6) % 7
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mondayOffset - (PRACTICE_CALENDAR_WEEKS - 1) * 7)
+  const weeksBeforeToday = kind === 'setlist' ? Math.floor(PRACTICE_CALENDAR_WEEKS / 2) : PRACTICE_CALENDAR_WEEKS - 1
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mondayOffset + (windowOffset * PRACTICE_CALENDAR_WEEKS - weeksBeforeToday) * 7)
   const weeks = Array.from({ length: PRACTICE_CALENDAR_WEEKS }, (_, w) =>
     Array.from({ length: 7 }, (_, d) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + w * 7 + d)))
 
@@ -49,8 +52,10 @@ export function ActivityCalendar({ entries, kind, onSelectEntry, selectionDisabl
     const ids = w.flatMap((d) => byDay.get(isoOf(d)) ?? [])
     return { days: w.filter((d) => byDay.has(isoOf(d))).length, sessions: ids.length }
   }
-  const thisWeek = weekTotals(weeks[PRACTICE_CALENDAR_WEEKS - 1])
-  const lastWeek = weekTotals(weeks[PRACTICE_CALENDAR_WEEKS - 2])
+  const currentMonday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mondayOffset)
+  const weekAt = (offset: number) => Array.from({ length: 7 }, (_, day) => new Date(currentMonday.getFullYear(), currentMonday.getMonth(), currentMonday.getDate() + offset * 7 + day))
+  const thisWeek = weekTotals(weekAt(0))
+  const lastWeek = weekTotals(weekAt(-1))
   const weekDelta = thisWeek.sessions - lastWeek.sessions
   const todayCount = byDay.get(todayStr)?.length ?? 0
   const level = (n: number) => (n === 0 ? 0 : n === 1 ? 1 : n <= 3 ? 2 : n <= 5 ? 3 : 4)
@@ -63,25 +68,31 @@ export function ActivityCalendar({ entries, kind, onSelectEntry, selectionDisabl
     return i === 0 ? (weeks[1].some((d) => d.getDate() === 1) ? '' : w[0].toLocaleDateString(undefined, { month: 'short' })) : monthStart ? monthStart.toLocaleDateString(undefined, { month: 'short' }) : ''
   })
   const selectedEntries = selected ? (byDay.get(selected) ?? []).filter((entry) => entry.title !== undefined) : []
-  const countLabel = (n: number) => kind === 'practice' ? (n === 1 ? 'piece' : 'pieces') : (n === 1 ? 'lesson' : 'lessons')
+  const countLabel = (n: number) => kind === 'practice' ? (n === 1 ? 'piece' : 'pieces') : kind === 'lesson' ? (n === 1 ? 'lesson' : 'lessons') : (n === 1 ? 'setlist' : 'setlists')
   const activityLabel = (n: number) => kind === 'practice' ? (n === 1 ? 'practice' : 'practices') : countLabel(n)
   const detailLabel = (n: number) => kind === 'practice'
     ? `${n} ${countLabel(n)} practiced`
     : `${n} ${countLabel(n)}`
 
   return (
-    <section className="panel practice-cal" aria-label={kind === 'practice' ? 'Practice calendar' : 'Lesson calendar'}>
+    <section className="panel practice-cal" aria-label={kind === 'practice' ? 'Practice calendar' : kind === 'lesson' ? 'Lesson calendar' : 'Setlist calendar'}>
       <div className="cal-head">
         <div className="cal-stats">
-          <div><strong>{streak}</strong><span>day streak 🔥 · best {bestStreak}</span></div>
+          {kind !== 'setlist' && <div><strong>{streak}</strong><span>day streak 🔥 · best {bestStreak}</span></div>}
           <div><strong>{todayCount}</strong><span>{countLabel(todayCount)} today</span></div>
           <div><strong>{thisWeek.sessions}</strong><span>
-            {activityLabel(thisWeek.sessions)} this week · {thisWeek.days}/7 days
-            {weekDelta !== 0 && <em className={weekDelta > 0 ? 'up' : 'down'}> {weekDelta > 0 ? '▲' : '▼'} {Math.abs(weekDelta)} vs last week</em>}
+            {activityLabel(thisWeek.sessions)} this week{kind !== 'setlist' && ` · ${thisWeek.days}/7 days`}
+            {kind !== 'setlist' && weekDelta !== 0 && <em className={weekDelta > 0 ? 'up' : 'down'}> {weekDelta > 0 ? '▲' : '▼'} {Math.abs(weekDelta)} vs last week</em>}
           </span></div>
         </div>
+        {kind === 'setlist' && <div className="cal-navigation">
+          <button type="button" className="link" aria-label="Previous calendar period" onClick={() => { setWindowOffset((offset) => offset - 1); setSelected(null) }}>← Earlier</button>
+          <button type="button" className="link" disabled={windowOffset === 0} onClick={() => { setWindowOffset(0); setSelected(null) }}>Today</button>
+          <button type="button" className="link" aria-label="Next calendar period" onClick={() => { setWindowOffset((offset) => offset + 1); setSelected(null) }}>Later →</button>
+          <span className="muted">{weeks[0][0].toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} – {weeks[weeks.length - 1][6].toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}</span>
+        </div>}
       </div>
-      <div className="cal-scroll" ref={scrollToEnd}>
+      <div className="cal-scroll" ref={kind === 'setlist' ? scrollToMiddle : scrollToEnd}>
         <div className="cal-months" style={{ gridTemplateColumns: `repeat(${PRACTICE_CALENDAR_WEEKS}, 14px)` }}>
           {monthLabels.map((m, i) => <span key={i}>{m}</span>)}
         </div>
@@ -91,7 +102,7 @@ export function ActivityCalendar({ entries, kind, onSelectEntry, selectionDisabl
               {w.map((d) => {
                 const iso = isoOf(d)
                 const n = byDay.get(iso)?.length ?? 0
-                if (d > today) return <span className="cal-cell future" key={iso} />
+                if (kind !== 'setlist' && d > today) return <span className="cal-cell future" key={iso} />
                 return (
                   <button
                     key={iso}
@@ -111,7 +122,7 @@ export function ActivityCalendar({ entries, kind, onSelectEntry, selectionDisabl
         <div className="cal-detail">
           <div className="cal-detail-head">
             <strong>{dayLabel(selected)}</strong>
-            <span className="muted">{selectedEntries.length ? detailLabel(selectedEntries.length) : kind === 'practice' ? 'Nothing practiced.' : 'No lessons.'}</span>
+            <span className="muted">{selectedEntries.length ? detailLabel(selectedEntries.length) : kind === 'practice' ? 'Nothing practiced.' : kind === 'lesson' ? 'No lessons.' : 'No setlists.'}</span>
             <button type="button" className="cal-detail-close" aria-label="Close details" onClick={() => setSelected(null)}>{CloseIcon}</button>
           </div>
           {selectedEntries.length > 0 && (
