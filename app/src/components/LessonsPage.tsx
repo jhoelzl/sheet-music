@@ -49,6 +49,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [materialError, setMaterialError] = useState('')
   const [newMaterialTags, setNewMaterialTags] = useState<string[]>([])
   const [materialTagFilter, setMaterialTagFilter] = useUrlOptional('materialTag')
+  const [materialsExpanded, setMaterialsExpanded] = useUrlOptional('materials')
   const [file, setFile] = useState<File | null>(null)
   const [fileKey, setFileKey] = useState(0)
   const [processingPhotos, setProcessingPhotos] = useState(false)
@@ -70,8 +71,13 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const groupDirty = Boolean(groupDraft && savedGroup && (groupDraft.teacher_name !== savedGroup.teacher_name || groupDraft.instrument !== savedGroup.instrument))
   const savedMaterial = materials.find((material) => material.id === materialDraft?.id)
   const materialDirty = Boolean(materialDraft && savedMaterial && materialDraft.title !== savedMaterial.title)
+  const materialBusy = uploadingMaterial || processingPhotos
+  const showMaterials = materialsExpanded === 'open' || materialBusy
 
   useEffect(() => { onDirtyChange(dirty || groupDirty || materialDirty) }, [dirty, groupDirty, materialDirty, onDirtyChange])
+  useEffect(() => {
+    if (materialBusy && materialsExpanded !== 'open') setMaterialsExpanded('open')
+  }, [materialBusy, materialsExpanded, setMaterialsExpanded])
 
   useEffect(() => {
     let active = true
@@ -449,97 +455,106 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
             </div>}
           </section>
           <section className="teaching-materials" aria-label="Teaching materials">
-            <div className="teaching-materials-heading">
-              <div><h3>Teaching materials <span className="materials-count">{materials.length}</span></h3><p className="muted">Upload PDFs once and reuse them across lessons.</p></div>
-              <button type="button" className="btn" disabled={!visibleMaterials.length || busy}
-                onClick={() => void lib.openMaterialPdf(visibleMaterials[0], visibleMaterials)}>Browse materials</button>
-            </div>
-            {uploadedMaterial && <UploadStatus state="success" title="Upload complete" detail={`Uploaded “${uploadedMaterial.title}”.${materialTagFilter && !uploadedMaterial.tags.includes(materialTagFilter) ? ' Hidden by the current tag filter.' : ''}`}>
-              <button type="button" className="link" onClick={() => void lib.openMaterialPdf(uploadedMaterial, materials)}>Open material</button>
-            </UploadStatus>}
-            {showMaterialForm ? <form className="document-add material-add" onSubmit={uploadMaterial} aria-labelledby="material-add-heading">
-              <div className="document-add-heading">
-                <span className="document-add-icon" aria-hidden="true">+</span>
-                <div>
-                  <span className="document-add-kicker">New teaching material</span>
-                  <h4 id="material-add-heading">Add teaching material</h4>
-                  <p>Your saved materials will stay unchanged.</p>
-                </div>
+            <h3 className="teaching-materials-heading">
+              <button type="button" className="teaching-materials-toggle" aria-expanded={showMaterials} aria-controls="teaching-materials-content"
+                disabled={materialBusy} onClick={() => setMaterialsExpanded(showMaterials ? null : 'open')}>
+                <span>Teaching materials <span className="materials-count">{materials.length}</span></span>{' '}
+                <span className="teaching-materials-action">{showMaterials ? 'Hide' : 'Show'} <span aria-hidden="true">{showMaterials ? '↑' : '↓'}</span></span>
+              </button>
+            </h3>
+            <div id="teaching-materials-content" className="teaching-materials-content" hidden={!showMaterials}>
+              <div className="teaching-materials-intro">
+                <p className="muted">Upload PDFs once and reuse them across lessons.</p>
+                <button type="button" className="btn" disabled={!visibleMaterials.length || busy}
+                  onClick={() => void lib.openMaterialPdf(visibleMaterials[0], visibleMaterials)}>Browse materials</button>
               </div>
-              {uploadingMaterial && <UploadStatus key={materialUploadStage?.message} state="pending" stage={materialUploadStage} title="Uploading teaching material" />}
-              {uploadError && <UploadStatus state="error" stage={materialAttemptId ? materialUploadStage : null} title="Upload failed" detail={`${uploadError}${materialAttemptId ? `${/[.!?]$/.test(uploadError) ? '' : '.'} Your document is still selected; retry without scanning again.` : ''}`}>
-                {materialAttemptId && <>
-                  <button type="submit" className="btn primary" disabled={busy}>Retry upload</button>
-                  <button type="button" className="link" disabled={busy} onClick={() => {
-                    if (!window.confirm('The previous request may still complete. Check the material list before starting over. Discard this upload?')) return
-                    setMaterialAttemptId(null); setUploadError('')
-                  }}>Start over</button>
-                </>}
+              {uploadedMaterial && <UploadStatus state="success" title="Upload complete" detail={`Uploaded “${uploadedMaterial.title}”.${materialTagFilter && !uploadedMaterial.tags.includes(materialTagFilter) ? ' Hidden by the current tag filter.' : ''}`}>
+                <button type="button" className="link" onClick={() => void lib.openMaterialPdf(uploadedMaterial, materials)}>Open material</button>
               </UploadStatus>}
-              {file && (uploadingMaterial || materialAttemptId !== null) && <div className="document-add-file">
-                <span>{uploadingMaterial ? 'Uploading document' : 'Selected document'}</span><strong>“{file.name}”</strong>
-              </div>}
-              {materialAttemptId !== null && <div className="material-add-title"><span>Material title</span><strong>{materialTitle}</strong></div>}
-              <div className="document-add-section" hidden={materialAttemptId !== null}>
-                <span className="document-add-step">1 <span>Choose a document</span></span>
-                <DocumentInput key={fileKey} label="PDF file" file={file} disabled={busy || materialAttemptId !== null}
-                  onChange={(next) => { setFile(next); setUploadError('') }} onProcessingChange={setProcessingPhotos} />
-              </div>
-              <div className="document-add-section" hidden={materialAttemptId !== null}>
-                <span className="document-add-step">2 <span>Material details</span></span>
-                <label>Material title<input required value={materialTitle} disabled={busy || materialAttemptId !== null} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
-                <div className="score-field"><span>Tags</span>
-                  <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy || materialAttemptId !== null} onChange={setNewMaterialTags} />
-                </div>
-              </div>
-              {(!uploadError || !materialAttemptId) && <div className="document-add-actions">
-                <button type="submit" className="btn primary" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : 'Upload PDF'}</button>
-                <button type="button" className="link" disabled={busy || processingPhotos} onClick={cancelMaterialUpload}>Cancel</button>
-              </div>}
-            </form> : <button type="button" className="btn material-add-button" disabled={busy} onClick={() => { setUploadedMaterialId(null); setShowMaterialForm(true) }}>+ Add material</button>}
-            <div className="piece-scores-heading materials-saved-heading">
-              <span className="piece-scores-label">Saved materials</span>
-              <span className="piece-scores-count">{materials.length}</span>
-            </div>
-            {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
-              <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} disabled={Boolean(materialDraft)} onClick={() => setMaterialTagFilter(null)}>All tags</button>
-              {filterTags.map((tag) => <button key={tag} type="button" className={`filter-pill${materialTagFilter === tag ? ' active' : ''}`}
-                aria-pressed={materialTagFilter === tag} disabled={Boolean(materialDraft)} onClick={() => setMaterialTagFilter(materialTagFilter === tag ? null : tag)}>#{tag}</button>)}
-            </div>}
-            {materialTagFilter && visibleMaterials.length === 0 && <p className="muted">No materials with this tag.</p>}
-            {visibleMaterials.map((material) => {
-              const linkedIds = new Set(lessonMaterials.filter((link) => link.material_id === material.id).map((link) => link.lesson_id))
-              const linkedLessons = lessons.filter((lesson) => linkedIds.has(lesson.id))
-                .sort((a, b) => b.lesson_date.localeCompare(a.lesson_date) || a.title.localeCompare(b.title))
-              return <div className="material-row" key={material.id}>
-                <div className="material-content">
-                  <div className="material-info">
-                    {materialDraft?.id === material.id ? (
-                      <form className="material-rename" onSubmit={saveMaterialTitle} onKeyDown={(event) => {
-                        if (event.key === 'Escape' && !busy) { setMaterialDraft(null); setMaterialError('') }
-                      }}>
-                        <input aria-label={`New name for ${material.title}`} autoFocus required value={materialDraft.title} disabled={busy}
-                          onChange={(event) => { setMaterialDraft({ ...materialDraft, title: event.target.value }); setMaterialError('') }} />
-                        <button type="submit" className="btn" disabled={busy}>Save</button>
-                        <button type="button" className="link" disabled={busy} onClick={() => { setMaterialDraft(null); setMaterialError('') }}>Cancel</button>
-                        {materialError && <p className="material-rename-error" role="alert">{materialError}</p>}
-                      </form>
-                    ) : <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material, visibleMaterials)}>{material.title}</button>}
-                    <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy || Boolean(materialDraft)} onChange={(tags) => saveMaterialTags(material, tags)} />
+              {showMaterialForm ? <form className="document-add material-add" onSubmit={uploadMaterial} aria-labelledby="material-add-heading">
+                <div className="document-add-heading">
+                  <span className="document-add-icon" aria-hidden="true">+</span>
+                  <div>
+                    <span className="document-add-kicker">New teaching material</span>
+                    <h4 id="material-add-heading">Add teaching material</h4>
+                    <p>Your saved materials will stay unchanged.</p>
                   </div>
-                  {linkedLessons.length > 0 && <div className="material-lessons" aria-label={`Lessons using ${material.title}`}>
-                    <span>Used in:</span>
-                    <ul>{linkedLessons.map((lesson) => <li key={lesson.id}>{lesson.title} · {lesson.lesson_date}</li>)}</ul>
-                  </div>}
                 </div>
-                <div className="material-actions">
-                  <button type="button" className="icon-btn edit" aria-label={`Rename teaching material ${material.title}`} title="Rename"
-                    disabled={busy || Boolean(materialDraft)} onClick={() => { setMaterialDraft({ id: material.id, title: material.title }); setMaterialError('') }}>{EditIcon}</button>
-                  <DeleteButton label={`Delete teaching material ${material.title}`} disabled={busy || Boolean(materialDraft)} onClick={() => deleteMaterial(material)} />
+                {uploadingMaterial && <UploadStatus key={materialUploadStage?.message} state="pending" stage={materialUploadStage} title="Uploading teaching material" />}
+                {uploadError && <UploadStatus state="error" stage={materialAttemptId ? materialUploadStage : null} title="Upload failed" detail={`${uploadError}${materialAttemptId ? `${/[.!?]$/.test(uploadError) ? '' : '.'} Your document is still selected; retry without scanning again.` : ''}`}>
+                  {materialAttemptId && <>
+                    <button type="submit" className="btn primary" disabled={busy}>Retry upload</button>
+                    <button type="button" className="link" disabled={busy} onClick={() => {
+                      if (!window.confirm('The previous request may still complete. Check the material list before starting over. Discard this upload?')) return
+                      setMaterialAttemptId(null); setUploadError('')
+                    }}>Start over</button>
+                  </>}
+                </UploadStatus>}
+                {file && (uploadingMaterial || materialAttemptId !== null) && <div className="document-add-file">
+                  <span>{uploadingMaterial ? 'Uploading document' : 'Selected document'}</span><strong>“{file.name}”</strong>
+                </div>}
+                {materialAttemptId !== null && <div className="material-add-title"><span>Material title</span><strong>{materialTitle}</strong></div>}
+                <div className="document-add-section" hidden={materialAttemptId !== null}>
+                  <span className="document-add-step">1 <span>Choose a document</span></span>
+                  <DocumentInput key={fileKey} label="PDF file" file={file} disabled={busy || materialAttemptId !== null}
+                    onChange={(next) => { setFile(next); setUploadError('') }} onProcessingChange={setProcessingPhotos} />
                 </div>
+                <div className="document-add-section" hidden={materialAttemptId !== null}>
+                  <span className="document-add-step">2 <span>Material details</span></span>
+                  <label>Material title<input required value={materialTitle} disabled={busy || materialAttemptId !== null} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
+                  <div className="score-field"><span>Tags</span>
+                    <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy || materialAttemptId !== null} onChange={setNewMaterialTags} />
+                  </div>
+                </div>
+                {(!uploadError || !materialAttemptId) && <div className="document-add-actions">
+                  <button type="submit" className="btn primary" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : 'Upload PDF'}</button>
+                  <button type="button" className="link" disabled={busy || processingPhotos} onClick={cancelMaterialUpload}>Cancel</button>
+                </div>}
+              </form> : <button type="button" className="btn material-add-button" disabled={busy} onClick={() => { setUploadedMaterialId(null); setShowMaterialForm(true) }}>+ Add material</button>}
+              <div className="piece-scores-heading materials-saved-heading">
+                <span className="piece-scores-label">Saved materials</span>
+                <span className="piece-scores-count">{materials.length}</span>
               </div>
-            })}
-            {!materials.length && <p className="muted">No teaching materials yet.</p>}
+              {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
+                <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} disabled={Boolean(materialDraft)} onClick={() => setMaterialTagFilter(null)}>All tags</button>
+                {filterTags.map((tag) => <button key={tag} type="button" className={`filter-pill${materialTagFilter === tag ? ' active' : ''}`}
+                  aria-pressed={materialTagFilter === tag} disabled={Boolean(materialDraft)} onClick={() => setMaterialTagFilter(materialTagFilter === tag ? null : tag)}>#{tag}</button>)}
+              </div>}
+              {materialTagFilter && visibleMaterials.length === 0 && <p className="muted">No materials with this tag.</p>}
+              {visibleMaterials.map((material) => {
+                const linkedIds = new Set(lessonMaterials.filter((link) => link.material_id === material.id).map((link) => link.lesson_id))
+                const linkedLessons = lessons.filter((lesson) => linkedIds.has(lesson.id))
+                  .sort((a, b) => b.lesson_date.localeCompare(a.lesson_date) || a.title.localeCompare(b.title))
+                return <div className="material-row" key={material.id}>
+                  <div className="material-content">
+                    <div className="material-info">
+                      {materialDraft?.id === material.id ? (
+                        <form className="material-rename" onSubmit={saveMaterialTitle} onKeyDown={(event) => {
+                          if (event.key === 'Escape' && !busy) { setMaterialDraft(null); setMaterialError('') }
+                        }}>
+                          <input aria-label={`New name for ${material.title}`} autoFocus required value={materialDraft.title} disabled={busy}
+                            onChange={(event) => { setMaterialDraft({ ...materialDraft, title: event.target.value }); setMaterialError('') }} />
+                          <button type="submit" className="btn" disabled={busy}>Save</button>
+                          <button type="button" className="link" disabled={busy} onClick={() => { setMaterialDraft(null); setMaterialError('') }}>Cancel</button>
+                          {materialError && <p className="material-rename-error" role="alert">{materialError}</p>}
+                        </form>
+                      ) : <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material, visibleMaterials)}>{material.title}</button>}
+                      <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy || Boolean(materialDraft)} onChange={(tags) => saveMaterialTags(material, tags)} />
+                    </div>
+                    {linkedLessons.length > 0 && <div className="material-lessons" aria-label={`Lessons using ${material.title}`}>
+                      <span>Used in:</span>
+                      <ul>{linkedLessons.map((lesson) => <li key={lesson.id}>{lesson.title} · {lesson.lesson_date}</li>)}</ul>
+                    </div>}
+                  </div>
+                  <div className="material-actions">
+                    <button type="button" className="icon-btn edit" aria-label={`Rename teaching material ${material.title}`} title="Rename"
+                      disabled={busy || Boolean(materialDraft)} onClick={() => { setMaterialDraft({ id: material.id, title: material.title }); setMaterialError('') }}>{EditIcon}</button>
+                    <DeleteButton label={`Delete teaching material ${material.title}`} disabled={busy || Boolean(materialDraft)} onClick={() => deleteMaterial(material)} />
+                  </div>
+                </div>
+              })}
+              {!materials.length && <p className="muted">No teaching materials yet.</p>}
+            </div>
           </section>
           <form className="panel lesson-create" onSubmit={createLesson}>
             <label>Date<input type="date" value={newDate} required disabled={busy} onChange={(event) => setNewDate(event.target.value)} /></label>
