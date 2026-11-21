@@ -16,8 +16,11 @@ const mocks = vi.hoisted(() => ({
   dirty: vi.fn(),
   preparePhoto: vi.fn(),
   photosToPdf: vi.fn(),
+  scannerAvailable: vi.fn(),
+  scanDocument: vi.fn(),
 }))
 vi.mock('../lib/photoPdf', () => ({ preparePhoto: mocks.preparePhoto, photosToPdf: mocks.photosToPdf }))
+vi.mock('../lib/documentScanner', () => ({ hasDocumentScanner: mocks.scannerAvailable, scanDocument: mocks.scanDocument }))
 
 vi.mock('../supabase', () => ({
   supabase: {
@@ -66,6 +69,7 @@ const lib = {
 
 describe('lessons', () => {
   beforeEach(() => {
+    mocks.scannerAvailable.mockReturnValue(false)
     mocks.tables = {
       sm_lessons: [{ id: 'l1', lesson_date: '2026-11-18', title: 'Guitar', notes: '' }],
       sm_lesson_groups: [{ id: 'g1', teacher_name: 'Alex', instrument: 'guitar' }],
@@ -207,6 +211,19 @@ describe('lessons', () => {
     await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf' }))
     expect(await screen.findByRole('button', { name: 'Delete teaching material Camera material' })).toBeTruthy()
     expect(screen.queryByText('1 photo in PDF')).toBeNull()
+  })
+
+  it('uploads a scanned PDF as teaching material', async () => {
+    mocks.scannerAvailable.mockReturnValue(true)
+    const pdf = new File(['%PDF-'], 'document-scan.pdf', { type: 'application/pdf' })
+    mocks.scanDocument.mockResolvedValueOnce(pdf)
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.type(await screen.findByLabelText('Material title'), 'Scanned material')
+    await user.click(screen.getByRole('button', { name: 'Scan document' }))
+    await screen.findByText('document-scan.pdf')
+    await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf' }))
   })
 
   it('opens the correct linked tune, including tunes without a score', async () => {

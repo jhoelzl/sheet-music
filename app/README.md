@@ -31,6 +31,9 @@ In Xcode, select a signing team and a connected device, then build and run the
 app. Run the sync command again after changing the web app.
 Camera capture requires the updated native camera permission description and a
 rebuilt iOS app; the system will ask for camera access on first use.
+Document scanning uses Apple's native scanner on supported iPhones and iPads.
+Rebuild and reinstall the iOS app after adding or changing the native scanner;
+the browser and older installations can still capture photos as a PDF.
 
 On iOS, YouTube videos open in an in-app player. Its WebView uses the app's
 bundle ID as the HTTPS base URL so YouTube receives the required referrer.
