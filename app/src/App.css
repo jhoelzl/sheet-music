@@ -316,6 +316,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .cal-stats div { display: flex; align-items: baseline; gap: 6px; }
 .cal-stats strong { font-size: 22px; font-weight: 650; }
 .cal-stats span { font-size: 13px; color: var(--muted); }
+.cal-navigation { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
 .cal-scroll { overflow-x: auto; padding: 3px; min-width: 0; max-width: 100%; }
 .cal-months, .cal-grid { display: grid; gap: 4px; width: max-content; }
 .cal-months span { font-size: 11px; color: var(--muted); height: 16px; white-space: nowrap; }
@@ -576,6 +577,8 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .setlist-heading h3 { font-size: 18px; }
 .setlist-heading p { margin-top: 4px; color: var(--muted); font-size: 12px; }
 .setlist-heading-actions, .setlist-rename, .setlist-placeholder { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.setlist-schedule { display: flex; align-items: end; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.setlist-schedule label { min-width: 0; }
 .setlist-rename input { width: 180px; }
 .setlist-placeholder { align-items: end; padding-bottom: 16px; }
 .setlist-placeholder label { flex: 1; min-width: 160px; }

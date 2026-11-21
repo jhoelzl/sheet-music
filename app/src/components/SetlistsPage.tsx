@@ -5,6 +5,7 @@ import { scoresOf } from '../hooks/useLibrary'
 import { supabase } from '../supabase'
 import { dropIndex, moveItem } from '../lib/reorder'
 import { confirmDelete } from '../lib/confirmDelete'
+import { todayISO } from '../lib/dates'
 import { scoreLabel } from '../lib/scores'
 import { SetlistComment } from './SetlistComment'
 import { SetlistPlayer } from './SetlistPlayer'
@@ -12,9 +13,10 @@ import type { PlayerEntry } from './SetlistPlayer'
 import { SetlistTuneDetails } from './SetlistTuneDetails'
 import { SetlistTunePicker } from './SetlistTunePicker'
 import { DeleteButton } from './DeleteButton'
+import { ActivityCalendar } from './ActivityCalendar'
 import { ArchiveIcon, GripIcon, InfoIcon, PauseIcon, PdfIcon, PlayIcon } from './icons'
 
-type Setlist = { id: string; name: string; position: number; archived_at: string | null }
+type Setlist = { id: string; name: string; position: number; archived_at: string | null; event_date: string | null; event_time: string | null }
 type SetlistEntry = { id: string; piece_id: string | null; position: number; placeholder: string | null; comment: string | null; score_id: string | null }
 type LibraryData = Pick<Library, 'pieces' | 'composerNamesOf' | 'hiddenIds' | 'openPdf' | 'pdfUrl' | 'recordPdfPages'>
 type DragState = { pointerId: number; fromRow: number; startY: number; startScrollY: number; tops: number[]; heights: number[]; shift: number }
@@ -24,6 +26,10 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [membersBySetlist, setMembersBySetlist] = useState<Record<string, SetlistEntry[]>>({})
   const [name, setName] = useState('')
+  const [newDate, setNewDate] = useState('')
+  const [newTime, setNewTime] = useState('')
+  const [schedule, setSchedule] = useState<{ date: string; time: string } | null>(null)
+  const [showActivity, setShowActivity] = useState(false)
   const [rename, setRename] = useState<string | null>(null)
   const [placeholder, setPlaceholder] = useState('')
   const [error, setError] = useState('')
@@ -56,7 +62,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
   useEffect(() => {
     let active = true
     void (async () => {
-      const { data, error: loadError } = await supabase.from('sm_setlists').select('id, name, position, archived_at').order('position').order('created_at')
+      const { data, error: loadError } = await supabase.from('sm_setlists').select('id, name, position, archived_at, event_date, event_time').order('position').order('created_at')
       if (!active) return
       if (loadError) setError(loadError.message)
       else {
@@ -102,6 +108,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
 
   const selectSetlist = (setlist: Setlist) => {
     setRename(null)
+    setSchedule(null)
     setPlaceholder('')
     setOpenDetails(null)
     if (setlist.id === selectedId) return
@@ -116,7 +123,9 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     if (!nextName) return
     void perform(async () => {
       const position = setlists.reduce((max, item) => Math.max(max, item.position), -1) + 1
-      const { data, error: createError } = await supabase.from('sm_setlists').insert({ name: nextName, position }).select('id, name, position, archived_at').single()
+      const { data, error: createError } = await supabase.from('sm_setlists')
+        .insert({ name: nextName, position, event_date: newDate || null, event_time: newTime || null })
+        .select('id, name, position, archived_at, event_date, event_time').single()
       if (createError || !data) { setError(createError?.message ?? 'Could not create setlist.'); return }
       const created = data as Setlist
       setSetlists((current) => [...current, created])
@@ -124,7 +133,10 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       setMembersLoading(true)
       setSelectedId(created.id)
       setName('')
+      setNewDate('')
+      setNewTime('')
       setRename(null)
+      setSchedule(null)
       setOpenDetails(null)
     })
   }
@@ -138,6 +150,18 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       if (saveError) { setError(saveError.message); return }
       setSetlists((current) => current.map((item) => item.id === selectedId ? { ...item, name: nextName } : item))
       setRename(null)
+    })
+  }
+
+  const saveSchedule = (event: FormEvent) => {
+    event.preventDefault()
+    if (!selectedId || !schedule) return
+    const values = { event_date: schedule.date || null, event_time: schedule.time || null }
+    void perform(async () => {
+      const { error: saveError } = await supabase.from('sm_setlists').update(values).eq('id', selectedId)
+      if (saveError) { setError(saveError.message); return }
+      setSetlists((current) => current.map((item) => item.id === selectedId ? { ...item, ...values } : item))
+      setSchedule(null)
     })
   }
 
@@ -156,12 +180,13 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       const { data, error: duplicateError } = await supabase.rpc('sm_duplicate_setlist', { source_id: setlist.id, new_name: copy })
       if (duplicateError || !data) { setError(duplicateError?.message ?? 'Could not duplicate the setlist.'); return }
       const position = setlists.reduce((max, item) => Math.max(max, item.position), -1) + 1
-      const created: Setlist = { id: data as string, name: copy, position, archived_at: null }
+      const created: Setlist = { id: data as string, name: copy, position, archived_at: null, event_date: null, event_time: null }
       setSetlists((current) => [...current, created])
       setLoadedId(null)
       setMembersLoading(true)
       setSelectedId(created.id)
       setRename(null)
+      setSchedule(null)
       setOpenDetails(null)
     })
   }
@@ -174,6 +199,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
       setSetlists((current) => current.map((item) => item.id === setlist.id ? { ...item, archived_at } : item))
       setOpenDetails(null)
       setRename(null)
+      setSchedule(null)
       if (archived) setShowArchived(true)
     })
   }
@@ -195,6 +221,7 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
         setMembersLoading(remaining.length > 0)
         setSelectedId(remaining[0]?.id ?? null)
         setRename(null)
+        setSchedule(null)
         setOpenDetails(null)
       }
     })
@@ -402,6 +429,8 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     scoreId: entry.score_id,
   }))
   const chosenPieceIds = orderedRows.flatMap(({ piece }) => piece ? [piece.id] : [])
+  const datedSetlists = setlists.filter((setlist) => setlist.event_date)
+  const todayCount = datedSetlists.filter((setlist) => setlist.event_date === todayISO()).length
 
   const setlistRow = (setlist: Setlist, index: number, moveable: boolean) => (
     <div className="setlist-tab-row" key={setlist.id}>
@@ -421,10 +450,26 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
     <>
       <div className="library-intro"><div><span className="library-kicker">Plan your music</span><h2>Setlists</h2><p>Collect and order tunes for gigs and jam sessions.</p></div></div>
       {error && <div className="error" role="alert">{error}</div>}
+      {!loading && <section className="practice-summary" aria-label="Setlist activity">
+        <button type="button" className="practice-summary-toggle" aria-expanded={showActivity} aria-controls="setlist-activity" onClick={() => setShowActivity(!showActivity)}>
+          <span className="practice-summary-icon" aria-hidden="true">✦</span>
+          <span className="practice-summary-copy"><strong>Your setlists</strong><span>{todayCount} {todayCount === 1 ? 'setlist' : 'setlists'} today</span></span>
+          <span className="practice-summary-action">{showActivity ? 'Hide activity' : 'View activity'} <span aria-hidden="true">{showActivity ? '↑' : '↓'}</span></span>
+        </button>
+        {showActivity && <div id="setlist-activity">
+          <ActivityCalendar kind="setlist" entries={datedSetlists.flatMap((setlist) => setlist.event_date ? [{ id: setlist.id, date: setlist.event_date, title: setlist.name, subtitle: setlist.event_time?.slice(0, 5) }] : [])}
+            selectionDisabled={busy} onSelectEntry={(id) => {
+              const setlist = setlists.find((item) => item.id === id)
+              if (setlist) { if (setlist.archived_at) setShowArchived(true); selectSetlist(setlist) }
+            }} />
+        </div>}
+      </section>}
       <div className="setlist-layout">
         <aside className="setlist-sidebar" aria-label="Your setlists">
           <form className="setlist-create" onSubmit={createSetlist}>
             <label>Setlist name<input aria-label="Setlist name" placeholder="Friday jam session" value={name} onChange={(event) => setName(event.target.value)} required /></label>
+            <label>Date (optional)<input type="date" aria-label="New setlist date" value={newDate} disabled={busy} onChange={(event) => { setNewDate(event.target.value); if (!event.target.value) setNewTime('') }} /></label>
+            <label>Time (optional)<input type="time" aria-label="New setlist time" value={newTime} disabled={busy || !newDate} onChange={(event) => setNewTime(event.target.value)} /></label>
             <button type="submit" className="btn primary" disabled={busy || loading}>Create setlist</button>
           </form>
           {loading && <p className="muted">Loading setlists…</p>}
@@ -467,6 +512,17 @@ export function SetlistsPage({ lib }: { lib: LibraryData }) {
                   <DeleteButton label="Delete setlist" disabled={busy} onClick={() => removeSetlist(selected)} />
                 </div>
               </div>
+              {schedule ? <form className="setlist-schedule" onSubmit={saveSchedule}>
+                <label>Date (optional)<input type="date" aria-label="Setlist date" value={schedule.date} disabled={busy} onChange={(event) => setSchedule({ date: event.target.value, time: event.target.value ? schedule.time : '' })} /></label>
+                <label>Time (optional)<input type="time" aria-label="Setlist time" value={schedule.time} disabled={busy || !schedule.date} onChange={(event) => setSchedule({ ...schedule, time: event.target.value })} /></label>
+                <button type="submit" className="btn" disabled={busy}>Save date</button>
+                <button type="button" className="link" disabled={busy} onClick={() => setSchedule(null)}>Cancel</button>
+              </form> : <div className="setlist-schedule">
+                <span className="muted">{selected.event_date
+                  ? `${new Date(`${selected.event_date}T00:00:00`).toLocaleDateString()}${selected.event_time ? ` · ${selected.event_time.slice(0, 5)}` : ''}`
+                  : 'No date scheduled'}</span>
+                {!isArchived && <button type="button" className="link" disabled={busy} onClick={() => setSchedule({ date: selected.event_date ?? '', time: selected.event_time?.slice(0, 5) ?? '' })}>{selected.event_date ? 'Edit date' : 'Add date'}</button>}
+              </div>}
               {isArchived && <p className="setlist-archived-note" role="status">Archived setlists are read-only. Restore this one to change its tunes.</p>}
               {membersLoading && <p className="muted">Loading entries…</p>}
               <ol className="setlist-order" aria-label="Tune order" ref={listRef}>
