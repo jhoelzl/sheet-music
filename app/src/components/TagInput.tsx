@@ -57,7 +57,7 @@ export function TagInput({ tags, suggestions, label, disabled = false, selectSug
           else if (e.key === 'Backspace' && !draft && tags.length) remove(tags[tags.length - 1])
         }}
         onBlur={(event) => {
-          if (event.relatedTarget === selectRef.current || choosingSuggestion.current) return
+          if ((selectRef.current && event.relatedTarget === selectRef.current) || choosingSuggestion.current) return
           if (draft.trim()) add(draft)
         }} />
       {!selectSuggestions && <datalist id={listId}>{available.map((s) => <option key={s} value={s} />)}</datalist>}

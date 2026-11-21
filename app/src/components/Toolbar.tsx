@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Library } from '../hooks/useLibrary'
+import { scoresOf, type Library } from '../hooks/useLibrary'
 import { INSTRUMENTS } from '../lib/instruments'
 import { FILTERS, MISSING_DATA_FILTERS, SORTS, VIEWS } from '../lib/sorting'
 import type { SortKey, View } from '../lib/sorting'
@@ -20,6 +20,8 @@ export function Toolbar({ lib }: { lib: Library }) {
         <button type="button" className={`btn filter-toggle${activeFilters ? ' active' : ''}`} aria-expanded={filtersOpen} aria-controls="library-filters" onClick={() => setFiltersOpen(!filtersOpen)}>
           Filters{activeFilters > 0 && ` (${activeFilters})`}
         </button>
+        <button type="button" className="btn" onClick={lib.startScoreBrowse}
+          disabled={!lib.visible.some((piece) => scoresOf(piece).length > 0)}>Browse scores</button>
         {view !== 'table' && (
           <label className="sort-field">
             <span>Sort</span>

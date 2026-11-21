@@ -48,6 +48,11 @@ function TestLibrary() {
   return <><Toasts lib={lib} /><PdfPreview lib={lib} /><Library lib={lib} /></>
 }
 
+function TestMaterialPreview() {
+  const lib = useLibrary()
+  return <><PdfPreview lib={lib} /><button onClick={() => void lib.openMaterialPdf({ id: 'm1', title: 'Scales', pdf_path: 'scales.pdf', tags: [] })}>Open material</button></>
+}
+
 function TestComposers() {
   const lib = useLibrary()
   return <ComposersPage lib={lib} />
@@ -434,6 +439,155 @@ describe('focused library', () => {
 
     await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Choose score' }), 's2')
     expect(await within(dialog).findByText('PDF content: https://example.test/romance-guitar.pdf')).toBeTruthy()
+  })
+
+  it('edits the current score tags in the viewer, including a custom tag', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    const tags = within(dialog).getByRole('group', { name: 'Tags for the score of Romance' })
+    await user.click(within(tags).getByRole('button', { name: 'Solo' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'solo'] }, 'id', 's1'))
+    await waitFor(() => expect((within(tags).getByRole('button', { name: 'Solo' }) as HTMLButtonElement).disabled).toBe(false))
+    await user.type(within(tags).getByRole('textbox', { name: 'Add tag' }), 'practice{Enter}')
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'solo', 'practice'] }, 'id', 's1'))
+    expect(await within(dialog).findByText('#practice')).toBeTruthy()
+  })
+
+  it('does not show score editing or browsing for teaching materials', async () => {
+    const user = userEvent.setup()
+    render(<TestMaterialPreview />)
+    await user.click(screen.getByRole('button', { name: 'Open material' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Scales' })
+    expect(within(dialog).queryByText('Score tags')).toBeNull()
+    expect(within(dialog).queryByRole('group', { name: 'Browse scores' })).toBeNull()
+  })
+
+  it('saves an unfinished custom tag when closing the viewer with Escape', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    await user.type(within(dialog).getByRole('textbox', { name: 'Add tag' }), 'practice')
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'practice'] }, 'id', 's1'))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('keeps keyboard focus inside the viewer including its tag input', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    const close = within(dialog).getByRole('button', { name: '← Library' })
+    const input = within(dialog).getByRole('textbox', { name: 'Add tag' })
+    expect(document.activeElement).toBe(close)
+    await user.tab({ shift: true })
+    expect(document.activeElement).toBe(input)
+    await user.tab()
+    expect(document.activeElement).toBe(close)
+  })
+
+  it('browses every score of filtered pieces in a stable sequence as tags are edited', async () => {
+    mocks.pieces = [
+      { id: 'p1', composer_id: 'c1', title: 'Alpha', tags: [], links: [] },
+      { id: 'p2', composer_id: 'c1', title: 'Beta', tags: [], links: [] },
+      { id: 'p3', composer_id: 'c1', title: 'Gamma', tags: [], links: [] },
+    ]
+    mocks.scores = [
+      { id: 's1', piece_id: 'p1', pdf_path: 'alpha.pdf', pdf_pages: 1, tags: [], position: 0 },
+      { id: 's2', piece_id: 'p1', pdf_path: 'alpha-2.pdf', pdf_pages: 1, tags: ['guitar'], position: 1 },
+      { id: 's3', piece_id: 'p2', pdf_path: 'beta.pdf', pdf_pages: 1, tags: [], position: 0 },
+      { id: 's4', piece_id: 'p3', pdf_path: 'gamma.pdf', pdf_pages: 1, tags: ['solo'], position: 0 },
+    ]
+    mocks.signedUrl.mockImplementation(async (path: string) => ({ data: { signedUrl: `https://example.test/${path}` }, error: null }))
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Alpha', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Filters' }))
+    await user.click(screen.getByRole('button', { name: 'Score missing tags' }))
+    await user.click(screen.getByRole('button', { name: 'Browse scores' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Alpha' })
+    expect(within(dialog).getByText('1 / 3')).toBeTruthy()
+    expect((within(dialog).getByRole('button', { name: '← Previous' }) as HTMLButtonElement).disabled).toBe(true)
+    await user.click(within(dialog).getByRole('button', { name: 'Piano' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano'] }, 'id', 's1'))
+    await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Next →' }) as HTMLButtonElement).disabled).toBe(false))
+    await user.click(within(dialog).getByRole('button', { name: 'Next →' }))
+    expect(await within(dialog).findByText('PDF content: https://example.test/alpha-2.pdf')).toBeTruthy()
+    expect(within(dialog).getByText('2 / 3')).toBeTruthy()
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Choose score' }), 's1')
+    expect(await within(dialog).findByText('PDF content: https://example.test/alpha.pdf')).toBeTruthy()
+    expect(within(dialog).getByText('1 / 3')).toBeTruthy()
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Choose score' }), 's2')
+    await user.click(within(dialog).getByRole('button', { name: 'Next →' }))
+    const beta = await screen.findByRole('dialog', { name: 'PDF: Beta' })
+    expect(await within(beta).findByText('PDF content: https://example.test/beta.pdf')).toBeTruthy()
+    expect(within(beta).getByText('3 / 3')).toBeTruthy()
+    expect((within(beta).getByRole('button', { name: 'Next →' }) as HTMLButtonElement).disabled).toBe(true)
+    await user.click(within(beta).getByRole('button', { name: '← Previous' }))
+    expect(await screen.findByRole('dialog', { name: 'PDF: Alpha' })).toBeTruthy()
+  })
+
+  it('ignores a stale score URL after browsing to another score', async () => {
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+    let resolveFirst!: (value: { data: { signedUrl: string }; error: null }) => void
+    mocks.signedUrl.mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve }))
+    mocks.signedUrl.mockResolvedValueOnce({ data: { signedUrl: 'https://example.test/second.pdf' }, error: null })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Browse scores' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    await user.click(within(dialog).getByRole('button', { name: 'Next →' }))
+    expect(await within(dialog).findByText('PDF content: https://example.test/second.pdf')).toBeTruthy()
+    await act(async () => { resolveFirst({ data: { signedUrl: 'https://example.test/first.pdf' }, error: null }) })
+    expect(within(dialog).getByText('PDF content: https://example.test/second.pdf')).toBeTruthy()
+  })
+
+  it('saves a custom tag before navigating to the next score', async () => {
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Browse scores' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    await user.type(within(dialog).getByRole('textbox', { name: 'Add tag' }), 'practice')
+    await user.click(within(dialog).getByRole('button', { name: 'Next →' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'practice'] }, 'id', 's1'))
+    expect(await within(dialog).findByText('2 / 2')).toBeTruthy()
+  })
+
+  it('can navigate past a score that disappears from the library', async () => {
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+    mocks.update.mockImplementationOnce(() => { mocks.scores = mocks.scores.filter((score) => score.id !== 's1') })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Browse scores' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    await user.click(within(dialog).getByRole('button', { name: 'Solo' }))
+    expect(await within(dialog).findByText('Score no longer available')).toBeTruthy()
+    await user.click(within(dialog).getByRole('button', { name: 'Next →' }))
+    expect(await within(dialog).findByText('1 / 1')).toBeTruthy()
+  })
+
+  it('can continue browsing after a score URL fails', async () => {
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+    mocks.signedUrl.mockResolvedValueOnce({ data: null, error: new Error('Access denied') })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Browse scores' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('Access denied')
+    await user.click(within(dialog).getByRole('button', { name: 'Next →' }))
+    expect(await within(dialog).findByText('2 / 2')).toBeTruthy()
+    expect(await within(dialog).findByText('PDF content: https://example.test/music.pdf')).toBeTruthy()
   })
 
   it('adds another composer to a piece', async () => {
