@@ -7,7 +7,7 @@ import type { SortKey, View } from '../lib/sorting'
 export function Toolbar({ lib }: { lib: Library }) {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const { search, setSearch, view, setView, sort, setSort, filtering, clearFilters } = lib
-  const { instrumentFilter, setInstrumentFilter, filter, setFilter, allTags, tagFilter, setTagFilter } = lib
+  const { instrumentFilter, setInstrumentFilter, filter, setFilter, filterTags, tagFilter, setTagFilter } = lib
   const activeFilters = Number(instrumentFilter !== 'all') + Number(filter !== 'all') + Number(tagFilter !== null)
   return (
     <>
@@ -47,10 +47,10 @@ export function Toolbar({ lib }: { lib: Library }) {
               <button key={f.value} type="button" className={`filter-pill${filter === f.value ? ' active' : ''}`} aria-pressed={filter === f.value} onClick={() => setFilter(f.value)}>{f.label}</button>
             ))}
           </div>
-          {allTags.length > 0 && (
+          {filterTags.length > 0 && (
             <div className="filter-bar" role="group" aria-label="Filter by tag">
               <button type="button" className={`filter-pill${tagFilter === null ? ' active' : ''}`} aria-pressed={tagFilter === null} onClick={() => setTagFilter(null)}>All tags</button>
-              {allTags.map((t) => (
+              {filterTags.map((t) => (
                 <button key={t} type="button" className={`filter-pill${tagFilter === t ? ' active' : ''}`} aria-pressed={tagFilter === t} onClick={() => setTagFilter(tagFilter === t ? null : t)}>#{t}</button>
               ))}
             </div>
