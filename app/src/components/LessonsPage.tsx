@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { PDF_STORAGE_BUCKET } from '../config'
 import type { Library } from '../hooks/useLibrary'
 import { useUrlOptional, useUrlString } from '../hooks/useUrlState'
 import { todayISO } from '../lib/dates'
@@ -22,7 +21,7 @@ import { EditIcon } from './icons'
 
 type LessonPiece = { lesson_id: string; piece_id: string }
 type LessonMaterial = { lesson_id: string; material_id: string }
-type LibraryData = Pick<Library, 'pieces' | 'hiddenIds' | 'composerNamesOf' | 'openPdf' | 'openMaterialPdf'>
+type LibraryData = Pick<Library, 'pieces' | 'hiddenIds' | 'composerNamesOf' | 'openPdf' | 'openMaterialPdf' | 'cleanupFiles'>
 
 export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyChange: (dirty: boolean) => void }) {
   const [lessons, setLessons] = useState<Lesson[]>([])
@@ -396,8 +395,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
       if (failure) throw failure
       setMaterials((current) => current.filter((item) => item.id !== material.id))
       setLessonMaterials((current) => current.filter((item) => item.material_id !== material.id))
-      const removed = await supabase.storage.from(PDF_STORAGE_BUCKET).remove([material.pdf_path])
-      if (removed.error) throw new Error(`Material deleted, but its PDF could not be deleted (${material.pdf_path}): ${removed.error.message}`)
+      await lib.cleanupFiles([material.pdf_path])
     })
   }
 

@@ -2,7 +2,12 @@ import { PDF_STORAGE_BUCKET } from '../config'
 import { supabase } from '../supabase'
 
 const REQUEST_TIMEOUT_MS = 90_000
+export const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024
 export type UploadStage = { phase: 'prepare' | 'upload' | 'save'; message: string }
+
+export function validateDocumentSize(file: File): void {
+  if (file.size > MAX_DOCUMENT_BYTES) throw new Error('This document is larger than 50 MB. Reduce its size and try again.')
+}
 
 export async function uploadStep<T>(operation: PromiseLike<T>, stage: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -55,6 +60,7 @@ export async function saveUploadRecord<T>(
 }
 
 export async function uploadDocument(file: File, id: string, folder: '' | 'materials', onStage: (stage: UploadStage) => void): Promise<string> {
+  validateDocumentSize(file)
   onStage({ phase: 'prepare', message: 'Checking your account…' })
   const { data: { user }, error } = await uploadStep(supabase.auth.getUser(), 'Checking your account')
   if (error) throw error

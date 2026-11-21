@@ -4,7 +4,7 @@ import { PDF_SIGNED_URL_TTL_SECONDS, PDF_STORAGE_BUCKET } from '../config'
 import { supabase } from '../supabase'
 import type { Composer, Instrument, Piece, PieceLink, PiecePatch, PieceScore, PracticeLog, TeachingMaterial } from '../supabase'
 import { countPdfPages } from '../lib/pdf'
-import { saveUploadRecord, UploadCleanupError, uploadDocument, uploadErrorMessage, uploadStep } from '../lib/documentUpload'
+import { saveUploadRecord, UploadCleanupError, uploadDocument, uploadErrorMessage, uploadStep, validateDocumentSize } from '../lib/documentUpload'
 import type { UploadStage } from '../lib/documentUpload'
 import { backupFileName, buildBackup, downloadBlob, materialFileName, scoreFileName } from '../lib/backup'
 import { createZip } from '../lib/zip'
@@ -19,7 +19,7 @@ import { DEFAULT_USER_SETTINGS } from '../lib/userSettings'
 import type { UserSettings } from '../lib/userSettings'
 import { useUrlEnum, useUrlOptional, useUrlString } from './useUrlState'
 
-export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
+export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void; actionLabel?: string }
 export type Panel = 'composer' | 'piece' | null
 export type Preview = { id: string; pieceId: string | null; title: string; url: string | null; pages: number | null; error: string | null }
 export type BrowseScore = { pieceId: string; scoreId: string }
@@ -154,10 +154,10 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
 
   const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
 
-  const notify = useCallback((message: string, kind: Toast['kind'] = 'error', undo?: () => void) => {
+  const notify = useCallback((message: string, kind: Toast['kind'] = 'error', undo?: () => void, actionLabel?: string) => {
     const id = ++toastSeq.current
-    setToasts((t) => [...t, { id, message, kind, undo }])
-    window.setTimeout(() => dismissToast(id), undo ? 6000 : 5000)
+    setToasts((t) => [...t, { id, message, kind, undo, actionLabel }])
+    if (!actionLabel) window.setTimeout(() => dismissToast(id), undo ? 6000 : 5000)
     return id
   }, [dismissToast])
 
@@ -202,6 +202,28 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     return !error
   }
 
+  const cleanupFiles = async (paths: string[]) => {
+    if (!paths.length) return
+    try {
+      const [scores, materials] = await Promise.all([
+        supabase.from('sm_piece_scores').select('pdf_path').in('pdf_path', paths),
+        supabase.from('sm_teaching_materials').select('pdf_path').in('pdf_path', paths),
+      ])
+      if (scores.error || materials.error) throw scores.error ?? materials.error
+      const referenced = new Set([...(scores.data ?? []), ...(materials.data ?? [])].map((row) => row.pdf_path))
+      const unreferenced = paths.filter((path) => !referenced.has(path))
+      if (!unreferenced.length) return
+      const { error } = await supabase.storage.from(PDF_STORAGE_BUCKET).remove(unreferenced)
+      if (error) throw error
+    } catch (reason) {
+      const message = uploadErrorMessage(reason)
+      const toastId = notify(`The item was deleted, but its files could not be cleaned up: ${message}. Files: ${paths.join(', ')}`, 'error', () => {
+        dismissToast(toastId)
+        void cleanupFiles(paths)
+      }, 'Retry cleanup')
+    }
+  }
+
   const duplicateComposer = (name: string, exceptId?: string) =>
     composers.some((c) => c.id !== exceptId && c.name.trim().toLowerCase() === name.trim().toLowerCase())
 
@@ -233,6 +255,13 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     e.preventDefault()
     if (!newComposerIds.length) { notify('Select at least one composer.'); return }
     if (pieceSavingRef.current || pieceSaveUncertain) return
+    if (file) {
+      try { validateDocumentSize(file) }
+      catch (reason) {
+        setPieceUploadStatus({ state: 'error', stage: { phase: 'prepare', message: 'Checking document…' }, title: 'Piece not saved', detail: uploadErrorMessage(reason) })
+        return
+      }
+    }
     pieceSavingRef.current = true
     setPieceSaving(true)
     let attempt = pieceScoreAttempt
@@ -400,7 +429,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     if (!confirmDelete(`"${p.title}" from your library`, 'Its scores, practice history, and links to lessons and setlists will also be deleted.')) return
     setHiddenIds((h) => new Set(h).add(p.id))
     const unhide = () => setHiddenIds((h) => { const n = new Set(h); n.delete(p.id); return n })
-    const toastId = notify(`Deleted "${p.title}" from your library`, 'info', () => {
+    const toastId = notify(`Removing "${p.title}" from your library`, 'info', () => {
       window.clearTimeout(deleteTimers.current.get(p.id))
       deleteTimers.current.delete(p.id)
       unhide()
@@ -410,9 +439,13 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
       deleteTimers.current.delete(p.id)
       void (async () => {
         const paths = scoresOf(p).map((score) => score.pdf_path)
-        if (paths.length) await supabase.storage.from(PDF_STORAGE_BUCKET).remove(paths)
-        await run(supabase.from('sm_pieces').delete().eq('id', p.id))
-        unhide()
+        try {
+          if (await run(supabase.from('sm_pieces').delete().eq('id', p.id))) await cleanupFiles(paths)
+        } catch (reason) {
+          notify(`Could not confirm deletion: ${uploadErrorMessage(reason)}. Refresh the library before retrying.`)
+        } finally {
+          unhide()
+        }
       })()
     }, 6000))
   }
@@ -447,6 +480,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     uploadingScore.current = true
     setUploadingId(p.id)
     try {
+      validateDocumentSize(f)
       onStage({ phase: 'prepare', message: 'Reading PDF…' })
       const pdf_pages = await uploadStep(countPdfPages(f), 'Reading the PDF')
       const pdf_path = await uploadDocument(f, id, '', onStage)
@@ -492,8 +526,12 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const removeScore = (p: Piece, score: PieceScore) => {
     if (!confirmDelete(`this score for "${p.title}"`, 'Its PDF will also be deleted. Setlists using it will no longer reference it.')) return
     void (async () => {
-      const ok = await run(supabase.from('sm_piece_scores').delete().eq('id', score.id))
-      if (ok) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([score.pdf_path])
+      try {
+        const ok = await run(supabase.from('sm_piece_scores').delete().eq('id', score.id))
+        if (ok) await cleanupFiles([score.pdf_path])
+      } catch (reason) {
+        notify(`Could not confirm deletion: ${uploadErrorMessage(reason)}. Refresh the library before retrying.`)
+      }
     })()
   }
 
@@ -505,7 +543,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     if (!confirmDelete(`composer "${c.name}"`, `${count} ${count === 1 ? 'piece' : 'pieces'} with no other composer and their scores will also be deleted. Shared pieces will be kept.`)) return
     setHiddenIds((h) => new Set(h).add(key))
     const unhide = () => setHiddenIds((h) => { const n = new Set(h); n.delete(key); return n })
-    const toastId = notify(`Deleted "${c.name}"${count ? ` and ${count} ${count === 1 ? 'piece' : 'pieces'}` : ''}`, 'info', () => {
+    const toastId = notify(`Removing "${c.name}"${count ? ` and ${count} ${count === 1 ? 'piece' : 'pieces'}` : ''}`, 'info', () => {
       window.clearTimeout(deleteTimers.current.get(key))
       deleteTimers.current.delete(key)
       unhide()
@@ -515,21 +553,25 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     deleteTimers.current.set(key, window.setTimeout(() => {
       deleteTimers.current.delete(key)
       void (async () => {
-        for (const piece of related.filter((p) => composerIdsOf(p).length > 1 && p.composer_id === c.id)) {
-          const replacement = composerIdsOf(piece).find((id) => id !== c.id)!
-          const { error } = await supabase.from('sm_pieces').update({ composer_id: replacement }).eq('id', piece.id)
-          if (error) {
-            notify(error.message)
-            await load()
-            unhide()
-            return
+        try {
+          for (const piece of related.filter((p) => composerIdsOf(p).length > 1 && p.composer_id === c.id)) {
+            const replacement = composerIdsOf(piece).find((id) => id !== c.id)!
+            const { error } = await supabase.from('sm_pieces').update({ composer_id: replacement }).eq('id', piece.id)
+            if (error) {
+              notify(error.message)
+              await load()
+              return
+            }
           }
+          const { error } = await supabase.from('sm_composers').delete().eq('id', c.id)
+          if (error) notify(error.message)
+          else await cleanupFiles(paths)
+          await load()
+        } catch (reason) {
+          notify(`Could not confirm deletion: ${uploadErrorMessage(reason)}. Refresh the library before retrying.`)
+        } finally {
+          unhide()
         }
-        if (paths.length) await supabase.storage.from(PDF_STORAGE_BUCKET).remove(paths)
-        const { error } = await supabase.from('sm_composers').delete().eq('id', c.id)
-        if (error) notify(error.message)
-        await load()
-        unhide()
       })()
     }, 6000))
   }
@@ -745,7 +787,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     // new-item form state
     composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreTags, setNewScoreTags, newTags, setNewTags, pieceSaving, pieceUploadStatus, setPieceUploadStatus, pieceScoreAttempt, pieceSaveUncertain, discardPieceUpload,
     // actions
-    dismissToast, closePdf, pdfUrl, openMaterialPdf, openBrowseMaterialPdf, openBrowsePdf, startScoreBrowse, recordPdfPages, recordMaterialPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
+    dismissToast, cleanupFiles, closePdf, pdfUrl, openMaterialPdf, openBrowseMaterialPdf, openBrowsePdf, startScoreBrowse, recordPdfPages, recordMaterialPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, addScore, updateScore, removeScore, removeComposer, startEditComposer, commitComposerEdit, openPdf,
     scoresOf, keysOf, primaryScore, backup, backingUp,
   }

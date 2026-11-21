@@ -1,11 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { saveUploadRecord, UploadCleanupError, uploadStep } from './documentUpload'
+import { MAX_DOCUMENT_BYTES, saveUploadRecord, UploadCleanupError, uploadStep, validateDocumentSize } from './documentUpload'
 
 const mocks = vi.hoisted(() => ({ remove: vi.fn() }))
 vi.mock('../supabase', () => ({ supabase: { storage: { from: () => ({ remove: mocks.remove }) } } }))
 
 describe('document upload safeguards', () => {
   afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
+
+  it('accepts documents up to 50 MB and rejects larger files', () => {
+    const file = new File([], 'scan.pdf', { type: 'application/pdf' })
+    Object.defineProperty(file, 'size', { value: MAX_DOCUMENT_BYTES, configurable: true })
+    expect(() => validateDocumentSize(file)).not.toThrow()
+    Object.defineProperty(file, 'size', { value: MAX_DOCUMENT_BYTES + 1 })
+    expect(() => validateDocumentSize(file)).toThrow('larger than 50 MB')
+  })
 
   it('times out a stalled request without waiting for it to settle', async () => {
     vi.useFakeTimers()

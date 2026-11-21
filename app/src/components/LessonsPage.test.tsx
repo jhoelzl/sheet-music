@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   openMaterialPdf: vi.fn(),
   openPdf: vi.fn(),
+  cleanupFiles: vi.fn(),
   dirty: vi.fn(),
   preparePhoto: vi.fn(),
   photosToPdf: vi.fn(),
@@ -81,7 +82,7 @@ const piece: Piece = {
 }
 const lib = {
   pieces: [piece], hiddenIds: new Set<string>(), composerNamesOf: () => 'Joseph Kosma',
-  openPdf: mocks.openPdf, openMaterialPdf: mocks.openMaterialPdf,
+  openPdf: mocks.openPdf, openMaterialPdf: mocks.openMaterialPdf, cleanupFiles: mocks.cleanupFiles,
 }
 
 describe('lessons', () => {
@@ -742,7 +743,7 @@ describe('lessons', () => {
     expect(mocks.remove).not.toHaveBeenCalled()
     await user.click(remove)
     await waitFor(() => expect(mocks.tables.sm_teaching_materials).toHaveLength(0))
-    expect(mocks.remove).toHaveBeenCalledWith(['u1/scales.pdf'])
+    expect(mocks.cleanupFiles).toHaveBeenCalledWith(['u1/scales.pdf'])
   })
 
   it('searches and links multiple materials, opens each, and unlinks only the chosen one', async () => {
