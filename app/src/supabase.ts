@@ -17,7 +17,7 @@ export type Instrument = 'piano' | 'guitar'
 
 export type LinkType = 'youtube' | 'spotify' | 'instagram' | 'other'
 
-export type PieceLink = { type: LinkType; url: string }
+export type PieceLink = { type: LinkType; url: string; added_at?: string }
 
 /** One PDF of a piece, with its musical key and independent tags. */
 export type PieceScore = {

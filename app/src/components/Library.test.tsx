@@ -320,6 +320,22 @@ describe('focused library', () => {
     expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
   })
 
+  it('records when a new video link is added', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: '+ Link' }))
+    const input = screen.getByRole('textbox', { name: 'Add link for Romance' })
+    const before = Date.now()
+    await user.type(input, 'https://youtu.be/abcdefghi{Enter}')
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith(
+      'sm_pieces', { links: [expect.objectContaining({ type: 'youtube', url: 'https://youtu.be/abcdefghi', added_at: expect.any(String) })] }, 'id', 'p1',
+    ))
+    const link = (mocks.pieces[0].links as { added_at: string }[])[0]
+    expect(Date.parse(link.added_at)).toBeGreaterThanOrEqual(before)
+    expect(Date.parse(link.added_at)).toBeLessThanOrEqual(Date.now())
+  })
+
   it('adds a piece with an optional subtitle and a score', async () => {
     vi.stubGlobal('crypto', { randomUUID: () => 'uuid-1' })
     mocks.scores[0].tags = ['piano', 'duet']

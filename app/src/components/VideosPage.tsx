@@ -7,14 +7,30 @@ import { youtubeId } from '../lib/youtube'
 import { VideoFeed } from './VideoFeed'
 import type { Video } from './VideoFeed'
 
+type SortableVideo = Video & { addedAt: number | null; lastPractised: number | null }
+
 export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean }) {
-  const [videos, setVideos] = useState<Video[] | null>(null)
+  const [videos, setVideos] = useState<SortableVideo[] | null>(null)
   const [defaultOrder] = useState(() => defaultRandom ? `random:${randomSeed()}` : 'ordered')
   const [order, setOrder] = useUrlString('videoOrder', defaultOrder)
   const [error, setError] = useState('')
   const seedMatch = /^random:(\d{1,10})$/.exec(order)
   const seed = seedMatch && Number(seedMatch[1]) <= 0xffffffff ? Number(seedMatch[1]) : null
-  const shuffledVideos = useMemo(() => videos && seed !== null ? shuffle(videos, seed) : null, [videos, seed])
+  const selectedOrder = seed !== null ? 'random' : order === 'added' || order === 'practised' ? order : 'ordered'
+  const orderedVideos = useMemo(() => {
+    if (!videos) return null
+    if (seed !== null) return shuffle(videos, seed)
+    if (selectedOrder === 'added' || selectedOrder === 'practised') {
+      const field = selectedOrder === 'added' ? 'addedAt' : 'lastPractised'
+      return [...videos].sort((a, b) => {
+        const first = a[field], second = b[field]
+        if (first === null) return second === null ? 0 : 1
+        if (second === null) return -1
+        return second - first
+      })
+    }
+    return videos
+  }, [videos, seed, selectedOrder])
 
   useEffect(() => {
     if (!new URLSearchParams(window.location.search).has('videoOrder')) setOrder(defaultOrder)
@@ -35,7 +51,7 @@ export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean 
         ids.push(link.composer_id)
         composerIdsByPiece.set(link.piece_id, ids)
       }
-      const out: Video[] = []
+      const out: SortableVideo[] = []
       for (const piece of p.data as Piece[]) {
         const composerNames = [...new Set([piece.composer_id, ...(composerIdsByPiece.get(piece.id) ?? [])])]
           .map((id) => names.get(id))
@@ -44,7 +60,10 @@ export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean 
         for (const link of piece.links ?? []) {
           const href = safeUrl(link.url)
           const id = href && youtubeId(href)
-          if (href && id) out.push({ key: `${piece.id}:${id}`, id, href, title: piece.title, composer: composerNames })
+          if (href && id) out.push({
+            key: `${piece.id}:${id}`, id, href, title: piece.title, composer: composerNames,
+            addedAt: timestamp(link.added_at), lastPractised: timestamp(piece.last_practiced),
+          })
         }
       }
       setVideos(out)
@@ -58,11 +77,19 @@ export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean 
     <>
       <div className="library-intro video-intro"><div><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'} from your library</p></div></div>
       {videos.length > 1 && <div className="video-order" aria-label="Video order">
-        <button type="button" className="btn" aria-pressed={shuffledVideos !== null}
-          onClick={() => setOrder(shuffledVideos ? 'ordered' : `random:${randomSeed()}`)}>Random order</button>
-        {shuffledVideos && <button type="button" className="btn" onClick={() => setOrder(`random:${randomSeed()}`)}>Shuffle again</button>}
+        <label className="sort-field">Sort by
+          <select value={selectedOrder} onChange={(event) => setOrder(event.target.value === 'random' ? `random:${randomSeed()}` : event.target.value)}>
+            <option value="ordered">Library order</option>
+            <option value="added">Recently added</option>
+            <option value="practised">Last practised (recent first)</option>
+            <option value="random">Random order</option>
+          </select>
+        </label>
+        {seed !== null && <button type="button" className="btn" onClick={() => setOrder(`random:${randomSeed()}`)}>Shuffle again</button>}
+        {selectedOrder === 'added' && videos.some((video) => video.addedAt === null) &&
+          <p className="video-order-hint">Older links without a recorded date appear last.</p>}
       </div>}
-      <VideoFeed videos={shuffledVideos ?? videos} />
+      <VideoFeed videos={orderedVideos ?? videos} />
     </>
   )
 }
@@ -71,7 +98,13 @@ function randomSeed() {
   return Math.floor(Math.random() * 0x100000000)
 }
 
-function shuffle(videos: Video[], seed: number): Video[] {
+function timestamp(value: string | null | undefined): number | null {
+  if (!value) return null
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function shuffle<T>(videos: T[], seed: number): T[] {
   const result = [...videos]
   let state = seed
   for (let i = result.length - 1; i > 0; i--) {
