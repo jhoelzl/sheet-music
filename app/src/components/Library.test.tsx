@@ -201,6 +201,34 @@ describe('focused library', () => {
     expect(screen.getByRole('button', { name: 'Filters' })).toBeTruthy()
   })
 
+  it('filters pieces by score tags and piece tags in the same tag filter', async () => {
+    mocks.pieces = [
+      { id: 'p1', composer_id: 'c1', title: 'Score match', tags: ['calm'], play_progress: 0 },
+      { id: 'p2', composer_id: 'c1', title: 'Piece match', tags: ['solo'], play_progress: 0 },
+      { id: 'p3', composer_id: 'c1', title: 'No match', tags: [], play_progress: 0 },
+    ]
+    mocks.scores = [
+      { id: 's1', piece_id: 'p1', pdf_path: 'one.pdf', tags: ['piano'], position: 0 },
+      { id: 's2', piece_id: 'p1', pdf_path: 'two.pdf', tags: ['solo', 'duet'], position: 1 },
+    ]
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Score match', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Filters' }))
+    const tags = screen.getByRole('group', { name: 'Filter by tag' })
+    expect(within(tags).getAllByRole('button', { name: '#solo' })).toHaveLength(1)
+    expect(within(tags).getByRole('button', { name: '#duet' })).toBeTruthy()
+    await user.click(within(tags).getByRole('button', { name: '#solo' }))
+    expect(screen.getByText('Score match', { selector: 'summary strong' })).toBeTruthy()
+    expect(screen.getByText('Piece match', { selector: 'summary strong' })).toBeTruthy()
+    expect(screen.queryByText('No match', { selector: 'summary strong' })).toBeNull()
+    await user.click(within(tags).getByRole('button', { name: '#duet' }))
+    expect(screen.getByText('Score match', { selector: 'summary strong' })).toBeTruthy()
+    expect(screen.queryByText('Piece match', { selector: 'summary strong' })).toBeNull()
+    await user.click(within(tags).getByRole('button', { name: 'All tags' }))
+    expect(screen.getByText('No match', { selector: 'summary strong' })).toBeTruthy()
+  })
+
   it('finds pieces by a substring and ignores accents', async () => {
     const user = userEvent.setup()
     render(<TestLibrary />)

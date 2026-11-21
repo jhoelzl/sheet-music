@@ -592,7 +592,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
       if (!terms.every((t) => haystack.includes(t))) return false
     }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
-    if (tagFilter && !(p.tags ?? []).includes(tagFilter)) return false
+    if (tagFilter && !(p.tags ?? []).includes(tagFilter) && !scoresOf(p).some((score) => score.tags.includes(tagFilter))) return false
     switch (filter) {
       case 'can_play': return p.play_progress === 100
       case 'cannot_play': return p.play_progress === 0
@@ -601,8 +601,9 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
       default: return true
     }
   })
-  const allTags = [...new Set([...pieces.flatMap((p) => p.tags ?? []), ...(tagFilter ? [tagFilter] : [])])].sort()
+  const allTags = [...new Set(pieces.flatMap((p) => p.tags ?? []))].sort()
   const allScoreTags = [...new Set(pieces.flatMap((p) => scoresOf(p).flatMap((score) => score.tags)))].sort()
+  const filterTags = [...new Set([...allTags, ...allScoreTags, ...(tagFilter ? [tagFilter] : [])])].sort()
   const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all' || Boolean(tagFilter)
   const tableRows = [...visible].sort((a, b) => {
     const val = (p: Piece): string | number => {
@@ -630,7 +631,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
 
   return {
     // data
-    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, allScoreTags, practicedToday,
+    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, allScoreTags, filterTags, practicedToday,
     // ui state
     sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, savingScoreIds, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,

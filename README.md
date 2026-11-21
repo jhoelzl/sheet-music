@@ -9,6 +9,7 @@ Setlists can optionally have a date and time (stored as local calendar values, w
 When adding a piece, a score to an existing piece, or teaching material, choose an existing PDF or use **Take photo** to capture pages one at a time. The photos are combined into a PDF on the device without automatic cropping. On supported iPhones and iPads, the installed app also offers **Scan document**: Apple's document scanner detects and crops pages, lets you review them, and combines them into a PDF on the device. The PDF contains scanned page images, without text recognition. The iOS app must be rebuilt and reinstalled to add the native scanner.
 
 For score tags, use **Choose existing tag** to reuse a custom tag, or type a new one.
+The Library tag filter matches tags on pieces as well as tags on any of their scores.
 
 The **Videos** page shows YouTube links from the library. Turn on random order to shuffle the feed, shuffle again for a new order, or turn it off to return to the original order.
 
