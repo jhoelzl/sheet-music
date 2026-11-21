@@ -415,6 +415,21 @@ describe('focused library', () => {
     expect(localStorage.getItem('sm:view')).toBe('list')
   })
 
+  it('shows each piece’s score count in every library view', async () => {
+    mocks.pieces.push({ id: 'p2', composer_id: 'c1', title: 'Waltz', tags: [], links: [] })
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    const title = await screen.findByText('Romance', { selector: 'summary strong' })
+    expect(within(title.closest('summary')!).getByText('2 scores')).toBeTruthy()
+    expect(within(screen.getByText('Waltz', { selector: 'summary strong' }).closest('summary')!).getByText('0 scores')).toBeTruthy()
+    for (const view of ['grouped', 'grid', 'board', 'table']) {
+      await user.selectOptions(screen.getByRole('combobox', { name: 'View' }), view)
+      expect(screen.getByText('2 scores')).toBeTruthy()
+      expect(screen.getByText('0 scores')).toBeTruthy()
+    }
+  })
+
   it('opens the PDF in place and returns to the same filtered, expanded library', async () => {
     const user = userEvent.setup()
     render(<TestLibrary />)
@@ -716,17 +731,42 @@ describe('focused library', () => {
     expect(within(dialog).getByText('2 / 2')).toBeTruthy()
   })
 
-  it('does not navigate on swipes in an ordinary score preview', async () => {
-    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+  it('swipes between a piece’s scores without leaving the piece or interfering with scrolling and zoom', async () => {
+    mocks.pieces.push({ id: 'p2', composer_id: 'c1', title: 'Waltz', tags: [], links: [] })
+    mocks.scores.push(
+      { id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 },
+      { id: 's3', piece_id: 'p2', pdf_path: 'other.pdf', pdf_pages: 1, tags: [], position: 0 },
+    )
+    mocks.signedUrl.mockImplementation(async (path: string) => ({ data: { signedUrl: `https://example.test/${path}` }, error: null }))
     const user = userEvent.setup()
     render(<TestLibrary />)
     await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
-    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    await user.click(screen.getByRole('button', { name: 'Open score 2 for Romance' }))
     const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
-    await within(dialog).findByText('PDF content: https://example.test/music.pdf')
-    swipe(within(dialog).getByLabelText('PDF pages'), [200, 100], [100, 100])
-    expect((within(dialog).getByRole('combobox', { name: 'Choose score' }) as HTMLSelectElement).value).toBe('s1')
+    await within(dialog).findByText('PDF content: https://example.test/second.pdf')
+    const pages = () => within(dialog).getByLabelText('PDF pages')
+    swipe(pages(), [200, 100], [100, 100])
     expect(mocks.signedUrl).toHaveBeenCalledTimes(1)
+    swipe(pages(), [200, 100], [100, 250])
+    vi.stubGlobal('visualViewport', { scale: 2 })
+    swipe(pages(), [100, 100], [250, 100])
+    vi.stubGlobal('visualViewport', { scale: 1 })
+    Object.defineProperty(pages(), 'clientWidth', { configurable: true, value: 300 })
+    Object.defineProperty(pages(), 'scrollWidth', { configurable: true, value: 600 })
+    swipe(pages(), [100, 100], [250, 100])
+    Object.defineProperty(pages(), 'scrollWidth', { configurable: true, value: 300 })
+    expect(mocks.signedUrl).toHaveBeenCalledTimes(1)
+    await user.type(within(dialog).getByRole('textbox', { name: 'Add tag' }), 'practice')
+    swipe(pages(), [100, 100], [250, 100])
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['practice'] }, 'id', 's2'))
+    expect(await within(dialog).findByText('PDF content: https://example.test/romance.pdf')).toBeTruthy()
+    expect((within(dialog).getByRole('combobox', { name: 'Choose score' }) as HTMLSelectElement).value).toBe('s1')
+    swipe(pages(), [100, 100], [250, 100])
+    expect(mocks.signedUrl).toHaveBeenCalledTimes(2)
+    swipe(pages(), [250, 100], [100, 100])
+    expect(await within(dialog).findByText('PDF content: https://example.test/second.pdf')).toBeTruthy()
+    expect((within(dialog).getByRole('combobox', { name: 'Choose score' }) as HTMLSelectElement).value).toBe('s2')
+    expect(within(dialog).queryByRole('group', { name: 'Browse scores' })).toBeNull()
   })
 
   it('saves a custom tag before navigating to the next score', async () => {
@@ -1043,7 +1083,9 @@ describe('focused library', () => {
     mocks.scores[0].tags = ['piano', 'duet']
     const user = userEvent.setup()
     render(<TestLibrary />)
-    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    const summary = (await screen.findByText('Romance', { selector: 'summary strong' })).closest('summary')!
+    expect(within(summary).getByText('1 score')).toBeTruthy()
+    await user.click(summary)
     expect(screen.getByRole('combobox', { name: 'Key for score 1 of Romance' })).toBeTruthy()
 
     await user.click(screen.getByRole('button', { name: '+ Add score' }))
@@ -1060,6 +1102,7 @@ describe('focused library', () => {
       piece_id: 'p1', pdf_path: 'u1/uuid-2.pdf', musical_key: 'C major', tags: ['guitar', 'solo', 'duet'], position: 1,
     })))
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Key for score 2 of Romance' })).toBeTruthy())
+    expect(within(summary).getByText('2 scores')).toBeTruthy()
 
     vi.mocked(window.confirm).mockReturnValueOnce(false)
     await user.click(screen.getByRole('button', { name: 'Delete score 2 for Romance' }))
@@ -1068,6 +1111,7 @@ describe('focused library', () => {
     expect(window.confirm).toHaveBeenLastCalledWith('Delete this score for "Romance"? Its PDF will also be deleted. Setlists using it will no longer reference it.')
     await waitFor(() => expect(mocks.delete).toHaveBeenCalledWith('sm_piece_scores', 'id', 'sc-new-1'))
     await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Key for score 2 of Romance' })).toBeNull())
+    expect(within(summary).getByText('1 score')).toBeTruthy()
     expect(screen.getByRole('combobox', { name: 'Key for score 1 of Romance' })).toBeTruthy()
   })
 

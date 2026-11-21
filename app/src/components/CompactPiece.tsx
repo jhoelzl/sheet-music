@@ -3,6 +3,7 @@ import type { Library } from '../hooks/useLibrary'
 import { statusOf } from '../lib/status'
 import type { Piece } from '../supabase'
 import { PieceCard } from './PieceCard'
+import { ScoreCount } from './PieceParts'
 
 export function CompactPiece({ lib, p }: { lib: Library; p: Piece }) {
   const [open, setOpen] = useState(false)
@@ -15,6 +16,7 @@ export function CompactPiece({ lib, p }: { lib: Library; p: Piece }) {
           <span className="compact-piece-title">
             <strong>{p.title}</strong>
             {p.subtitle && <span className="compact-piece-subtitle">{p.subtitle}</span>}
+            <ScoreCount lib={lib} p={p} />
           </span>
           <span>{lib.composerNamesOf(p)}{p.instruments.length > 0 ? ` · ${p.instruments.join(', ')}` : ''}{keys.length > 0 ? ` · ${keys.join(', ')}` : ''}</span>
         </span>

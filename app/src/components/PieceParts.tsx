@@ -7,6 +7,11 @@ import { DeleteButton } from './DeleteButton'
 
 type Props = { lib: Library; p: Piece }
 
+export function ScoreCount({ lib, p }: Props) {
+  const count = lib.scoresOf(p).length
+  return <span className="piece-score-count">{count} {count === 1 ? 'score' : 'scores'}</span>
+}
+
 export function PieceTitle({ lib, p }: Props) {
   if (lib.editingId === p.id) {
     return (
@@ -16,6 +21,7 @@ export function PieceTitle({ lib, p }: Props) {
           onBlur={() => lib.commitEdit(p)}
           onKeyDown={(e) => { if (e.key === 'Enter') lib.commitEdit(p); if (e.key === 'Escape') lib.setEditingId(null) }} />
         {p.subtitle && <span className="piece-subtitle">{p.subtitle}</span>}
+        <ScoreCount lib={lib} p={p} />
       </span>
     )
   }
@@ -26,6 +32,7 @@ export function PieceTitle({ lib, p }: Props) {
         <span className="title-edit-hint" aria-hidden="true">{EditIcon}</span>
       </button>
       {p.subtitle && <span className="piece-subtitle">{p.subtitle}</span>}
+      <ScoreCount lib={lib} p={p} />
     </span>
   )
 }

@@ -17,17 +17,19 @@ export function PdfPreview({ lib }: { lib: Library }) {
   const piece = preview ? pieces.find((item) => item.id === preview.pieceId) ?? null : null
   const scores = piece ? scoresOf(piece) : []
   const score = scores.find((item) => item.id === preview?.id)
-  const scoreItems = browseScores?.flatMap((entry, index) => {
+  const scoreItems = browseScores ? browseScores.flatMap((entry, index) => {
     const item = pieces.find((candidate) => candidate.id === entry.pieceId)
     const match = item && scoresOf(item).find((candidate) => candidate.id === entry.scoreId)
     return item && match ? [{ kind: 'score' as const, piece: item, score: match, index }] : []
-  }) ?? []
+  }) : piece ? scores.map((item, index) => ({ kind: 'score' as const, piece, score: item, index })) : []
   const browseItems = browseMaterials
     ? browseMaterials.map((material, index) => ({ kind: 'material' as const, material, index }))
     : scoreItems
   const browseIndex = browseMaterials
     ? browseMaterials.findIndex((material) => preview?.pieceId === null && material.id === preview.id)
-    : browseScores?.findIndex((item) => item.scoreId === preview?.id && item.pieceId === preview?.pieceId) ?? -1
+    : browseScores
+      ? browseScores.findIndex((item) => item.scoreId === preview?.id && item.pieceId === preview?.pieceId)
+      : scores.findIndex((item) => item.id === preview?.id)
   const currentPosition = browseItems.findIndex((item) => item.index === browseIndex)
   const first = browseItems[0]
   const last = browseItems[browseItems.length - 1]
@@ -46,7 +48,7 @@ export function PdfPreview({ lib }: { lib: Library }) {
 
   const startSwipe = (event: TouchEvent<HTMLDivElement>) => {
     swipeStart.current = null
-    if ((!browseScores && !browseMaterials) || browseIndex < 0 || !preview || event.touches.length !== 1 || !(event.target instanceof Element)) return
+    if ((!browseScores && !browseMaterials && scores.length < 2) || browseIndex < 0 || !preview || event.touches.length !== 1 || !(event.target instanceof Element)) return
     const scroll = event.target.closest<HTMLElement>('.pdf-scroll')
     if (!scroll || !event.currentTarget.contains(scroll) || scroll.scrollWidth > scroll.clientWidth + 1 || (window.visualViewport?.scale ?? 1) > 1) return
     const touch = event.touches[0]

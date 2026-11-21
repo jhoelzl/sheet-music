@@ -11,7 +11,7 @@ When adding a piece, a score to an existing piece, or teaching material, choose 
 For score tags, tap an existing custom tag to select it, or type a new one.
 The Library tag filter matches tags on pieces as well as tags on any of their scores.
 Missing-data filters find pieces with neither a YouTube nor a Spotify link, without scores, or with at least one score missing a key or tags. Pieces with no scores are listed only by the missing-scores filter, not by the score key or tag filters.
-Edit score tags directly in the PDF viewer. **Browse scores** opens all scores of the currently filtered pieces in their sorted order, including every score of a matching piece; Start, Previous, Next and End retain that selection while you edit. Swipe left or right over the score to move between scores on touch devices. When the score is zoomed wider than the screen, swiping pans it instead; reset zoom to browse by swiping. In table view the table sort determines the order.
+Each piece header shows its score count. Edit score tags directly in the PDF viewer. **Browse scores** opens all scores of the currently filtered pieces in their sorted order, including every score of a matching piece; Start, Previous, Next and End retain that selection while you edit. Swipe left or right over the score to move between scores on touch devices, either within a piece or across the browsed selection. When the score is zoomed wider than the screen, swiping pans it instead; reset zoom to browse by swiping. In table view the table sort determines the order.
 
 The **Videos** page shows YouTube links from the library. Turn on random order to shuffle the feed, shuffle again for a new order, or turn it off to return to the original order.
 
