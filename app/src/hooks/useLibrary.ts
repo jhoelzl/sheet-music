@@ -466,7 +466,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     if (!url) { notify('Please enter a valid http(s) link.'); return }
     const links = p.links ?? []
     if (links.some((l) => l.url === url)) { notify('This link is already added.'); return }
-    update(p, { links: [...links, { type: detectLinkType(url), url }] })
+    update(p, { links: [...links, { type: detectLinkType(url), url, added_at: new Date().toISOString() }] })
     setOpenLink(null)
   }
   const removeLink = (p: Piece, link: PieceLink) => {
