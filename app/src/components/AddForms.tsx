@@ -20,7 +20,7 @@ export function AddForms({ lib }: { lib: Library }) {
   if (panel === 'piece') {
     const { newComposerIds, setNewComposerIds, pieceSaving } = lib
     return (
-      <form className="panel" onSubmit={(e) => { if (processingPhotos) e.preventDefault(); else void lib.addPiece(e) }} aria-busy={pieceSaving || processingPhotos}>
+      <form className="panel piece-add-form" onSubmit={(e) => { if (processingPhotos) e.preventDefault(); else void lib.addPiece(e) }} aria-busy={pieceSaving || processingPhotos}>
         <div className="field-group">
           <span>Composers</span>
           <ComposerPicker composers={composers} selectedIds={newComposerIds} label="Composers for new piece" disabled={pieceSaving} onChange={setNewComposerIds} />
