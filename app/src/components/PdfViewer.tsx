@@ -110,7 +110,8 @@ export function PdfViewer({ url, onLoad }: { url: string; onLoad: (pages: number
         const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url')
         if (!active) return
         pdfjs.GlobalWorkerOptions.workerSrc = worker.default
-        task = pdfjs.getDocument({ url })
+        const wasmUrl = new URL(`${import.meta.env.BASE_URL}pdfjs-wasm/`, document.baseURI).href
+        task = pdfjs.getDocument({ url, wasmUrl })
         const loaded = await task.promise
         if (active) {
           setDoc(loaded)
