@@ -8,7 +8,7 @@ import { PdfViewer } from './PdfViewer'
 import { ScoreTags } from './ScoreTags'
 
 export function PdfPreview({ lib }: { lib: Library }) {
-  const { preview, pieces, openPdf, openBrowsePdf, closePdf, recordPdfPages, browseScores } = lib
+  const { preview, pieces, openPdf, openBrowsePdf, openBrowseMaterialPdf, closePdf, recordPdfPages, recordMaterialPdfPages, browseScores, browseMaterials } = lib
   const closeRef = useRef(closePdf)
   useEffect(() => { closeRef.current = closePdf }, [closePdf])
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -17,12 +17,17 @@ export function PdfPreview({ lib }: { lib: Library }) {
   const piece = preview ? pieces.find((item) => item.id === preview.pieceId) ?? null : null
   const scores = piece ? scoresOf(piece) : []
   const score = scores.find((item) => item.id === preview?.id)
-  const browseItems = browseScores?.flatMap((entry, index) => {
+  const scoreItems = browseScores?.flatMap((entry, index) => {
     const item = pieces.find((candidate) => candidate.id === entry.pieceId)
     const match = item && scoresOf(item).find((candidate) => candidate.id === entry.scoreId)
-    return item && match ? [{ piece: item, score: match, index }] : []
+    return item && match ? [{ kind: 'score' as const, piece: item, score: match, index }] : []
   }) ?? []
-  const browseIndex = browseScores?.findIndex((item) => item.scoreId === preview?.id && item.pieceId === preview?.pieceId) ?? -1
+  const browseItems = browseMaterials
+    ? browseMaterials.map((material, index) => ({ kind: 'material' as const, material, index }))
+    : scoreItems
+  const browseIndex = browseMaterials
+    ? browseMaterials.findIndex((material) => preview?.pieceId === null && material.id === preview.id)
+    : browseScores?.findIndex((item) => item.scoreId === preview?.id && item.pieceId === preview?.pieceId) ?? -1
   const currentPosition = browseItems.findIndex((item) => item.index === browseIndex)
   const first = browseItems[0]
   const last = browseItems[browseItems.length - 1]
@@ -35,12 +40,13 @@ export function PdfPreview({ lib }: { lib: Library }) {
     if (document.activeElement instanceof HTMLInputElement && dialogRef.current?.contains(document.activeElement)) {
       document.activeElement.blur()
     }
-    void openBrowsePdf(destination.piece, destination.score)
+    if (destination.kind === 'material') void openBrowseMaterialPdf(destination.material)
+    else void openBrowsePdf(destination.piece, destination.score)
   }
 
   const startSwipe = (event: TouchEvent<HTMLDivElement>) => {
     swipeStart.current = null
-    if (!browseScores || browseIndex < 0 || !preview || event.touches.length !== 1 || !(event.target instanceof Element)) return
+    if ((!browseScores && !browseMaterials) || browseIndex < 0 || !preview || event.touches.length !== 1 || !(event.target instanceof Element)) return
     const scroll = event.target.closest<HTMLElement>('.pdf-scroll')
     if (!scroll || !event.currentTarget.contains(scroll) || scroll.scrollWidth > scroll.clientWidth + 1 || (window.visualViewport?.scale ?? 1) > 1) return
     const touch = event.touches[0]
@@ -117,8 +123,8 @@ export function PdfPreview({ lib }: { lib: Library }) {
             </label>
           )}
         </div>
-        {browseScores && browseIndex >= 0 && (
-          <div className="pdf-browse" role="group" aria-label="Browse scores">
+        {(browseScores || browseMaterials) && browseIndex >= 0 && (
+          <div className="pdf-browse" role="group" aria-label={browseMaterials ? 'Browse teaching materials' : 'Browse scores'}>
             <button type="button" className="btn" disabled={!first || first.index === browseIndex}
               onClick={() => navigateBrowse(first)}>Start</button>
             <button type="button" className="btn" disabled={!previous}
@@ -140,7 +146,10 @@ export function PdfPreview({ lib }: { lib: Library }) {
         {preview.error ? (
           <div className="pdf-scroll"><p className="pdf-message" role="alert">{preview.error} Close and try again.</p></div>
         ) : preview.url ? (
-          <PdfViewer key={preview.url} url={preview.url} onLoad={(pages) => void recordPdfPages(preview.id, pages)} />
+          <PdfViewer key={preview.url} url={preview.url} onLoad={(pages) => {
+            if (preview.pieceId === null) recordMaterialPdfPages(preview.id, pages)
+            else void recordPdfPages(preview.id, pages)
+          }} />
         ) : (
           <div className="pdf-scroll"><p className="pdf-message" role="status">Opening PDF…</p></div>
         )}

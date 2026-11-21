@@ -199,7 +199,7 @@ describe('lessons', () => {
     expect(screen.getByRole('button', { name: 'Delete material Chord concepts' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Delete Autumn Leaves from Guitar' })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Open material Chord concepts' }))
-    expect(mocks.openMaterialPdf).toHaveBeenCalledWith(expect.objectContaining({ title: 'Chord concepts' }))
+    expect(mocks.openMaterialPdf).toHaveBeenCalledWith(expect.objectContaining({ title: 'Chord concepts' }), expect.any(Array))
   })
 
   it('uploads camera photos as a teaching material PDF', async () => {
@@ -419,7 +419,7 @@ describe('lessons', () => {
     expect(within(section).getAllByRole('button', { name: /^Rename teaching material/ }).map((button) => button.getAttribute('aria-label')))
       .toEqual(['Rename teaching material Arpeggios', 'Rename teaching material Chords'])
     await user.click(screen.getByRole('button', { name: 'Open material Arpeggios' }))
-    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm1', title: 'Arpeggios', pdf_path: 'u1/scales.pdf' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm1', title: 'Arpeggios', pdf_path: 'u1/scales.pdf' }), expect.any(Array))
     rendered.unmount()
     render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
     expect(await screen.findByRole('button', { name: 'Open material Arpeggios' })).toBeTruthy()
@@ -507,6 +507,25 @@ describe('lessons', () => {
     expect(screen.getByLabelText('Lessons using Scales').textContent).toContain('Piano · 2026-11-11')
   })
 
+  it('browses the filtered materials, or all materials when opened from a lesson', async () => {
+    const materials = [
+      { id: 'm1', title: 'Arpeggios', pdf_path: 'u1/arpeggios.pdf', tags: ['technique'] },
+      { id: 'm2', title: 'Chords', pdf_path: 'u1/chords.pdf', tags: ['harmony'] },
+      { id: 'm3', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: ['technique'] },
+    ]
+    mocks.tables.sm_teaching_materials = materials
+    mocks.tables.sm_lesson_materials = [{ lesson_id: 'l1', material_id: 'm2' }]
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.click(await screen.findByRole('button', { name: '#technique', pressed: false }))
+    await user.click(screen.getByRole('button', { name: 'Browse materials' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(materials[0], [materials[0], materials[2]])
+    await user.click(screen.getByRole('button', { name: 'Scales' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(materials[2], [materials[0], materials[2]])
+    await user.click(screen.getByRole('button', { name: 'Open material Chords' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(materials[1], materials)
+  })
+
   it('asks before deleting teaching material and preserves it when cancelled', async () => {
     mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: [] }]
     mocks.tables.sm_lesson_materials = [{ lesson_id: 'l1', material_id: 'm1' }]
@@ -541,9 +560,9 @@ describe('lessons', () => {
     await user.type(search, 'scales{Enter}')
     await screen.findByRole('button', { name: 'Open material Scales' })
     await user.click(screen.getByRole('button', { name: 'Open material Étude' }))
-    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm1', pdf_path: 'u1/etude.pdf' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm1', pdf_path: 'u1/etude.pdf' }), expect.any(Array))
     await user.click(screen.getByRole('button', { name: 'Open material Scales' }))
-    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm2', pdf_path: 'u1/scales.pdf' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm2', pdf_path: 'u1/scales.pdf' }), expect.any(Array))
     await user.click(screen.getByRole('button', { name: 'Delete material Étude' }))
     await waitFor(() => expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l1', material_id: 'm2' }]))
     expect(mocks.remove).not.toHaveBeenCalled()

@@ -382,6 +382,8 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
           <section className="teaching-materials" aria-label="Teaching materials">
             <div className="teaching-materials-heading">
               <div><h3>Teaching materials <span className="materials-count">{materials.length}</span></h3><p className="muted">Upload PDFs once and reuse them across lessons.</p></div>
+              <button type="button" className="btn" disabled={!visibleMaterials.length || busy}
+                onClick={() => void lib.openMaterialPdf(visibleMaterials[0], visibleMaterials)}>Browse materials</button>
             </div>
             <form className="panel" onSubmit={uploadMaterial}>
               <label className="grow">Material title<input required value={materialTitle} disabled={busy} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
@@ -414,7 +416,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
                         <button type="button" className="link" disabled={busy} onClick={() => { setMaterialDraft(null); setMaterialError('') }}>Cancel</button>
                         {materialError && <p className="material-rename-error" role="alert">{materialError}</p>}
                       </form>
-                    ) : <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>}
+                    ) : <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material, visibleMaterials)}>{material.title}</button>}
                     <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy || Boolean(materialDraft)} onChange={(tags) => saveMaterialTags(material, tags)} />
                   </div>
                   {linkedLessons.length > 0 && <div className="material-lessons" aria-label={`Lessons using ${material.title}`}>
@@ -481,7 +483,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
                     if (added) return changeMaterial(added, true)
                     if (removed) return changeMaterial(removed, false)
                   }}
-                  onOpen={(id) => { const material = materials.find((item) => item.id === id); if (material) void lib.openMaterialPdf(material) }} />
+                  onOpen={(id) => { const material = materials.find((item) => item.id === id); if (material) void lib.openMaterialPdf(material, materials) }} />
               </section>
             </section>}
           </div>
