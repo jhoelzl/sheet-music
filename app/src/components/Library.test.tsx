@@ -41,7 +41,7 @@ vi.mock('../supabase', () => ({
     storage: { from: () => ({ createSignedUrl: mocks.signedUrl, upload: mocks.upload, remove: mocks.remove, download: mocks.download }) },
   },
 }))
-vi.mock('./PdfViewer', () => ({ PdfViewer: ({ url }: { url: string }) => <div>PDF content: {url}</div> }))
+vi.mock('./PdfViewer', () => ({ PdfViewer: ({ url }: { url: string }) => <div className="pdf-scroll" aria-label="PDF pages">PDF content: {url}</div> }))
 
 function TestLibrary() {
   const lib = useLibrary()
@@ -76,6 +76,13 @@ function TestSettings({ save }: { save: (settings: UserSettings) => Promise<void
 function TestRememberedView({ userId }: { userId: string }) {
   const lib = useLibrary(DEFAULT_USER_SETTINGS, userId)
   return <Library lib={lib} />
+}
+
+function swipe(element: HTMLElement, from: [number, number], to: [number, number]) {
+  const start = { identifier: 1, clientX: from[0], clientY: from[1] }
+  const end = { identifier: 1, clientX: to[0], clientY: to[1] }
+  fireEvent.touchStart(element, { touches: [start] })
+  fireEvent.touchEnd(element, { touches: [], changedTouches: [end] })
 }
 
 describe('focused library', () => {
@@ -547,6 +554,90 @@ describe('focused library', () => {
     expect(await within(dialog).findByText('PDF content: https://example.test/second.pdf')).toBeTruthy()
     await act(async () => { resolveFirst({ data: { signedUrl: 'https://example.test/first.pdf' }, error: null }) })
     expect(within(dialog).getByText('PDF content: https://example.test/second.pdf')).toBeTruthy()
+  })
+
+  it('swipes between browsed scores without passing either boundary', async () => {
+    mocks.pieces.push({ id: 'p2', composer_id: 'c1', title: 'Waltz', tags: [], links: [] })
+    mocks.scores.push(
+      { id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 },
+      { id: 's3', piece_id: 'p2', pdf_path: 'third.pdf', pdf_pages: 1, tags: [], position: 0 },
+    )
+    mocks.signedUrl.mockImplementation(async (path: string) => ({ data: { signedUrl: `https://example.test/${path}` }, error: null }))
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Browse scores' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    const pages = () => within(dialog).getByLabelText('PDF pages')
+    await within(dialog).findByText('PDF content: https://example.test/romance.pdf')
+    swipe(pages(), [100, 100], [250, 100])
+    expect(within(dialog).getByText('1 / 3')).toBeTruthy()
+    swipe(pages(), [250, 100], [100, 110])
+    expect(await within(dialog).findByText('PDF content: https://example.test/second.pdf')).toBeTruthy()
+    swipe(pages(), [250, 100], [100, 100])
+    expect(await within(dialog).findByText('PDF content: https://example.test/third.pdf')).toBeTruthy()
+    swipe(pages(), [250, 100], [100, 100])
+    expect(within(dialog).getByText('3 / 3')).toBeTruthy()
+    swipe(pages(), [100, 100], [250, 100])
+    expect(await within(dialog).findByText('PDF content: https://example.test/second.pdf')).toBeTruthy()
+  })
+
+  it('ignores scrolling, pinching, cancelled touches and swipes outside the score', async () => {
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Browse scores' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    await within(dialog).findByText('PDF content: https://example.test/music.pdf')
+    const pages = within(dialog).getByLabelText('PDF pages')
+    swipe(pages, [200, 200], [160, 200])
+    swipe(pages, [200, 200], [100, 350])
+    swipe(within(dialog).getByRole('button', { name: 'Solo' }), [200, 200], [100, 200])
+    const first = { identifier: 1, clientX: 200, clientY: 200 }
+    const second = { identifier: 2, clientX: 180, clientY: 200 }
+    fireEvent.touchStart(pages, { touches: [first] })
+    fireEvent.touchMove(pages, { touches: [first, second] })
+    fireEvent.touchEnd(pages, { touches: [], changedTouches: [{ ...first, clientX: 100 }] })
+    fireEvent.touchStart(pages, { touches: [first, second] })
+    fireEvent.touchEnd(pages, { touches: [], changedTouches: [{ ...first, clientX: 100 }] })
+    fireEvent.touchStart(pages, { touches: [first] })
+    fireEvent.touchCancel(pages, { touches: [], changedTouches: [first] })
+    fireEvent.touchEnd(pages, { touches: [], changedTouches: [{ ...first, clientX: 100 }] })
+    vi.stubGlobal('visualViewport', { scale: 2 })
+    swipe(pages, [200, 200], [100, 200])
+    vi.stubGlobal('visualViewport', { scale: 1 })
+    Object.defineProperty(pages, 'clientWidth', { configurable: true, value: 300 })
+    Object.defineProperty(pages, 'scrollWidth', { configurable: true, value: 600 })
+    swipe(pages, [200, 200], [100, 200])
+    expect(within(dialog).getByText('1 / 2')).toBeTruthy()
+  })
+
+  it('saves an unfinished custom tag when swiping to another score', async () => {
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Browse scores' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    await within(dialog).findByText('PDF content: https://example.test/music.pdf')
+    await user.type(within(dialog).getByRole('textbox', { name: 'Add tag' }), 'practice')
+    swipe(within(dialog).getByLabelText('PDF pages'), [200, 100], [100, 100])
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'practice'] }, 'id', 's1'))
+    expect(within(dialog).getByText('2 / 2')).toBeTruthy()
+  })
+
+  it('does not navigate on swipes in an ordinary score preview', async () => {
+    mocks.scores.push({ id: 's2', piece_id: 'p1', pdf_path: 'second.pdf', pdf_pages: 1, tags: [], position: 1 })
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    await user.click(screen.getByRole('button', { name: 'Open PDF for Romance' }))
+    const dialog = await screen.findByRole('dialog', { name: 'PDF: Romance' })
+    await within(dialog).findByText('PDF content: https://example.test/music.pdf')
+    swipe(within(dialog).getByLabelText('PDF pages'), [200, 100], [100, 100])
+    expect((within(dialog).getByRole('combobox', { name: 'Choose score' }) as HTMLSelectElement).value).toBe('s1')
+    expect(mocks.signedUrl).toHaveBeenCalledTimes(1)
   })
 
   it('saves a custom tag before navigating to the next score', async () => {
