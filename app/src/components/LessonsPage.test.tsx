@@ -14,7 +14,10 @@ const mocks = vi.hoisted(() => ({
   openMaterialPdf: vi.fn(),
   openPdf: vi.fn(),
   dirty: vi.fn(),
+  preparePhoto: vi.fn(),
+  photosToPdf: vi.fn(),
 }))
+vi.mock('../lib/photoPdf', () => ({ preparePhoto: mocks.preparePhoto, photosToPdf: mocks.photosToPdf }))
 
 vi.mock('../supabase', () => ({
   supabase: {
@@ -73,7 +76,7 @@ describe('lessons', () => {
     mocks.remove.mockResolvedValue({ error: null })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks() })
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals() })
 
   it('creates groups and assigns existing and new lessons, with filtered activity', async () => {
     mocks.tables.sm_lessons[0].lesson_date = todayISO()
@@ -188,6 +191,22 @@ describe('lessons', () => {
     expect(screen.getByRole('button', { name: 'Delete Autumn Leaves from Guitar' })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Open material Chord concepts' }))
     expect(mocks.openMaterialPdf).toHaveBeenCalledWith(expect.objectContaining({ title: 'Chord concepts' }))
+  })
+
+  it('uploads camera photos as a teaching material PDF', async () => {
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: vi.fn(() => 'blob:photo'), revokeObjectURL: vi.fn() }))
+    const pdf = new File(['pdf'], 'camera-scan.pdf', { type: 'application/pdf' })
+    mocks.preparePhoto.mockResolvedValueOnce({ id: 'one', jpeg: new Blob(['jpeg']), width: 10, height: 20 })
+    mocks.photosToPdf.mockResolvedValueOnce(pdf)
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.type(await screen.findByLabelText('Material title'), 'Camera material')
+    fireEvent.change(screen.getByLabelText('Camera photo'), { target: { files: [new File(['photo'], 'one.jpg', { type: 'image/jpeg' })] } })
+    await screen.findByText('1 photo in PDF')
+    await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf' }))
+    expect(await screen.findByRole('button', { name: 'Delete teaching material Camera material' })).toBeTruthy()
+    expect(screen.queryByText('1 photo in PDF')).toBeNull()
   })
 
   it('opens the correct linked tune, including tunes without a score', async () => {

@@ -23,7 +23,10 @@ const mocks = vi.hoisted(() => ({
   materials: [] as { id: string; title: string; pdf_path: string; tags: string[] }[],
   lessons: [] as { id: string; title: string; lesson_date: string; notes: string }[],
   lessonGroups: [] as { id: string; teacher_name: string; instrument: string }[],
+  preparePhoto: vi.fn(),
+  photosToPdf: vi.fn(),
 }))
+vi.mock('../lib/photoPdf', () => ({ preparePhoto: mocks.preparePhoto, photosToPdf: mocks.photosToPdf }))
 vi.mock('../supabase', () => ({
   supabase: {
     from: mocks.from,
@@ -217,6 +220,23 @@ describe('focused library', () => {
       { piece_id: 'p-new', composer_id: 'c1', position: 0 },
       { piece_id: 'p-new', composer_id: 'c2', position: 1 },
     ])
+  })
+
+  it('uploads camera photos as the new piece score PDF', async () => {
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, { createObjectURL: vi.fn(() => 'blob:photo'), revokeObjectURL: vi.fn() }))
+    const pdf = new File(['pdf'], 'camera-scan.pdf', { type: 'application/pdf' })
+    mocks.preparePhoto.mockResolvedValueOnce({ id: 'one', jpeg: new Blob(['jpeg']), width: 10, height: 20 })
+    mocks.photosToPdf.mockResolvedValueOnce(pdf)
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: '+ Piece' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Search composers for new piece' }), 'clara{Enter}')
+    await user.type(screen.getByLabelText('Title'), 'Camera score')
+    fireEvent.change(screen.getByLabelText('Camera photo'), { target: { files: [new File(['photo'], 'one.jpg', { type: 'image/jpeg' })] } })
+    await screen.findByText('1 photo in PDF')
+    await user.click(screen.getByRole('button', { name: 'Add piece' }))
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\.pdf$/), pdf, { contentType: 'application/pdf' }))
   })
 
   it('saves a new piece only once while the save is pending', async () => {
