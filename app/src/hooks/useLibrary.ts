@@ -11,7 +11,7 @@ import { todayISO } from '../lib/dates'
 import { confirmDelete } from '../lib/confirmDelete'
 import { detectLinkType, safeUrl } from '../lib/links'
 import { VIEWS, sortPieces } from '../lib/sorting'
-import type { SortKey, TableKey, View } from '../lib/sorting'
+import type { MissingDataFilter, SortKey, TableKey, View } from '../lib/sorting'
 import { statusOf } from '../lib/status'
 import { DEFAULT_USER_SETTINGS } from '../lib/userSettings'
 import type { UserSettings } from '../lib/userSettings'
@@ -104,6 +104,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const deleteTimers = useRef(new Map<string, number>())
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>(defaults.library_filter)
+  const [missingDataFilter, setMissingDataFilter] = useState<MissingDataFilter>('all')
   const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>(defaults.library_instrument)
   const [newScoreTags, setNewScoreTags] = useState<string[]>(['piano'])
   const [newComposerIds, setNewComposerIds] = useState<string[]>([])
@@ -593,6 +594,12 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
     if (tagFilter && !(p.tags ?? []).includes(tagFilter) && !scoresOf(p).some((score) => score.tags.includes(tagFilter))) return false
+    const scores = scoresOf(p)
+    if (missingDataFilter === 'links' && (p.links ?? []).some((link) =>
+      (link.type === 'youtube' || link.type === 'spotify') && safeUrl(link.url))) return false
+    if (missingDataFilter === 'scores' && scores.length > 0) return false
+    if (missingDataFilter === 'key' && !scores.some((score) => !score.musical_key?.trim())) return false
+    if (missingDataFilter === 'tags' && !scores.some((score) => score.tags.length === 0)) return false
     switch (filter) {
       case 'can_play': return p.play_progress === 100
       case 'cannot_play': return p.play_progress === 0
@@ -604,7 +611,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const allTags = [...new Set(pieces.flatMap((p) => p.tags ?? []))].sort()
   const allScoreTags = [...new Set(pieces.flatMap((p) => scoresOf(p).flatMap((score) => score.tags)))].sort()
   const filterTags = [...new Set([...allTags, ...allScoreTags, ...(tagFilter ? [tagFilter] : [])])].sort()
-  const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all' || Boolean(tagFilter)
+  const filtering = Boolean(search) || filter !== 'all' || missingDataFilter !== 'all' || instrumentFilter !== 'all' || Boolean(tagFilter)
   const tableRows = [...visible].sort((a, b) => {
     const val = (p: Piece): string | number => {
       switch (tableSort.key) {
@@ -627,7 +634,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const flat = sortPieces(visible, sort)
   const noMatches = composers.length > 0 && visible.length === 0
 
-  const clearFilters = () => { setSearch(''); setFilter('all'); setInstrumentFilter('all'); setTagFilter(null) }
+  const clearFilters = () => { setSearch(''); setFilter('all'); setMissingDataFilter('all'); setInstrumentFilter('all'); setTagFilter(null) }
 
   return {
     // data
@@ -635,7 +642,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     // ui state
     sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, savingScoreIds, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
-    search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
+    search, setSearch, filter, setFilter, missingDataFilter, setMissingDataFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, applyDefaults, composerNameOf, composerIdsOf, composerNamesOf,
     // new-item form state
     composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreTags, setNewScoreTags, newTags, setNewTags, pieceSaving,

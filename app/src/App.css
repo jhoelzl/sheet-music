@@ -112,6 +112,7 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .search-clear { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; color: var(--muted); background: none; border: 0; border-radius: 8px; font-size: 12px; line-height: 1; }
 .search-clear:hover { color: var(--text); background: var(--hover); }
 .filter-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+.filter-label { align-self: center; color: var(--muted); font-size: 13px; font-weight: 600; }
 .filter-pill { height: 32px; padding: 0 14px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 99px; font-size: 13px; }
 .filter-pill:hover { border-color: var(--line-strong); color: var(--text); }
 .filter-pill.active { color: #fff; background: var(--accent); border-color: var(--accent); }

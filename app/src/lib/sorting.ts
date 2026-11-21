@@ -8,6 +8,15 @@ export const FILTERS: { value: string; label: string }[] = [
   { value: 'hard', label: 'Hard (4+)' },
 ]
 
+export const MISSING_DATA_FILTERS = [
+  { value: 'all', label: 'Any completeness' },
+  { value: 'links', label: 'No YouTube or Spotify' },
+  { value: 'scores', label: 'No scores' },
+  { value: 'key', label: 'Score missing key' },
+  { value: 'tags', label: 'Score missing tags' },
+] as const
+export type MissingDataFilter = (typeof MISSING_DATA_FILTERS)[number]['value']
+
 export type SortKey = 'title' | 'rating' | 'difficulty' | 'recent'
 
 export const SORTS: { value: SortKey; label: string }[] = [
