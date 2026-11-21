@@ -62,7 +62,7 @@ async function addTune(user: ReturnType<typeof userEvent.setup>, title: string, 
 
 /** Click a rendered comment to open its inline editor and return the textarea. */
 async function openComment(user: ReturnType<typeof userEvent.setup>, title: string) {
-  await user.click(await screen.findByRole('button', { name: `Edit comment for ${title}` }))
+  await user.click(await screen.findByRole('button', { name: new RegExp(`^(Add|Edit) comment for ${title}$`) }))
   return await screen.findByRole('textbox', { name: `Comment for ${title}` }) as HTMLTextAreaElement
 }
 
@@ -160,7 +160,8 @@ describe('setlists page', () => {
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_setlist_pieces', {
       setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null,
     }))
-    expect(await screen.findByRole('button', { name: 'Edit comment for Moanin’' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Add comment for Moanin’' })).toBeTruthy()
+    expect(screen.queryByText('Add a comment (e.g. soloist)')).toBeNull()
   })
 
   it('creates, edits, clears and reloads an optional date and time', async () => {
@@ -348,12 +349,13 @@ describe('setlists page', () => {
     const placeholder = screen.getByRole('textbox', { name: 'Placeholder' })
     await user.type(placeholder, 'Break')
     await user.click(screen.getByRole('button', { name: 'Add placeholder' }))
-    await screen.findByRole('button', { name: 'Move Break up' })
+    await screen.findByRole('button', { name: 'Reorder Break' })
     await user.type(placeholder, 'Break')
     await user.click(screen.getByRole('button', { name: 'Add placeholder' }))
     await waitFor(() => expect(mocks.members).toHaveLength(3))
-    const buttons = screen.getAllByRole('button', { name: 'Move Break up' })
-    await user.click(buttons[0])
+    const buttons = screen.getAllByRole('button', { name: 'Reorder Break' })
+    buttons[0].focus()
+    await user.keyboard('{ArrowUp}')
     await waitFor(() => expect(mocks.members.find((entry) => entry.id === 'e2')?.position).toBe(0))
     rendered.unmount()
     render(<SetlistsPage lib={lib} />)
@@ -388,6 +390,29 @@ describe('setlists page', () => {
     await waitFor(() => expect(mocks.rpc).toHaveBeenCalledWith('sm_reorder_setlist_entries', { list_id: 's1', entry_ids: ['e2', 'e3', 'e1'] }))
     const updated = within(list).getAllByRole('listitem').map((item) => item.querySelector('strong')?.textContent)
     expect(updated).toEqual(['Break', 'Encore', 'Moanin’'])
+  })
+
+  it('reorders with arrow keys on the handle and respects boundaries and save errors', async () => {
+    mocks.setlists = [{ id: 's1', name: 'Gig', position: 0, archived_at: null }]
+    mocks.members = [
+      { id: 'e1', setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null, comment: null },
+      { id: 'e2', setlist_id: 's1', piece_id: 'p2', position: 1, placeholder: null, comment: null },
+    ]
+    const user = userEvent.setup()
+    render(<SetlistsPage lib={lib} />)
+    const handle = await screen.findByRole('button', { name: 'Reorder Moanin’' })
+    await waitFor(() => expect((handle as HTMLButtonElement).disabled).toBe(false))
+    expect(screen.queryByRole('button', { name: 'Move Moanin’ down' })).toBeNull()
+    handle.focus()
+    await user.keyboard('{ArrowUp}')
+    expect(mocks.rpc).not.toHaveBeenCalledWith('sm_swap_setlist_entries', expect.anything())
+    await user.keyboard('{ArrowDown}')
+    await waitFor(() => expect(mocks.members.find((entry) => entry.id === 'e1')?.position).toBe(1))
+    expect(document.activeElement).toBe(handle)
+    mocks.fail = 'sm_swap_setlist_entries'
+    await user.keyboard('{ArrowUp}')
+    expect((await screen.findByRole('alert')).textContent).toContain('Swap failed')
+    expect(mocks.members.find((entry) => entry.id === 'e1')?.position).toBe(1)
   })
 
   it('numbers tunes only and marks placeholders distinctly', async () => {

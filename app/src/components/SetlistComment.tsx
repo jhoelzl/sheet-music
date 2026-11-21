@@ -40,7 +40,7 @@ export function SetlistComment({ comment, title, disabled, onSave }: {
   if (editing) {
     return (
       <textarea ref={fieldRef} className="setlist-comment" aria-label={`Comment for ${title}`}
-        placeholder="Add a comment (e.g. soloist)" defaultValue={comment ?? ''}
+        defaultValue={comment ?? ''}
         onChange={(event) => autosize(event.currentTarget)} onBlur={commit}
         onKeyDown={(event) => {
           if (event.key === 'Escape') { event.preventDefault(); setEditing(false) }
@@ -50,11 +50,11 @@ export function SetlistComment({ comment, title, disabled, onSave }: {
   }
 
   if (disabled && !comment) return null
+  if (!comment) return <button type="button" className="setlist-comment-add" aria-label={`Add comment for ${title}`} onClick={() => setEditing(true)}>+ Comment</button>
   return (
     <div className={`setlist-comment-view${disabled ? ' disabled' : ''}`}
       onClick={(event) => { if (!disabled && !(event.target as HTMLElement).closest('a')) setEditing(true) }}>
-      {comment ? <Markdown className="setlist-comment-md" text={comment} />
-        : <span className="setlist-comment-empty">Add a comment (e.g. soloist)</span>}
+      <Markdown className="setlist-comment-md" text={comment} />
       {!disabled && (
         <button type="button" className="setlist-comment-edit" aria-label={`Edit comment for ${title}`}
           onClick={(event) => { event.stopPropagation(); setEditing(true) }}>Edit</button>

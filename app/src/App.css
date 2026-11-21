@@ -589,7 +589,7 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .setlist-order li.placeholder.dragging { border-style: dashed; background: var(--surface); }
 .setlist-drag-handle { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 36px; margin: 0; padding: 0; color: var(--icon); background: none; border: 0; border-radius: 6px; cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .setlist-drag-handle:hover:not(:disabled) { color: var(--accent); background: var(--accent-soft); }
-.setlist-drag-handle:disabled { cursor: default; opacity: .5; }
+.setlist-drag-handle:disabled, .setlist-drag-handle[aria-disabled="true"] { cursor: default; opacity: .5; }
 .setlist-order li.dragging .setlist-drag-handle { cursor: grabbing; color: var(--accent); }
 .setlist-number { display: grid; place-items: center; flex: 0 0 28px; height: 28px; color: var(--accent); background: var(--accent-soft); border-radius: 50%; font-size: 12px; font-weight: 700; }
 .setlist-marker { display: grid; place-items: center; flex: 0 0 28px; height: 28px; color: var(--accent); background: var(--surface); border: 1px solid var(--accent-line); border-radius: 8px; }
@@ -607,7 +607,8 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .setlist-comment-view .md { flex: 1; min-width: 0; }
 .setlist-comment-edit { flex-shrink: 0; padding: 0 2px; color: var(--muted); background: none; border: 0; font-size: 11px; font-weight: 600; }
 .setlist-comment-edit:hover { color: var(--accent); }
-.setlist-comment-empty { color: var(--muted); font-style: italic; }
+.setlist-comment-add { align-self: flex-start; margin-top: 4px; padding: 0; color: var(--muted); background: none; border: 0; font-size: 11px; }
+.setlist-comment-add:hover { color: var(--accent); }
 .setlist-comment-md { color: var(--muted); }
 .md { display: grid; gap: 3px; }
 .md > :first-child { margin-top: 0; }
