@@ -29,6 +29,8 @@ production setup; only trust the configured site with the native bridge.
 
 In Xcode, select a signing team and a connected device, then build and run the
 app. Run the sync command again after changing the web app.
+Camera capture requires the updated native camera permission description and a
+rebuilt iOS app; the system will ask for camera access on first use.
 
 On iOS, YouTube videos open in an in-app player. Its WebView uses the app's
 bundle ID as the HTTPS base URL so YouTube receives the required referrer.

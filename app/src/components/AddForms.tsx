@@ -1,10 +1,13 @@
+import { useState } from 'react'
 import type { Library } from '../hooks/useLibrary'
 import { INSTRUMENTS } from '../lib/instruments'
 import { KeySelect } from './KeySelect'
 import { ComposerPicker } from './ComposerPicker'
 import { TagInput } from './TagInput'
+import { DocumentInput } from './DocumentInput'
 
 export function AddForms({ lib }: { lib: Library }) {
+  const [processingPhotos, setProcessingPhotos] = useState(false)
   const { panel, composers } = lib
   if (panel === 'composer') {
     return (
@@ -17,7 +20,7 @@ export function AddForms({ lib }: { lib: Library }) {
   if (panel === 'piece') {
     const { newComposerIds, setNewComposerIds, pieceSaving } = lib
     return (
-      <form className="panel" onSubmit={(e) => void lib.addPiece(e)} aria-busy={pieceSaving}>
+      <form className="panel" onSubmit={(e) => { if (processingPhotos) e.preventDefault(); else void lib.addPiece(e) }} aria-busy={pieceSaving || processingPhotos}>
         <div className="field-group">
           <span>Composers</span>
           <ComposerPicker composers={composers} selectedIds={newComposerIds} label="Composers for new piece" disabled={pieceSaving} onChange={setNewComposerIds} />
@@ -28,7 +31,7 @@ export function AddForms({ lib }: { lib: Library }) {
           <span>Tags</span>
           <TagInput tags={lib.newTags} suggestions={lib.allTags} label="Tags for new piece" disabled={pieceSaving} onChange={lib.setNewTags} />
         </div>
-        <label>PDF score (optional)<input type="file" accept="application/pdf" disabled={pieceSaving} onChange={(e) => lib.setFile(e.target.files?.[0] ?? null)} /></label>
+        <DocumentInput label="PDF score (optional)" file={lib.file} disabled={pieceSaving} onChange={lib.setFile} onProcessingChange={setProcessingPhotos} />
         {lib.file && <>
           <label>Key<KeySelect value={lib.newMusicalKey} onChange={lib.setNewMusicalKey} disabled={pieceSaving} /></label>
           <div className="field-group" role="group" aria-label="Type for the new score">
@@ -43,7 +46,7 @@ export function AddForms({ lib }: { lib: Library }) {
             </div>
           </div>
         </>}
-        <button className="btn primary" type="submit" disabled={pieceSaving}>{pieceSaving ? 'Saving…' : 'Add piece'}</button>
+        <button className="btn primary" type="submit" disabled={pieceSaving || processingPhotos}>{pieceSaving ? 'Saving…' : 'Add piece'}</button>
       </form>
     )
   }

@@ -13,6 +13,7 @@ import { SearchPicker } from './SearchPicker'
 import { TagInput } from './TagInput'
 import { ActivityCalendar } from './ActivityCalendar'
 import { DeleteButton } from './DeleteButton'
+import { DocumentInput } from './DocumentInput'
 
 type LessonPiece = { lesson_id: string; piece_id: string }
 type LessonMaterial = { lesson_id: string; material_id: string }
@@ -40,6 +41,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [materialTagFilter, setMaterialTagFilter] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
   const [fileKey, setFileKey] = useState(0)
+  const [processingPhotos, setProcessingPhotos] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showActivity, setShowActivity] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -250,7 +252,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
 
   const uploadMaterial = (event: FormEvent) => {
     event.preventDefault()
-    if (!file || !materialTitle.trim()) return
+    if (processingPhotos || !file || !materialTitle.trim()) return
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { setError('Choose a PDF file.'); return }
     void perform(async () => {
       const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -356,12 +358,11 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
             </div>
             <form className="panel" onSubmit={uploadMaterial}>
               <label className="grow">Material title<input required value={materialTitle} disabled={busy} onChange={(event) => setMaterialTitle(event.target.value)} /></label>
-              <label>PDF file<input key={fileKey} type="file" accept="application/pdf,.pdf" disabled={busy}
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></label>
+              <DocumentInput key={fileKey} label="PDF file" file={file} disabled={busy} onChange={setFile} onProcessingChange={setProcessingPhotos} />
               <div className="field-group"><span>Tags</span>
                 <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy} onChange={setNewMaterialTags} />
               </div>
-              <button type="submit" className="btn" disabled={busy || !file || !materialTitle.trim()}>Upload PDF</button>
+              <button type="submit" className="btn" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>Upload PDF</button>
             </form>
             {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
               <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} onClick={() => setMaterialTagFilter(null)}>All tags</button>
