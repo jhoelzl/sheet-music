@@ -45,6 +45,9 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [file, setFile] = useState<File | null>(null)
   const [fileKey, setFileKey] = useState(0)
   const [processingPhotos, setProcessingPhotos] = useState(false)
+  const [uploadingMaterial, setUploadingMaterial] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [uploadedMaterialId, setUploadedMaterialId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showActivity, setShowActivity] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
@@ -262,31 +265,45 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const uploadMaterial = (event: FormEvent) => {
     event.preventDefault()
     if (processingPhotos || !file || !materialTitle.trim()) return
-    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { setError('Choose a PDF file.'); return }
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setUploadedMaterialId(null)
+      setUploadError('Choose a PDF file.')
+      return
+    }
     void perform(async () => {
-      const { data: { user }, error: authError } = await supabase.auth.getUser()
-      if (authError) throw authError
-      if (!user) throw new Error('Sign in to upload teaching materials.')
-      const path = `${user.id}/materials/${crypto.randomUUID()}.pdf`
-      const storage = supabase.storage.from(PDF_STORAGE_BUCKET)
-      const upload = await storage.upload(path, file, { contentType: 'application/pdf' })
-      if (upload.error) throw upload.error
+      setUploadingMaterial(true)
+      setUploadError('')
+      setUploadedMaterialId(null)
       try {
-        const result = await supabase.from('sm_teaching_materials').insert({ title: materialTitle.trim(), pdf_path: path, tags: newMaterialTags })
-          .select('id, title, pdf_path, tags').single()
-        if (result.error) throw result.error
-        if (!result.data) throw new Error('Could not save material.')
-        setMaterials((current) => [...current, result.data as TeachingMaterial].sort((a, b) => a.title.localeCompare(b.title)))
-      } catch (reason) {
-        const cleanup = await storage.remove([path])
-        if (cleanup.error) throw new Error(`Could not save material; cleanup also failed for ${path}: ${cleanup.error.message}`)
-        throw reason
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError) throw authError
+        if (!user) throw new Error('Sign in to upload teaching materials.')
+        const path = `${user.id}/materials/${crypto.randomUUID()}.pdf`
+        const storage = supabase.storage.from(PDF_STORAGE_BUCKET)
+        const upload = await storage.upload(path, file, { contentType: 'application/pdf' })
+        if (upload.error) throw upload.error
+        let material: TeachingMaterial
+        try {
+          const result = await supabase.from('sm_teaching_materials').insert({ title: materialTitle.trim(), pdf_path: path, tags: newMaterialTags })
+            .select('id, title, pdf_path, tags').single()
+          if (result.error) throw result.error
+          if (!result.data) throw new Error('Could not save material.')
+          material = result.data as TeachingMaterial
+        } catch (reason) {
+          const cleanup = await storage.remove([path])
+          if (cleanup.error) throw new Error(`Could not save material; cleanup also failed for ${path}: ${cleanup.error.message}`)
+          throw reason
+        }
+        setMaterials((current) => [...current, material].sort((a, b) => a.title.localeCompare(b.title)))
+        setMaterialTitle('')
+        setNewMaterialTags([])
+        setFile(null)
+        setFileKey((current) => current + 1)
+        setUploadedMaterialId(material.id)
+      } finally {
+        setUploadingMaterial(false)
       }
-      setMaterialTitle('')
-      setNewMaterialTags([])
-      setFile(null)
-      setFileKey((current) => current + 1)
-    })
+    }, setUploadError)
   }
 
   const saveMaterialTags = (material: TeachingMaterial, tags: string[]) => {
@@ -338,6 +355,7 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const materialTags = [...new Set(materials.flatMap((material) => material.tags))].sort((a, b) => a.localeCompare(b))
   const filterTags = materialTagFilter && !materialTags.includes(materialTagFilter) ? [...materialTags, materialTagFilter] : materialTags
   const visibleMaterials = materialTagFilter ? materials.filter((material) => material.tags.includes(materialTagFilter)) : materials
+  const uploadedMaterial = materials.find((material) => material.id === uploadedMaterialId)
   return (
     <div className="lessons-page">
       <div className="library-intro"><div><h2>Lessons</h2><p>Keep lesson notes, tunes and teaching materials together.</p></div></div>
@@ -391,8 +409,14 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               <div className="field-group"><span>Tags</span>
                 <TagInput tags={newMaterialTags} suggestions={materialTags} label="Tags for new material" disabled={busy} onChange={setNewMaterialTags} />
               </div>
-              <button type="submit" className="btn" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>Upload PDF</button>
+              <button type="submit" className="btn" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>{uploadingMaterial ? 'Uploading…' : 'Upload PDF'}</button>
             </form>
+            {uploadingMaterial && <p className="material-upload-status" role="status">Uploading teaching material…</p>}
+            {uploadError && <p className="material-upload-error" role="alert">{uploadError}</p>}
+            {uploadedMaterial && <div className="material-upload-confirmation">
+              <p role="status">Uploaded “{uploadedMaterial.title}”.{materialTagFilter && !uploadedMaterial.tags.includes(materialTagFilter) ? ' Hidden by the current tag filter.' : ''}</p>
+              <button type="button" className="link" onClick={() => void lib.openMaterialPdf(uploadedMaterial, materials)}>Open material</button>
+            </div>}
             {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
               <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} disabled={Boolean(materialDraft)} onClick={() => setMaterialTagFilter(null)}>All tags</button>
               {filterTags.map((tag) => <button key={tag} type="button" className={`filter-pill${materialTagFilter === tag ? ' active' : ''}`}

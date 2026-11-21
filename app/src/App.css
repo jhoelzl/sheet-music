@@ -520,6 +520,10 @@ button.tag:hover, button.tag.on { border-color: var(--accent-strong); background
 .teaching-materials-heading p { font-size: 13px; }
 .materials-count { margin-left: 5px; color: var(--muted); font-size: 12px; font-weight: 500; }
 .teaching-materials .panel { margin: 0 0 14px; padding: 14px; flex-wrap: wrap; }
+.material-upload-status, .material-upload-error, .material-upload-confirmation { margin: 0 0 14px; font-size: 13px; overflow-wrap: anywhere; }
+.material-upload-status { color: var(--muted); }
+.material-upload-error { color: var(--danger); }
+.material-upload-confirmation { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--accent); }
 .material-row { display: flex; justify-content: space-between; gap: 10px; border-top: 1px solid var(--line); padding: 5px 0; }
 .material-content { min-width: 0; flex: 1; }
 .material-info { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }

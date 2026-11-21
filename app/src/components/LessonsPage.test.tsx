@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Piece } from '../supabase'
@@ -218,17 +218,31 @@ describe('lessons', () => {
     expect(screen.queryByText('1 photo in PDF')).toBeNull()
   })
 
-  it('uploads a scanned PDF as teaching material', async () => {
+  it('shows upload progress and confirms a scanned material even when it is filtered out', async () => {
     mocks.scannerAvailable.mockReturnValue(true)
+    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: ['technique'] }]
     const pdf = new File(['%PDF-'], 'document-scan.pdf', { type: 'application/pdf' })
     mocks.scanDocument.mockResolvedValueOnce(pdf)
+    let finishUpload!: (result: { error: null }) => void
+    mocks.upload.mockReturnValueOnce(new Promise((resolve) => { finishUpload = resolve }))
     const user = userEvent.setup()
     render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
     await user.type(await screen.findByLabelText('Material title'), 'Scanned material')
+    await user.click(screen.getByRole('button', { name: '#technique', pressed: false }))
     await user.click(screen.getByRole('button', { name: 'Scan document' }))
     await screen.findByText('document-scan.pdf')
     await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
     await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf' }))
+    expect(screen.getByRole('status').textContent).toContain('Uploading teaching material')
+    expect((screen.getByRole('button', { name: 'Uploading…' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByText(/Uploaded “Scanned material”/)).toBeNull()
+    await act(async () => { finishUpload({ error: null }) })
+    expect((await screen.findByRole('status')).textContent).toContain('Uploaded “Scanned material”. Hidden by the current tag filter.')
+    expect((screen.getByLabelText('Material title') as HTMLInputElement).value).toBe('')
+    expect(screen.queryByText('document-scan.pdf')).toBeNull()
+    expect(screen.getByRole('button', { name: '#technique', pressed: true })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Open material' }))
+    expect(mocks.openMaterialPdf).toHaveBeenCalledWith(expect.objectContaining({ title: 'Scanned material' }), expect.arrayContaining([expect.objectContaining({ title: 'Scales' })]))
   })
 
   it('opens the correct linked tune, including tunes without a score', async () => {
@@ -665,6 +679,13 @@ describe('lessons', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Database unavailable')
     expect(mocks.remove).toHaveBeenCalledWith([mocks.upload.mock.calls[0][0]])
     expect(mocks.tables.sm_teaching_materials).toHaveLength(0)
+    expect((screen.getByLabelText('Material title') as HTMLInputElement).value).toBe('Theory')
+    expect(screen.getByText('theory.pdf')).toBeTruthy()
+    expect(screen.queryByText(/Uploaded “Theory”/)).toBeNull()
+    mocks.fail = ''
+    await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
+    expect((await screen.findByRole('status')).textContent).toContain('Uploaded “Theory”')
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('does not discard unsaved notes when lesson switching is cancelled', async () => {
