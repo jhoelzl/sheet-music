@@ -3,7 +3,7 @@ import type { PieceScore } from '../supabase'
 import { backupFileName, buildBackup, scoreFileName } from './backup'
 
 const score = (over: Partial<PieceScore> = {}): PieceScore => ({
-  id: 's1', piece_id: 'p1', pdf_path: 'u/a.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', lead_sheet: false, position: 0, ...over,
+  id: 's1', piece_id: 'p1', pdf_path: 'u/a.pdf', pdf_pages: 2, musical_key: 'F minor', instrument: 'piano', lead_sheet: false, tags: ['piano'], position: 0, ...over,
 })
 
 describe('backup helpers', () => {
@@ -23,7 +23,7 @@ describe('backup helpers', () => {
   })
 
   it('names a lead sheet and strips path characters', () => {
-    expect(scoreFileName(score({ id: 's2', lead_sheet: true, instrument: null, musical_key: null }), 'A/B: C'))
+    expect(scoreFileName(score({ id: 's2', lead_sheet: true, instrument: null, tags: ['lead sheet'], musical_key: null }), 'A/B: C'))
       .toBe('scores/A B C - Lead sheet (s2).pdf')
   })
 })

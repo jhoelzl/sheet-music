@@ -79,7 +79,7 @@ describe('focused library', () => {
     vi.stubGlobal('confirm', vi.fn(() => true))
     localStorage.clear()
     mocks.pieces = [{ id: 'p1', composer_id: 'c1', title: 'Romance', subtitle: 'Étude', tags: ['calm'], play_progress: 50, links: [] }]
-    mocks.scores = [{ id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', lead_sheet: false, position: 0 }]
+    mocks.scores = [{ id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', lead_sheet: false, tags: ['piano'], position: 0 }]
     mocks.composerLinks = [{ piece_id: 'p1', composer_id: 'c1', position: 0 }]
     mocks.materials = []
     mocks.lessons = []
@@ -231,6 +231,9 @@ describe('focused library', () => {
     await user.type(screen.getByLabelText('Subtitle'), 'Op. 9 No. 2')
     await user.upload(screen.getByLabelText('PDF score (optional)'), new File(['x'], 'nocturne.pdf', { type: 'application/pdf' }))
     await user.selectOptions(screen.getByLabelText('Key'), 'Eb major')
+    const newScoreTags = screen.getByRole('group', { name: 'Tags for the new score' })
+    await user.click(within(newScoreTags).getByRole('button', { name: 'Lead sheet' }))
+    await user.type(within(newScoreTags).getByRole('combobox', { name: 'Add tag' }), 'Duet{Enter}')
     await user.click(screen.getByRole('button', { name: 'Add piece' }))
 
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_pieces', expect.objectContaining({
@@ -242,7 +245,7 @@ describe('focused library', () => {
       piece_id: 'p-new',
       pdf_path: 'u1/uuid-1.pdf',
       musical_key: 'Eb major',
-      instrument: 'piano',
+      tags: ['piano', 'lead sheet', 'duet'],
     })))
     expect(mocks.insert).toHaveBeenCalledWith('sm_piece_composers', [
       { piece_id: 'p-new', composer_id: 'c1', position: 0 },
@@ -347,8 +350,8 @@ describe('focused library', () => {
 
   it('switches between a piece’s scores in the viewer', async () => {
     mocks.scores = [
-      { id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', position: 0 },
-      { id: 's2', piece_id: 'p1', pdf_path: 'romance-guitar.pdf', pdf_pages: 1, musical_key: 'A minor', instrument: 'guitar', lead_sheet: false, position: 1 },
+      { id: 's1', piece_id: 'p1', pdf_path: 'romance.pdf', pdf_pages: 2, musical_key: 'C major', instrument: 'piano', tags: ['piano'], position: 0 },
+      { id: 's2', piece_id: 'p1', pdf_path: 'romance-guitar.pdf', pdf_pages: 1, musical_key: 'A minor', instrument: 'guitar', lead_sheet: false, tags: ['guitar'], position: 1 },
     ]
     mocks.signedUrl.mockImplementation(async (path: string) => ({ data: { signedUrl: `https://example.test/${path}` }, error: null }))
     const user = userEvent.setup()
@@ -520,7 +523,7 @@ describe('focused library', () => {
       { id: 'p2', composer_id: 'c1', title: 'Newer', play_progress: 100, difficulty: 5, created_at: '2026-01-01', links: [] },
       { id: 'p3', composer_id: 'c1', title: 'Excluded', play_progress: 0, difficulty: 5, created_at: '2026-02-01', links: [] },
     ]
-    mocks.scores = mocks.pieces.map((piece) => ({ id: `s-${piece.id}`, piece_id: piece.id, pdf_path: 'score.pdf', instrument: 'piano', position: 0 }))
+    mocks.scores = mocks.pieces.map((piece) => ({ id: `s-${piece.id}`, piece_id: piece.id, pdf_path: 'score.pdf', instrument: 'piano', tags: ['piano'], position: 0 }))
     const save = vi.fn().mockResolvedValue(undefined)
     const user = userEvent.setup()
     render(<TestSettings save={save} />)
@@ -561,17 +564,41 @@ describe('focused library', () => {
     expect(screen.getByLabelText('View')).toHaveProperty('value', 'grid')
   })
 
-  it('marks a score as a lead sheet and back to an instrument', async () => {
+  it('combines and removes independent score tags, including custom tags', async () => {
     const user = userEvent.setup()
     render(<TestLibrary />)
     await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
-    const group = () => screen.getByRole('group', { name: 'Type for score 1 of Romance' })
+    const group = () => screen.getByRole('group', { name: 'Tags for score 1 of Romance' })
     await user.click(within(group()).getByRole('button', { name: 'Lead sheet' }))
-    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { lead_sheet: true, instrument: null }, 'id', 's1'))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'lead sheet'] }, 'id', 's1'))
     await waitFor(() => expect(within(group()).getByRole('button', { name: 'Lead sheet' }).getAttribute('aria-pressed')).toBe('true'))
-
+    await user.click(within(group()).getByRole('button', { name: 'Solo' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'lead sheet', 'solo'] }, 'id', 's1'))
+    await user.type(within(group()).getByRole('combobox', { name: 'Add tag' }), 'Duet{Enter}')
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['piano', 'lead sheet', 'solo', 'duet'] }, 'id', 's1'))
     await user.click(within(group()).getByRole('button', { name: 'Piano' }))
-    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { instrument: 'piano', lead_sheet: false }, 'id', 's1'))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['lead sheet', 'solo', 'duet'] }, 'id', 's1'))
+    await user.click(within(group()).getByRole('button', { name: 'Lead sheet' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['solo', 'duet'] }, 'id', 's1'))
+    await user.click(within(group()).getByRole('button', { name: 'Solo' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: ['duet'] }, 'id', 's1'))
+    await user.click(within(group()).getByRole('button', { name: 'Delete tag duet' }))
+    await waitFor(() => expect(mocks.update).toHaveBeenCalledWith('sm_piece_scores', { tags: [] }, 'id', 's1'))
+  })
+
+  it('filters a score with multiple instruments by either instrument and searches its custom tags', async () => {
+    mocks.scores[0].tags = ['piano', 'guitar', 'solo', 'duet']
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await screen.findByText('Romance', { selector: 'summary strong' })
+    await user.click(screen.getByRole('button', { name: 'Filters' }))
+    const filters = screen.getByRole('group', { name: 'Filter by instrument' })
+    await user.click(within(filters).getByRole('button', { name: /guitar/i }))
+    expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
+    await user.click(within(filters).getByRole('button', { name: /piano/i }))
+    expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
+    await user.type(screen.getByRole('textbox', { name: 'Search pieces' }), 'duet')
+    expect(screen.getByText('Romance', { selector: 'summary strong' })).toBeTruthy()
   })
 
   it('adds and removes scores on a piece', async () => {
@@ -584,11 +611,14 @@ describe('focused library', () => {
     await user.click(screen.getByRole('button', { name: '+ Add score' }))
     await user.upload(screen.getByLabelText('PDF for Romance'), new File(['x'], 'guitar.pdf', { type: 'application/pdf' }))
     await user.selectOptions(screen.getByLabelText('Key for new score of Romance'), 'C major')
-    await user.click(within(screen.getByRole('group', { name: 'Type for new score of Romance' })).getByRole('button', { name: /guitar/i }))
+    const group = screen.getByRole('group', { name: 'Tags for new score of Romance' })
+    await user.click(within(group).getByRole('button', { name: 'Piano' }))
+    await user.click(within(group).getByRole('button', { name: 'Guitar' }))
+    await user.click(within(group).getByRole('button', { name: 'Solo' }))
     await user.click(screen.getByRole('button', { name: 'Add score' }))
 
     await waitFor(() => expect(mocks.insert).toHaveBeenCalledWith('sm_piece_scores', expect.objectContaining({
-      piece_id: 'p1', pdf_path: 'u1/uuid-2.pdf', musical_key: 'C major', instrument: 'guitar', position: 1,
+      piece_id: 'p1', pdf_path: 'u1/uuid-2.pdf', musical_key: 'C major', tags: ['guitar', 'solo'], position: 1,
     })))
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Key for score 2 of Romance' })).toBeTruthy())
 

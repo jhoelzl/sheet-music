@@ -37,7 +37,7 @@ export const primaryScore = (p: Piece): PieceScore | null => scoresOf(p)[0] ?? n
 const withScores = (p: Piece, scores: PieceScore[]): Piece => ({
   ...p,
   scores,
-  instruments: [...new Set(scores.map((s) => s.instrument).filter((i): i is Instrument => i !== null))],
+  instruments: [...new Set(scores.flatMap((s) => s.tags.filter((tag): tag is Instrument => tag === 'piano' || tag === 'guitar')))],
   musical_key: scores.find((s) => s.musical_key)?.musical_key ?? null,
   pdf_path: scores[0]?.pdf_path ?? null,
   pdf_pages: scores.reduce((total, s) => total + (s.pdf_pages ?? 0), 0) || null,
@@ -95,6 +95,8 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [draftComposer, setDraftComposer] = useState('')
   const [openLink, setOpenLink] = useState<string | null>(null)
   const [uploadingId, setUploadingId] = useState<string | null>(null)
+  const [savingScoreIds, setSavingScoreIds] = useState<Set<string>>(new Set())
+  const savingScores = useRef(new Set<string>())
   const [backingUp, setBackingUp] = useState(false)
   const backingUpRef = useRef(false)
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set())
@@ -103,7 +105,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<string>(defaults.library_filter)
   const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>(defaults.library_instrument)
-  const [newScoreInstrument, setNewScoreInstrument] = useState<Instrument | null>('piano')
+  const [newScoreTags, setNewScoreTags] = useState<string[]>(['piano'])
   const [newComposerIds, setNewComposerIds] = useState<string[]>([])
   const [newTags, setNewTags] = useState<string[]>([])
   const [newSubtitle, setNewSubtitle] = useState('')
@@ -141,7 +143,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     const c = await supabase.from('sm_composers').select('*').order('name')
     const p = await supabase.from('sm_pieces').select('*').order('title')
     const pc = await supabase.from('sm_piece_composers').select('piece_id, composer_id, position').order('position')
-    const sc = await supabase.from('sm_piece_scores').select('id, piece_id, pdf_path, pdf_pages, musical_key, instrument, lead_sheet, position').order('position')
+    const sc = await supabase.from('sm_piece_scores').select('id, piece_id, pdf_path, pdf_pages, musical_key, instrument, lead_sheet, tags, position').order('position')
     if (c.error || p.error || pc.error || sc.error) notify((c.error ?? p.error ?? pc.error ?? sc.error)!.message)
     setComposersLoaded(!c.error)
     setComposers(c.data ?? [])
@@ -218,8 +220,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
       pdf_path,
       pdf_pages,
       musical_key: newMusicalKey.trim() || null,
-      instrument: newScoreInstrument,
-      lead_sheet: newScoreInstrument === null,
+      tags: newScoreTags,
       position: 0,
     })
     if (error) {
@@ -253,7 +254,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
       await load()
       // The piece exists now, so always reset the form even if a child insert failed;
       // otherwise a second submit would create a duplicate.
-      setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewScoreInstrument('piano'); setNewTags([]); setPanel(null)
+      setTitle(''); setNewSubtitle(''); setNewMusicalKey(''); setNewComposerIds([]); setFile(null); setNewScoreTags(['piano']); setNewTags([]); setPanel(null)
       if (linkError) notify(`Piece saved, but its composer list could not be saved: ${linkError.message}`)
       else if (scoreError) notify(`Piece saved, but its score could not be saved: ${scoreError}`)
     } catch (error) {
@@ -375,8 +376,8 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     update(p, { links: (p.links ?? []).filter((l) => l.url !== link.url) })
   }
 
-  /** Upload a PDF and add it as a new score of the piece. A null instrument marks it a lead sheet. */
-  const addScore = async (p: Piece, f: File, musical_key: string | null, instrument: Instrument | null) => {
+  /** Upload a PDF and add it as a new score of the piece. */
+  const addScore = async (p: Piece, f: File, musical_key: string | null, tags: string[]) => {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setUploadingId(p.id)
@@ -387,18 +388,31 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
       notify(`Upload failed: ${up.error.message}`)
     } else {
       const position = scoresOf(p).reduce((max, score) => Math.max(max, score.position), -1) + 1
-      const ok = await run(supabase.from('sm_piece_scores').insert({ piece_id: p.id, pdf_path, pdf_pages, musical_key, instrument, lead_sheet: instrument === null, position }))
+      const ok = await run(supabase.from('sm_piece_scores').insert({ piece_id: p.id, pdf_path, pdf_pages, musical_key, tags, position }))
       if (!ok) await supabase.storage.from(PDF_STORAGE_BUCKET).remove([pdf_path])
     }
     setUploadingId(null)
   }
 
-  /** Change a score's key, instrument or lead-sheet flag. */
-  const updateScore = (p: Piece, score: PieceScore, patch: Partial<Pick<PieceScore, 'musical_key' | 'instrument' | 'lead_sheet'>>) => {
+  /** Change a score's key or tags. */
+  const updateScore = (p: Piece, score: PieceScore, patch: Partial<Pick<PieceScore, 'musical_key' | 'tags'>>) => {
+    if (savingScores.current.has(score.id)) return
+    savingScores.current.add(score.id)
+    setSavingScoreIds((ids) => new Set(ids).add(score.id))
     setPieces((current) => current.map((piece) => piece.id === p.id
       ? withScores(piece, scoresOf(piece).map((s) => s.id === score.id ? { ...s, ...patch } : s))
       : piece))
-    void run(supabase.from('sm_piece_scores').update(patch).eq('id', score.id))
+    void (async () => {
+      try {
+        await run(supabase.from('sm_piece_scores').update(patch).eq('id', score.id))
+      } catch (error) {
+        notify(error instanceof Error ? error.message : 'Could not save the score.')
+        await load()
+      } finally {
+        savingScores.current.delete(score.id)
+        setSavingScoreIds((ids) => { const next = new Set(ids); next.delete(score.id); return next })
+      }
+    })()
   }
 
   const removeScore = (p: Piece, score: PieceScore) => {
@@ -574,7 +588,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
   const visible = pieces.filter((p) => {
     if (hiddenIds.has(p.id)) return false
     if (terms.length) {
-      const haystack = normalizeSearch([p.title, p.subtitle, ...keysOf(p), composerNamesOf(p), p.notes, ...p.instruments, ...(p.tags ?? [])].filter(Boolean).join(' '))
+      const haystack = normalizeSearch([p.title, p.subtitle, ...keysOf(p), composerNamesOf(p), p.notes, ...p.instruments, ...scoresOf(p).flatMap((score) => score.tags), ...(p.tags ?? [])].filter(Boolean).join(' '))
       if (!terms.every((t) => haystack.includes(t))) return false
     }
     if (instrumentFilter !== 'all' && !p.instruments.includes(instrumentFilter)) return false
@@ -588,6 +602,7 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
     }
   })
   const allTags = [...new Set([...pieces.flatMap((p) => p.tags ?? []), ...(tagFilter ? [tagFilter] : [])])].sort()
+  const allScoreTags = [...new Set(pieces.flatMap((p) => scoresOf(p).flatMap((score) => score.tags)))].sort()
   const filtering = Boolean(search) || filter !== 'all' || instrumentFilter !== 'all' || Boolean(tagFilter)
   const tableRows = [...visible].sort((a, b) => {
     const val = (p: Piece): string | number => {
@@ -615,14 +630,14 @@ export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userI
 
   return {
     // data
-    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, practicedToday,
+    composers, pieces, logs, toasts, preview, visible, flat, tableRows, allTags, allScoreTags, practicedToday,
     // ui state
-    sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, hiddenIds,
+    sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, savingScoreIds, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
     search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
     filtering, noMatches, clearFilters, applyDefaults, composerNameOf, composerIdsOf, composerNamesOf,
     // new-item form state
-    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreInstrument, setNewScoreInstrument, newTags, setNewTags, pieceSaving,
+    composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreTags, setNewScoreTags, newTags, setNewTags, pieceSaving,
     // actions
     dismissToast, closePdf, pdfUrl, openMaterialPdf, recordPdfPages, addComposer, addPiece, togglePracticed, update, setPieceComposers, remove, startEdit, commitEdit,
     addLink, removeLink, addScore, updateScore, removeScore, removeComposer, startEditComposer, commitComposerEdit, openPdf,
