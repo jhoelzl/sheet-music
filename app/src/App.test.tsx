@@ -117,6 +117,7 @@ describe('app navigation', () => {
     await user.click(screen.getByRole('button', { name: 'Edit lesson draft' }))
     await user.click(within(navigation).getByRole('button', { name: 'Library' }))
     expect(confirm).toHaveBeenCalledOnce()
+    expect(confirm).toHaveBeenCalledWith('Discard unsaved changes?')
     expect(screen.getByText('Lessons content')).toBeTruthy()
     confirm.mockRestore()
   })

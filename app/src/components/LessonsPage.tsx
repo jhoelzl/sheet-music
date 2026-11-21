@@ -14,6 +14,7 @@ import { TagInput } from './TagInput'
 import { ActivityCalendar } from './ActivityCalendar'
 import { DeleteButton } from './DeleteButton'
 import { DocumentInput } from './DocumentInput'
+import { EditIcon } from './icons'
 
 type LessonPiece = { lesson_id: string; piece_id: string }
 type LessonMaterial = { lesson_id: string; material_id: string }
@@ -37,6 +38,8 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const [newDate, setNewDate] = useState(todayISO)
   const [newTitle, setNewTitle] = useState('')
   const [materialTitle, setMaterialTitle] = useState('')
+  const [materialDraft, setMaterialDraft] = useState<{ id: string; title: string } | null>(null)
+  const [materialError, setMaterialError] = useState('')
   const [newMaterialTags, setNewMaterialTags] = useState<string[]>([])
   const [materialTagFilter, setMaterialTagFilter] = useState<string | null>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -52,8 +55,10 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
   const dirty = Boolean(draft && selected && (draft.title !== selected.title || draft.lesson_date !== selected.lesson_date || draft.notes !== selected.notes || draft.group_id !== selected.group_id))
   const savedGroup = groups.find((group) => group.id === groupDraft?.id)
   const groupDirty = Boolean(groupDraft && savedGroup && (groupDraft.teacher_name !== savedGroup.teacher_name || groupDraft.instrument !== savedGroup.instrument))
+  const savedMaterial = materials.find((material) => material.id === materialDraft?.id)
+  const materialDirty = Boolean(materialDraft && savedMaterial && materialDraft.title !== savedMaterial.title)
 
-  useEffect(() => { onDirtyChange(dirty || groupDirty) }, [dirty, groupDirty, onDirtyChange])
+  useEffect(() => { onDirtyChange(dirty || groupDirty || materialDirty) }, [dirty, groupDirty, materialDirty, onDirtyChange])
 
   useEffect(() => {
     let active = true
@@ -91,13 +96,17 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
     return () => { active = false }
   }, [])
 
-  const perform = async (action: () => Promise<void>) => {
+  const perform = async (action: () => Promise<void>, onError?: (message: string) => void) => {
     if (busyRef.current) return
     busyRef.current = true
     setBusy(true)
     setError('')
     try { await action() }
-    catch (reason) { setError(reason instanceof Error ? reason.message : String((reason as { message?: string })?.message ?? 'Operation failed.')) }
+    catch (reason) {
+      const message = reason instanceof Error ? reason.message : String((reason as { message?: string })?.message ?? 'Operation failed.')
+      if (onError) onError(message)
+      else setError(message)
+    }
     finally { busyRef.current = false; setBusy(false) }
   }
 
@@ -288,6 +297,24 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
     })
   }
 
+  const saveMaterialTitle = (event: FormEvent) => {
+    event.preventDefault()
+    if (!materialDraft || !savedMaterial) return
+    const title = materialDraft.title.trim()
+    if (!title) { setMaterialError('Enter a material title.'); return }
+    if (title === savedMaterial.title) { setMaterialDraft(null); setMaterialError(''); return }
+    setMaterialError('')
+    void perform(async () => {
+      const { data, error: failure } = await supabase.from('sm_teaching_materials')
+        .update({ title }).eq('id', materialDraft.id).select('id').single()
+      if (failure) throw failure
+      if (!data) throw new Error('Could not rename material.')
+      setMaterials((current) => current.map((item) => item.id === materialDraft.id ? { ...item, title } : item)
+        .sort((a, b) => a.title.localeCompare(b.title)))
+      setMaterialDraft(null)
+    }, setMaterialError)
+  }
+
   const deleteMaterial = (material: TeachingMaterial) => {
     if (!confirmDelete(`teaching material "${material.title}"`, 'Its PDF and links to all lessons will also be deleted.')) return
     void perform(async () => {
@@ -365,9 +392,9 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               <button type="submit" className="btn" disabled={busy || processingPhotos || !file || !materialTitle.trim()}>Upload PDF</button>
             </form>
             {filterTags.length > 0 && <div className="filter-bar" role="group" aria-label="Filter teaching materials by tag">
-              <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} onClick={() => setMaterialTagFilter(null)}>All tags</button>
+              <button type="button" className={`filter-pill${materialTagFilter === null ? ' active' : ''}`} aria-pressed={materialTagFilter === null} disabled={Boolean(materialDraft)} onClick={() => setMaterialTagFilter(null)}>All tags</button>
               {filterTags.map((tag) => <button key={tag} type="button" className={`filter-pill${materialTagFilter === tag ? ' active' : ''}`}
-                aria-pressed={materialTagFilter === tag} onClick={() => setMaterialTagFilter(materialTagFilter === tag ? null : tag)}>#{tag}</button>)}
+                aria-pressed={materialTagFilter === tag} disabled={Boolean(materialDraft)} onClick={() => setMaterialTagFilter(materialTagFilter === tag ? null : tag)}>#{tag}</button>)}
             </div>}
             {materialTagFilter && visibleMaterials.length === 0 && <p className="muted">No materials with this tag.</p>}
             {visibleMaterials.map((material) => {
@@ -377,15 +404,29 @@ export function LessonsPage({ lib, onDirtyChange }: { lib: LibraryData; onDirtyC
               return <div className="material-row" key={material.id}>
                 <div className="material-content">
                   <div className="material-info">
-                    <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>
-                    <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy} onChange={(tags) => saveMaterialTags(material, tags)} />
+                    {materialDraft?.id === material.id ? (
+                      <form className="material-rename" onSubmit={saveMaterialTitle} onKeyDown={(event) => {
+                        if (event.key === 'Escape' && !busy) { setMaterialDraft(null); setMaterialError('') }
+                      }}>
+                        <input aria-label={`New name for ${material.title}`} autoFocus required value={materialDraft.title} disabled={busy}
+                          onChange={(event) => { setMaterialDraft({ ...materialDraft, title: event.target.value }); setMaterialError('') }} />
+                        <button type="submit" className="btn" disabled={busy}>Save</button>
+                        <button type="button" className="link" disabled={busy} onClick={() => { setMaterialDraft(null); setMaterialError('') }}>Cancel</button>
+                        {materialError && <p className="material-rename-error" role="alert">{materialError}</p>}
+                      </form>
+                    ) : <button type="button" className="link" onClick={() => void lib.openMaterialPdf(material)}>{material.title}</button>}
+                    <TagInput tags={material.tags} suggestions={materialTags} label={`Tags for ${material.title}`} disabled={busy || Boolean(materialDraft)} onChange={(tags) => saveMaterialTags(material, tags)} />
                   </div>
                   {linkedLessons.length > 0 && <div className="material-lessons" aria-label={`Lessons using ${material.title}`}>
                     <span>Used in:</span>
                     <ul>{linkedLessons.map((lesson) => <li key={lesson.id}>{lesson.title} · {lesson.lesson_date}</li>)}</ul>
                   </div>}
                 </div>
-                <DeleteButton label={`Delete teaching material ${material.title}`} disabled={busy} onClick={() => deleteMaterial(material)} />
+                <div className="material-actions">
+                  <button type="button" className="icon-btn edit" aria-label={`Rename teaching material ${material.title}`} title="Rename"
+                    disabled={busy || Boolean(materialDraft)} onClick={() => { setMaterialDraft({ id: material.id, title: material.title }); setMaterialError('') }}>{EditIcon}</button>
+                  <DeleteButton label={`Delete teaching material ${material.title}`} disabled={busy || Boolean(materialDraft)} onClick={() => deleteMaterial(material)} />
+                </div>
               </div>
             })}
             {!materials.length && <p className="muted">No teaching materials yet.</p>}

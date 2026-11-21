@@ -29,6 +29,7 @@ vi.mock('../supabase', () => ({
     from: (table: string) => {
       let action = 'select'
       let values: Row = {}
+      let returning = false
       const filters: Record<string, unknown> = {}
       const execute = () => {
         if (mocks.fail === `${table}:${action}`) return { data: null, error: { message: 'Database unavailable' } }
@@ -39,12 +40,16 @@ vi.mock('../supabase', () => ({
           rows.push(row)
           return { data: row, error: null }
         }
-        if (action === 'update') rows.filter(matches).forEach((row) => Object.assign(row, values))
+        if (action === 'update') {
+          const updated = rows.filter(matches)
+          updated.forEach((row) => Object.assign(row, values))
+          return { data: returning ? updated[0] ?? null : null, error: null }
+        }
         if (action === 'delete') mocks.tables[table] = rows.filter((row) => !matches(row))
         return { data: action === 'select' ? rows.map((row) => ({ ...row })) : null, error: null }
       }
       const query = {
-        select: () => query,
+        select: () => { returning = true; return query },
         order: () => query,
         insert: (row: Row) => { action = 'insert'; values = row; return query },
         update: (row: Row) => { action = 'update'; values = row; return query },
@@ -388,6 +393,79 @@ describe('lessons', () => {
     expect(screen.getByLabelText('Lessons using Scales').textContent).not.toContain('Guitar')
     expect(screen.getByLabelText('Lessons using Scales').textContent).toContain('Previous')
     expect(mocks.remove).not.toHaveBeenCalled()
+  })
+
+  it('renames a material without changing its PDF, tags or lesson links', async () => {
+    mocks.tables.sm_teaching_materials = [
+      { id: 'm2', title: 'Chords', pdf_path: 'u1/chords.pdf', tags: [] },
+      { id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: ['technique'] },
+    ]
+    mocks.tables.sm_lessons.push({ id: 'l2', lesson_date: '2026-11-11', title: 'Previous', notes: '' })
+    mocks.tables.sm_lesson_materials = [{ lesson_id: 'l1', material_id: 'm1' }, { lesson_id: 'l2', material_id: 'm1' }]
+    const user = userEvent.setup()
+    const rendered = render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.click(await screen.findByRole('button', { name: 'Rename teaching material Scales' }))
+    const input = screen.getByRole('textbox', { name: 'New name for Scales' })
+    await user.clear(input)
+    await user.type(input, '  Arpeggios  ')
+    expect(mocks.dirty).toHaveBeenLastCalledWith(true)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByRole('button', { name: 'Rename teaching material Arpeggios' })
+    expect(mocks.dirty).toHaveBeenLastCalledWith(false)
+    expect(mocks.tables.sm_teaching_materials[1]).toEqual({ id: 'm1', title: 'Arpeggios', pdf_path: 'u1/scales.pdf', tags: ['technique'] })
+    expect(mocks.tables.sm_lesson_materials).toEqual([{ lesson_id: 'l1', material_id: 'm1' }, { lesson_id: 'l2', material_id: 'm1' }])
+    expect(mocks.remove).not.toHaveBeenCalled()
+    const section = screen.getByRole('region', { name: 'Teaching materials' })
+    expect(within(section).getAllByRole('button', { name: /^Rename teaching material/ }).map((button) => button.getAttribute('aria-label')))
+      .toEqual(['Rename teaching material Arpeggios', 'Rename teaching material Chords'])
+    await user.click(screen.getByRole('button', { name: 'Open material Arpeggios' }))
+    expect(mocks.openMaterialPdf).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'm1', title: 'Arpeggios', pdf_path: 'u1/scales.pdf' }))
+    rendered.unmount()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    expect(await screen.findByRole('button', { name: 'Open material Arpeggios' })).toBeTruthy()
+  })
+
+  it('rejects blank material names and allows cancelling the draft', async () => {
+    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: ['technique'] }]
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.click(await screen.findByRole('button', { name: 'Rename teaching material Scales' }))
+    const input = screen.getByRole('textbox', { name: 'New name for Scales' })
+    await user.clear(input)
+    await user.type(input, '   ')
+    const filter = screen.getByRole('group', { name: 'Filter teaching materials by tag' })
+    expect((within(filter).getByRole('button', { name: '#technique' }) as HTMLButtonElement).disabled).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect((screen.getByRole('alert')).textContent).toContain('Enter a material title')
+    expect(mocks.tables.sm_teaching_materials[0].title).toBe('Scales')
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('button', { name: 'Rename teaching material Scales' })).toBeTruthy()
+    expect(mocks.dirty).toHaveBeenLastCalledWith(false)
+    await user.click(screen.getByRole('button', { name: 'Rename teaching material Scales' }))
+    await user.type(screen.getByRole('textbox', { name: 'New name for Scales' }), ' edited')
+    await user.keyboard('{Escape}')
+    expect(screen.getByRole('button', { name: 'Rename teaching material Scales' })).toBeTruthy()
+    expect(mocks.dirty).toHaveBeenLastCalledWith(false)
+  })
+
+  it('keeps the rename draft and reports a failed save so it can be retried', async () => {
+    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'u1/scales.pdf', tags: [] }]
+    mocks.fail = 'sm_teaching_materials:update'
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.click(await screen.findByRole('button', { name: 'Rename teaching material Scales' }))
+    const input = screen.getByRole('textbox', { name: 'New name for Scales' })
+    await user.clear(input)
+    await user.type(input, 'Arpeggios')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('Database unavailable')
+    expect(input).toHaveProperty('value', 'Arpeggios')
+    expect(mocks.tables.sm_teaching_materials[0].title).toBe('Scales')
+    expect(mocks.dirty).toHaveBeenLastCalledWith(true)
+    mocks.fail = ''
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('button', { name: 'Rename teaching material Arpeggios' })).toBeTruthy()
+    expect(mocks.dirty).toHaveBeenLastCalledWith(false)
   })
 
   it('confirms deleting lesson tune and material references without deleting the originals', async () => {
