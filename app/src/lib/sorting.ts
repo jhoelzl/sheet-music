@@ -25,7 +25,7 @@ export const VIEWS: { value: View; label: string }[] = [
   { value: 'grid', label: 'Grid' },
   { value: 'board', label: 'Board' },
 ]
-export type TableKey = 'title' | 'composer' | 'status' | 'difficulty' | 'rating' | 'pages' | 'practiced'
+export type TableKey = 'title' | 'composer' | 'status' | 'difficulty' | 'rating' | 'pages' | 'practiced' | 'recent'
 
 export function sortPieces(list: Piece[], key: SortKey): Piece[] {
   const byTitle = (a: Piece, b: Piece) => a.title.localeCompare(b.title)

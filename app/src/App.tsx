@@ -8,30 +8,55 @@ import { ComposersPage } from './components/ComposersPage'
 import { VideosPage } from './components/VideosPage'
 import { SetlistsPage } from './components/SetlistsPage'
 import { LessonsPage } from './components/LessonsPage'
+import { SettingsPage } from './components/SettingsPage'
 import { Login } from './components/Login'
 import { PdfPreview } from './components/PdfPreview'
 import { Toasts } from './components/Toasts'
 import { strokeIcon } from './components/icons'
 import { useLibrary } from './hooks/useLibrary'
+import { useUserSettings } from './hooks/useUserSettings'
+import type { SettingsState } from './hooks/useUserSettings'
+import type { UserSettings } from './lib/userSettings'
 
 const libraryIcon = strokeIcon('M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2m0-2a2 2 0 0 1 2-2h13M9 7h6M9 11h6')
 const composersIcon = strokeIcon('M20 21a8 8 0 0 0-16 0M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8')
 const videosIcon = strokeIcon('M4 5h16v14H4zM10 9l5 3-5 3z')
 const setlistsIcon = strokeIcon('M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01')
 const lessonsIcon = strokeIcon('M5 4h14v16H5zM8 8h8M8 12h8M8 16h5')
+const settingsIcon = strokeIcon('M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M19.07 4.93l-1.42 1.42M6.35 17.65l-1.42 1.42')
 
-type Page = 'library' | 'composers' | 'videos' | 'setlists' | 'lessons'
+type Page = 'library' | 'composers' | 'videos' | 'setlists' | 'lessons' | 'settings'
 type AuthState = { status: 'loading' } | { status: 'error' } | { status: 'ready'; session: Session | null }
 
-function AuthenticatedContent({ page, isIOS, onLessonDirty }: { page: Page; isIOS: boolean; onLessonDirty: (dirty: boolean) => void }) {
-  const lib = useLibrary()
+function AuthenticatedContent({ page, isIOS, onLessonDirty, userId, settingsState, saveSettings, retrySettings }: {
+  page: Page; isIOS: boolean; onLessonDirty: (dirty: boolean) => void; userId: string
+  settingsState: SettingsState; saveSettings: (settings: UserSettings) => Promise<void>; retrySettings: () => void
+}) {
+  const lib = useLibrary(settingsState.settings, userId)
+  const save = async (next: UserSettings) => {
+    await saveSettings(next)
+    lib.applyDefaults(next, settingsState.settings)
+  }
   return (
     <>
       <Toasts lib={lib} />
       <PdfPreview lib={lib} />
-      {page === 'composers' ? <ComposersPage lib={lib} /> : page === 'videos' ? <VideosPage /> : page === 'setlists' ? <SetlistsPage lib={lib} /> : page === 'lessons' ? <LessonsPage lib={lib} onDirtyChange={onLessonDirty} /> : <Library lib={lib} isIOS={isIOS} />}
+      {settingsState.status === 'error' && page !== 'settings' && <div className="error" role="alert">Could not load your settings. Default preferences are in use. Open Settings to retry.</div>}
+      {page === 'composers' ? <ComposersPage lib={lib} /> : page === 'videos' ? <VideosPage defaultRandom={settingsState.settings.video_order === 'random'} /> : page === 'setlists' ? <SetlistsPage lib={lib} /> : page === 'lessons' ? <LessonsPage lib={lib} onDirtyChange={onLessonDirty} /> : page === 'settings' ? <SettingsPage lib={lib} settings={settingsState.settings} loadError={settingsState.status === 'error' ? settingsState.message : null} onRetry={retrySettings} onSave={save} /> : <Library lib={lib} isIOS={isIOS} />}
     </>
   )
+}
+
+function useTheme(theme: UserSettings['theme']) {
+  useEffect(() => {
+    const preference = window.matchMedia?.('(prefers-color-scheme: dark)')
+    const apply = () => {
+      document.documentElement.dataset.theme = theme === 'system' ? (preference?.matches ? 'dark' : 'light') : theme
+    }
+    apply()
+    preference?.addEventListener('change', apply)
+    return () => { preference?.removeEventListener('change', apply); delete document.documentElement.dataset.theme }
+  }, [theme])
 }
 
 export default function App() {
@@ -40,6 +65,9 @@ export default function App() {
   const [page, setPage] = useState<Page>('library')
   const [lessonDirty, setLessonDirty] = useState(false)
   const isIOS = Capacitor.getPlatform() === 'ios'
+  const session = auth.status === 'ready' ? auth.session : null
+  const userSettings = useUserSettings(session?.user.id ?? null)
+  useTheme(userSettings.state.settings.theme)
   useEffect(() => {
     let active = true
     let subscription: { unsubscribe: () => void } | undefined
@@ -78,7 +106,6 @@ export default function App() {
     setLessonDirty(false)
     setPage(next)
   }
-  const session = auth.status === 'ready' ? auth.session : null
   const navigation = session && (
     <nav className="page-nav" aria-label="Pages">
       <button type="button" className={page === 'library' ? 'on' : ''} aria-current={page === 'library' ? 'page' : undefined} onClick={() => navigate('library')}>
@@ -95,6 +122,9 @@ export default function App() {
       </button>
       <button type="button" className={page === 'lessons' ? 'on' : ''} aria-current={page === 'lessons' ? 'page' : undefined} onClick={() => navigate('lessons')}>
         {isIOS && <span className="page-nav-icon">{lessonsIcon}</span>}Lessons
+      </button>
+      <button type="button" className={page === 'settings' ? 'on' : ''} aria-current={page === 'settings' ? 'page' : undefined} onClick={() => navigate('settings')}>
+        {isIOS && <span className="page-nav-icon">{settingsIcon}</span>}Settings
       </button>
     </nav>
   )
@@ -120,7 +150,9 @@ export default function App() {
               <button type="button" className="btn primary" onClick={() => { setAuth({ status: 'loading' }); setAuthAttempt((attempt) => attempt + 1) }}>Try again</button>
             </div>
           </div>
-        ) : session ? <AuthenticatedContent page={page} isIOS={isIOS} onLessonDirty={setLessonDirty} /> : <Login />}
+        ) : session ? userSettings.state.status === 'loading' ? (
+          <div className="auth-wrap"><div className="panel auth-card" role="status">Loading your settings…</div></div>
+        ) : <AuthenticatedContent key={`${session.user.id}:${userSettings.state.status}`} page={page} isIOS={isIOS} onLessonDirty={setLessonDirty} userId={session.user.id} settingsState={userSettings.state} saveSettings={userSettings.save} retrySettings={userSettings.retry} /> : <Login />}
       </main>
       {isIOS && navigation}
     </div>

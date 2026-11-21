@@ -13,6 +13,8 @@ import { detectLinkType, safeUrl } from '../lib/links'
 import { VIEWS, sortPieces } from '../lib/sorting'
 import type { SortKey, TableKey, View } from '../lib/sorting'
 import { statusOf } from '../lib/status'
+import { DEFAULT_USER_SETTINGS } from '../lib/userSettings'
+import type { UserSettings } from '../lib/userSettings'
 
 export type Toast = { id: number; message: string; kind: 'error' | 'info'; undo?: () => void }
 export type Panel = 'composer' | 'piece' | null
@@ -42,7 +44,8 @@ const withScores = (p: Piece, scores: PieceScore[]): Piece => ({
 })
 
 /** All library state, data loading, mutations and derived data. */
-export function useLibrary() {
+export function useLibrary(defaults: UserSettings = DEFAULT_USER_SETTINGS, userId?: string) {
+  const viewStorageKey = userId ? `sm:view:${userId}` : 'sm:view'
   const [composers, setComposers] = useState<Composer[]>([])
   const [composersLoaded, setComposersLoaded] = useState(false)
   const [pieces, setPieces] = useState<Piece[]>([])
@@ -50,12 +53,13 @@ export function useLibrary() {
   const [toasts, setToasts] = useState<Toast[]>([])
   const [preview, setPreview] = useState<Preview | null>(null)
   const previewRequest = useRef(0)
-  const [sort, setSort] = useState<SortKey>('title')
+  const [sort, setSort] = useState<SortKey>(defaults.library_sort)
   const [view, setViewState] = useState<View>(() => {
-    const v = localStorage.getItem('sm:view')
+    if (defaults.library_view !== 'remember') return defaults.library_view
+    const v = localStorage.getItem(viewStorageKey) ?? localStorage.getItem('sm:view')
     return VIEWS.some((x) => x.value === v) ? (v as View) : 'list'
   })
-  const setView = (v: View) => { setViewState(v); localStorage.setItem('sm:view', v) }
+  const setView = (v: View) => { setViewState(v); localStorage.setItem(viewStorageKey, v) }
   const [tableCompact, setTableCompactState] = useState<boolean>(() => localStorage.getItem('sm:table-compact') === '1')
   const setTableCompact = (next: boolean) => {
     setTableCompactState(next)
@@ -82,7 +86,9 @@ export function useLibrary() {
     setTableHiddenColumns([])
     localStorage.setItem('sm:table-hidden-columns', '[]')
   }
-  const [tableSort, setTableSort] = useState<{ key: TableKey; dir: 1 | -1 }>({ key: 'title', dir: 1 })
+  const [tableSort, setTableSort] = useState<{ key: TableKey; dir: 1 | -1 }>({
+    key: defaults.library_sort, dir: defaults.library_sort === 'title' ? 1 : -1,
+  })
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draftTitle, setDraftTitle] = useState('')
   const [editingComposerId, setEditingComposerId] = useState<string | null>(null)
@@ -95,8 +101,8 @@ export function useLibrary() {
   const toastSeq = useRef(0)
   const deleteTimers = useRef(new Map<string, number>())
   const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
-  const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>('all')
+  const [filter, setFilter] = useState<string>(defaults.library_filter)
+  const [instrumentFilter, setInstrumentFilter] = useState<'all' | Instrument>(defaults.library_instrument)
   const [newScoreInstrument, setNewScoreInstrument] = useState<Instrument | null>('piano')
   const [newComposerIds, setNewComposerIds] = useState<string[]>([])
   const [newTags, setNewTags] = useState<string[]>([])
@@ -111,6 +117,16 @@ export function useLibrary() {
   const [pieceSaving, setPieceSaving] = useState(false)
   const pieceSavingRef = useRef(false)
   const [panel, setPanel] = useState<Panel>(null)
+
+  const applyDefaults = (next: UserSettings, previous: UserSettings) => {
+    if (next.library_view !== previous.library_view && next.library_view !== 'remember') setView(next.library_view)
+    if (next.library_sort !== previous.library_sort) {
+      setSort(next.library_sort)
+      setTableSort({ key: next.library_sort, dir: next.library_sort === 'title' ? 1 : -1 })
+    }
+    if (next.library_filter !== previous.library_filter) setFilter(next.library_filter)
+    if (next.library_instrument !== previous.library_instrument) setInstrumentFilter(next.library_instrument)
+  }
 
   const dismissToast = useCallback((id: number) => setToasts((t) => t.filter((x) => x.id !== id)), [])
 
@@ -492,7 +508,7 @@ export function useLibrary() {
     setBackingUp(true)
     notify('Preparing your backup…', 'info')
     try {
-      const [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonGroupsResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult] = await Promise.all([
+      const [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonGroupsResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult, settingsResult] = await Promise.all([
         supabase.from('sm_composers').select('*'),
         supabase.from('sm_pieces').select('*'),
         supabase.from('sm_piece_composers').select('*'),
@@ -505,10 +521,12 @@ export function useLibrary() {
         supabase.from('sm_teaching_materials').select('*'),
         supabase.from('sm_lesson_pieces').select('*'),
         supabase.from('sm_lesson_materials').select('*'),
+        supabase.from('sm_user_settings').select('*'),
       ])
       const results = [composersResult, piecesResult, linksResult, scoresResult, setlistsResult, entriesResult, logResult, lessonGroupsResult, lessonsResult, materialsResult, lessonPiecesResult, lessonMaterialsResult]
       const failed = results.find((result) => result.error)
       if (failed) throw failed.error
+      if (settingsResult.error) notify(`Could not include your settings in the backup: ${settingsResult.error.message}`)
       const scores = (scoresResult.data ?? []) as PieceScore[]
       const materials = (materialsResult.data ?? []) as TeachingMaterial[]
       const titles = new Map(((piecesResult.data ?? []) as { id: string; title: string }[]).map((piece) => [piece.id, piece.title]))
@@ -525,6 +543,7 @@ export function useLibrary() {
         teaching_materials: materials,
         lesson_pieces: lessonPiecesResult.data ?? [],
         lesson_materials: lessonMaterialsResult.data ?? [],
+        user_settings: settingsResult.error ? null : settingsResult.data ?? [],
       })
       const files: ZipEntry[] = [{ name: 'data.json', data: new TextEncoder().encode(JSON.stringify(payload, null, 2)) }]
       let missing = 0
@@ -579,6 +598,7 @@ export function useLibrary() {
         case 'rating': return p.rating ?? -1
         case 'pages': return p.pdf_pages ?? -1
         case 'practiced': return p.last_practiced ?? ''
+        case 'recent': return p.created_at ?? ''
         default: return p.title.toLowerCase()
       }
     }
@@ -600,7 +620,7 @@ export function useLibrary() {
     sort, setSort, view, setView, tableCompact, setTableCompact, tableHiddenColumns, toggleTableColumn, resetTableColumns, tableSort, sortBy, panel, setPanel, openLink, setOpenLink, uploadingId, hiddenIds,
     editingId, setEditingId, draftTitle, setDraftTitle, editingComposerId, setEditingComposerId, draftComposer, setDraftComposer,
     search, setSearch, filter, setFilter, instrumentFilter, setInstrumentFilter, tagFilter, setTagFilter,
-    filtering, noMatches, clearFilters, composerNameOf, composerIdsOf, composerNamesOf,
+    filtering, noMatches, clearFilters, applyDefaults, composerNameOf, composerIdsOf, composerNamesOf,
     // new-item form state
     composerName, setComposerName, composerSaving, composersLoaded, title, setTitle, newSubtitle, setNewSubtitle, newMusicalKey, setNewMusicalKey, newComposerIds, setNewComposerIds, file, setFile, newScoreInstrument, setNewScoreInstrument, newTags, setNewTags, pieceSaving,
     // actions
