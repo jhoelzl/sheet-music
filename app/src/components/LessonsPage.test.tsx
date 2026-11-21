@@ -86,7 +86,7 @@ const lib = {
 
 describe('lessons', () => {
   beforeEach(() => {
-    window.history.replaceState(null, '', '/')
+    window.history.replaceState(null, '', '/?materials=open')
     mocks.scannerAvailable.mockReturnValue(false)
     mocks.tables = {
       sm_lessons: [{ id: 'l1', lesson_date: '2026-11-18', title: 'Guitar', notes: '' }],
@@ -100,6 +100,42 @@ describe('lessons', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
   afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals() })
+
+  it('starts collapsed and restores the expanded state from the URL', async () => {
+    window.history.replaceState(null, '', '/?page=lessons')
+    mocks.tables.sm_teaching_materials = [{ id: 'm1', title: 'Scales', pdf_path: 'scales.pdf', tags: [] }]
+    const user = userEvent.setup()
+    const rendered = render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const toggle = await screen.findByRole('button', { name: /Teaching materials 1 Show/ })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('button', { name: '+ Add material' })).toBeNull()
+    expect(screen.getByLabelText('Notes (Markdown)')).toBeTruthy()
+    await user.click(toggle)
+    expect(toggle.getAttribute('aria-expanded')).toBe('true')
+    expect(new URLSearchParams(window.location.search).get('materials')).toBe('open')
+    expect(new URLSearchParams(window.location.search).get('page')).toBe('lessons')
+    expect(screen.getByRole('button', { name: 'Scales' })).toBeTruthy()
+    rendered.unmount()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    const reopened = await screen.findByRole('button', { name: /Teaching materials 1 Hide/ })
+    expect(reopened.getAttribute('aria-expanded')).toBe('true')
+    await user.click(reopened)
+    expect(new URLSearchParams(window.location.search).has('materials')).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Scales' })).toBeNull()
+  })
+
+  it('preserves a material draft when collapsing and reopening', async () => {
+    const user = userEvent.setup()
+    render(<LessonsPage lib={lib} onDirtyChange={mocks.dirty} />)
+    await user.click(await screen.findByRole('button', { name: '+ Add material' }))
+    await user.type(screen.getByLabelText('Material title'), 'Draft')
+    await user.upload(screen.getByLabelText('PDF file'), new File(['pdf'], 'draft.pdf', { type: 'application/pdf' }))
+    await user.click(screen.getByRole('button', { name: /Teaching materials .* Hide/ }))
+    expect(screen.queryByRole('form', { name: 'Add teaching material' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: /Teaching materials .* Show/ }))
+    expect(screen.getByLabelText('Material title')).toHaveProperty('value', 'Draft')
+    expect(screen.getByText('draft.pdf')).toBeTruthy()
+  })
 
   it('restores the selected group, lesson and material filter from the URL', async () => {
     mocks.tables.sm_lessons[0].group_id = 'g1'
@@ -302,6 +338,14 @@ describe('lessons', () => {
     await screen.findByText('document-scan.pdf')
     await user.click(screen.getByRole('button', { name: 'Upload PDF' }))
     await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(expect.stringMatching(/\/materials\/.*\.pdf$/), pdf, { contentType: 'application/pdf', upsert: true }))
+    expect((screen.getByRole('button', { name: /Teaching materials .* Hide/ }) as HTMLButtonElement).disabled).toBe(true)
+    act(() => {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('materials')
+      window.history.pushState(null, '', url)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get('materials')).toBe('open'))
     expect(screen.getByRole('status').textContent).toContain('Uploading teaching material')
     expect(within(form).getByRole('progressbar').getAttribute('aria-label')).toContain('Uploading PDF')
     expect(within(form).getByText('“document-scan.pdf”')).toBeTruthy()
