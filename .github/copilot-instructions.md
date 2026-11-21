@@ -9,3 +9,15 @@ normally appear without reinstalling.
 Do not uninstall the existing app or overwrite uncommitted work. Respect device
 and signing prompts. If a device is unavailable or deployment fails, report
 which device still needs updating; do not claim that it was updated.
+
+## Database migrations
+
+Before applying a migration to a shared or remote database, identify the target
+project and explain the migration's impact, then ask the user for approval.
+After approval, apply it yourself if access and a safe method are available,
+verify the result, and report what was applied. If you cannot apply it safely,
+explain the blocker and the remaining steps.
+
+Do not run `supabase db push` against a database with unreconciled migration
+history, and do not repair migration history without verifying it and obtaining
+the user's approval.
