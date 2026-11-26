@@ -1,11 +1,12 @@
 import type { Library } from '../hooks/useLibrary'
-import { safeUrl } from '../lib/links'
+import { detectLinkType, safeUrl } from '../lib/links'
 import { youtubeId } from '../lib/youtube'
 import type { Piece } from '../supabase'
 import { AddForms } from './AddForms'
 import { CompactPiece } from './CompactPiece'
 import { ComposerHeading } from './ComposerHeading'
 import { VideoFeed } from './VideoFeed'
+import type { Video } from './VideoFeed'
 
 export function ComposersPage({ lib }: { lib: Library }) {
   const composers = lib.composers.filter((c) => !lib.hiddenIds.has(`composer:${c.id}`))
@@ -45,7 +46,7 @@ export function ComposersPage({ lib }: { lib: Library }) {
                     <h4>Videos</h4>
                     {videos.length
                       ? <VideoFeed videos={videos} />
-                      : <p className="muted">No YouTube videos linked to this composer’s pieces yet.</p>}
+                      : <p className="muted">No YouTube or Instagram videos linked to this composer’s pieces yet.</p>}
                   </section>
                 </div>
               </details>
@@ -57,10 +58,13 @@ export function ComposersPage({ lib }: { lib: Library }) {
   )
 }
 
-function composerVideos(pieces: Piece[], composer: string) {
-  return pieces.flatMap((piece) => (piece.links ?? []).flatMap((link) => {
+function composerVideos(pieces: Piece[], composer: string): Video[] {
+  return pieces.flatMap((piece) => (piece.links ?? []).flatMap<Video>((link, index) => {
     const href = safeUrl(link.url)
-    const id = href && youtubeId(href)
-    return href && id ? [{ key: `${piece.id}:${id}`, id, href, title: piece.title, composer }] : []
+    if (!href) return []
+    const details = { key: `${piece.id}:${index}:${href}`, href, title: piece.title, composer }
+    const id = youtubeId(href)
+    if (id) return [{ ...details, platform: 'youtube' as const, id }]
+    return detectLinkType(href) === 'instagram' ? [{ ...details, platform: 'instagram' as const }] : []
   }))
 }

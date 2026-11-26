@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useUrlString } from '../hooks/useUrlState'
 import { supabase } from '../supabase'
 import type { Composer, Piece } from '../supabase'
-import { safeUrl } from '../lib/links'
+import { detectLinkType, safeUrl } from '../lib/links'
 import { youtubeId } from '../lib/youtube'
 import { VideoFeed } from './VideoFeed'
 import type { Video } from './VideoFeed'
@@ -57,13 +57,16 @@ export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean 
           .map((id) => names.get(id))
           .filter(Boolean)
           .join(', ')
-        for (const link of piece.links ?? []) {
+        for (const [index, link] of (piece.links ?? []).entries()) {
           const href = safeUrl(link.url)
-          const id = href && youtubeId(href)
-          if (href && id) out.push({
-            key: `${piece.id}:${id}`, id, href, title: piece.title, composer: composerNames,
+          if (!href) continue
+          const video = {
+            key: `${piece.id}:${index}:${href}`, href, title: piece.title, composer: composerNames,
             addedAt: timestamp(link.added_at), lastPractised: timestamp(piece.last_practiced),
-          })
+          }
+          const id = youtubeId(href)
+          if (id) out.push({ ...video, platform: 'youtube', id })
+          else if (detectLinkType(href) === 'instagram') out.push({ ...video, platform: 'instagram' })
         }
       }
       setVideos(out)
@@ -72,7 +75,7 @@ export function VideosPage({ defaultRandom = false }: { defaultRandom?: boolean 
 
   if (error) return <div className="empty"><h3>Could not load videos</h3><p>{error}</p></div>
   if (!videos) return <p>Loading…</p>
-  if (!videos.length) return <div className="empty"><h3>No videos yet</h3><p>Add a YouTube link to a piece to see it here.</p></div>
+  if (!videos.length) return <div className="empty"><h3>No videos yet</h3><p>Add a YouTube or Instagram link to a piece to see it here.</p></div>
   return (
     <>
       <div className="library-intro video-intro"><div><h2>Videos</h2><p>{videos.length} {videos.length === 1 ? 'video' : 'videos'} from your library</p></div></div>
