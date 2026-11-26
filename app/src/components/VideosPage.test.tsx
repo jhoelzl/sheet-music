@@ -148,4 +148,18 @@ describe('video feed', () => {
     expect(screen.queryByTitle('Romance')).toBeNull()
     expect(screen.getByTitle('Nocturne')).toBeTruthy()
   })
+
+  it('shows Instagram links as cards that open the original post', async () => {
+    const instagramUrl = 'https://www.instagram.com/share/IQI5MzgiV'
+    mocks.pieces = [
+      { id: 'p1', composer_id: 'c1', title: 'Instagram piece', links: [{ url: instagramUrl }] },
+    ]
+    render(<VideosPage />)
+
+    const card = (await screen.findByRole('link', { name: 'Watch Instagram piece on Instagram' })).closest('article')!
+    expect(within(card).getByRole('link', { name: 'Open Instagram piece on Instagram' }).getAttribute('href')).toBe(instagramUrl)
+    expect(within(card).getByRole('link', { name: 'Watch Instagram piece on Instagram' }).getAttribute('href')).toBe(instagramUrl)
+    expect(within(card).queryByRole('iframe')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Play Instagram piece' })).toBeNull()
+  })
 })
