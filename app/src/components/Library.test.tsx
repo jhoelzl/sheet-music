@@ -667,6 +667,18 @@ describe('focused library', () => {
     }
   })
 
+  it('offers adding a piece to setlists in every library view', async () => {
+    const user = userEvent.setup()
+    render(<TestLibrary />)
+    await user.click(await screen.findByText('Romance', { selector: 'summary strong' }))
+    expect(screen.getByRole('button', { name: 'Add Romance to setlists' })).toBeTruthy()
+    for (const view of ['grouped', 'grid', 'board', 'table']) {
+      await user.selectOptions(screen.getByRole('combobox', { name: 'View' }), view)
+      if (view === 'grouped') await user.click(screen.getByText('Romance', { selector: 'summary strong' }))
+      expect(screen.getByRole('button', { name: 'Add Romance to setlists' })).toBeTruthy()
+    }
+  })
+
   it('opens the PDF in place and returns to the same filtered, expanded library', async () => {
     const user = userEvent.setup()
     render(<TestLibrary />)
