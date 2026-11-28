@@ -61,43 +61,47 @@ describe('adding a library piece to setlists', () => {
 
   afterEach(() => { cleanup(); vi.clearAllMocks() })
 
-  it('adds to multiple active setlists at the end without changing existing entries', async () => {
+  it('searches and adds multiple active setlists immediately without changing existing entries', async () => {
     const user = userEvent.setup()
     render(<AddToSetlists piece={piece} />)
     const trigger = screen.getByRole('button', { name: 'Add Romance to setlists' })
     await user.click(trigger)
-    const dialog = screen.getByRole('dialog', { name: 'Add Romance to setlists' })
-    const concert = await within(dialog).findByRole('checkbox', { name: 'Concert (already added)' })
-    expect(concert).toHaveProperty('disabled', true)
-    expect(concert).toHaveProperty('checked', true)
-    expect(within(dialog).queryByText('Old concert')).toBeNull()
-    await user.click(within(dialog).getByRole('checkbox', { name: 'Practice' }))
-    await user.click(within(dialog).getByRole('checkbox', { name: 'Another concert' }))
-    await user.click(within(dialog).getByRole('button', { name: 'Add to selected' }))
-    expect((await within(dialog).findByRole('status')).textContent).toContain('Added to 2 setlists.')
+    const picker = await screen.findByRole('group', { name: 'Setlists for Romance' })
+    expect(within(picker).getByText('Concert')).toBeTruthy()
+    expect(within(picker).queryByRole('button', { name: 'Delete setlist Concert' })).toBeNull()
+    const search = within(picker).getByRole('searchbox', { name: 'Search setlists for romance' })
+    await user.type(search, 'practice')
+    await user.click(within(picker).getByRole('button', { name: 'Practice' }))
+    await waitFor(() => expect(within(picker).getByText('Practice')).toBeTruthy())
+    await user.type(search, 'concert')
+    expect(within(picker).queryByRole('button', { name: 'Concert' })).toBeNull()
+    expect(within(picker).queryByRole('button', { name: 'Old concert' })).toBeNull()
+    await user.keyboard('{Enter}')
+    expect((await screen.findByRole('status')).textContent).toContain('Added to Another concert.')
     expect(mocks.entries).toEqual([
       { setlist_id: 's1', piece_id: 'p1', position: 0, placeholder: null },
       { setlist_id: 's2', piece_id: null, position: 4, placeholder: 'Break' },
       { setlist_id: 's2', piece_id: 'p1', position: 5, placeholder: null },
       { setlist_id: 's4', piece_id: 'p1', position: 0, placeholder: null },
     ])
-    await user.click(within(dialog).getByRole('button', { name: 'Done' }))
-    expect(document.activeElement).toBe(trigger)
+    await user.click(trigger)
+    expect(screen.queryByRole('group', { name: 'Setlists for Romance' })).toBeNull()
+    await user.click(trigger)
+    expect(await screen.findByText('Another concert')).toBeTruthy()
   })
 
-  it('reports partial failures and lets the user retry only the failed setlist', async () => {
+  it('reports failures and lets the user retry without duplicating successful additions', async () => {
     mocks.failInsert = 's4'
     const user = userEvent.setup()
     render(<AddToSetlists piece={piece} />)
     await user.click(screen.getByRole('button', { name: 'Add Romance to setlists' }))
-    await user.click(await screen.findByRole('checkbox', { name: 'Practice' }))
-    await user.click(screen.getByRole('checkbox', { name: 'Another concert' }))
-    await user.click(screen.getByRole('button', { name: 'Add to selected' }))
+    const search = await screen.findByRole('searchbox', { name: 'Search setlists for romance' })
+    await user.type(search, 'Practice{Enter}')
+    await waitFor(() => expect(screen.getByText('Practice')).toBeTruthy())
+    await user.type(search, 'Another concert{Enter}')
     expect((await screen.findByRole('alert')).textContent).toContain('Another concert: Save failed')
-    expect(screen.getByRole('checkbox', { name: 'Practice (already added)' })).toHaveProperty('disabled', true)
-    expect(screen.getByRole('checkbox', { name: 'Another concert' })).toHaveProperty('checked', true)
     mocks.failInsert = ''
-    await user.click(screen.getByRole('button', { name: 'Add to selected' }))
+    await user.type(search, 'Another concert{Enter}')
     await waitFor(() => expect(mocks.entries.filter((entry) => entry.piece_id === 'p1')).toHaveLength(3))
     expect(screen.queryByRole('alert')).toBeNull()
   })
