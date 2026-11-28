@@ -9,6 +9,7 @@ import { PieceScores } from './PieceScores'
 import { ComposerPicker } from './ComposerPicker'
 import { Rating } from './Rating'
 import { TagInput } from './TagInput'
+import { AddToSetlists } from './AddToSetlists'
 
 export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
   const status = statusOf(p)
@@ -20,6 +21,7 @@ export function PieceCard({ lib, p }: { lib: Library; p: Piece }) {
           {p.pdf_pages ? <span className="page-count" title="Pages in the score">{p.pdf_pages} {p.pdf_pages === 1 ? 'page' : 'pages'}</span> : null}
         </div>
         <div className="piece-actions">
+          <AddToSetlists piece={p} />
           <EditDeleteButtons lib={lib} p={p} />
         </div>
       </div>

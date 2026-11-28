@@ -4,6 +4,7 @@ import { INSTRUMENTS } from '../lib/instruments'
 import { nextStatus, statusLabel, statusOf, statusPatch } from '../lib/status'
 import { EditIcon, OpenIcon } from './icons'
 import { DeleteButton } from './DeleteButton'
+import { AddToSetlists } from './AddToSetlists'
 
 type Props = { lib: Library; p: Piece }
 
@@ -46,9 +47,10 @@ export function EditDeleteButtons({ lib, p }: Props) {
   )
 }
 
-export function PieceActions({ lib, p }: Props) {
+export function PieceActions({ lib, p, showSetlist = true }: Props & { showSetlist?: boolean }) {
   return (
     <div className="piece-actions">
+      {showSetlist && <AddToSetlists piece={p} />}
       <EditDeleteButtons lib={lib} p={p} />
     </div>
   )

@@ -64,6 +64,10 @@ On iOS, YouTube videos open in an in-app player. Its WebView uses the app's
 bundle ID as the HTTPS base URL so YouTube receives the required referrer.
 Browser playback continues to use the embedded player in the video feed.
 
+In the library, use **+ Setlist** on a piece to add it to one or more active
+setlists. Already-added pieces are marked, and new entries are appended.
+Archived setlists must be restored before they can be edited.
+
 PDFs and existing image scores open in a full-screen viewer over the library.
 Pages and images fit the available width and can be scrolled; use **Library**
 (or Escape on a keyboard) to return to the same library view. White margins

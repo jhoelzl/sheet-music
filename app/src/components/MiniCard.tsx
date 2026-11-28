@@ -3,6 +3,7 @@ import type { Library } from '../hooks/useLibrary'
 import { practicedText } from '../lib/dates'
 import { InstrumentIcons, PieceActions, PieceTitle, PracticeButton, StatusPill, TagList } from './PieceParts'
 import { Rating } from './Rating'
+import { AddToSetlists } from './AddToSetlists'
 
 export function MiniCard({ lib, p, board = false }: { lib: Library; p: Piece; board?: boolean }) {
   const keys = lib.keysOf(p)
@@ -13,7 +14,7 @@ export function MiniCard({ lib, p, board = false }: { lib: Library; p: Piece; bo
           <PieceTitle lib={lib} p={p} />
           <span className="mini-composer">{lib.composerNamesOf(p)}</span>
         </div>
-        <PieceActions lib={lib} p={p} />
+        <PieceActions lib={lib} p={p} showSetlist={false} />
       </div>
       <div className="mini-meta">
         <InstrumentIcons p={p} />
@@ -26,6 +27,7 @@ export function MiniCard({ lib, p, board = false }: { lib: Library; p: Piece; bo
         <Rating label="Rating" glyph="★" value={p.rating} onChange={(n) => lib.update(p, { rating: n })} />
         {!board && <StatusPill lib={lib} p={p} />}
         <PracticeButton lib={lib} p={p} />
+        <AddToSetlists piece={p} />
       </div>
     </article>
   )
