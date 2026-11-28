@@ -3,7 +3,7 @@ import { usePickerDismiss } from '../hooks/usePickerDismiss'
 import { confirmDelete } from '../lib/confirmDelete'
 import { DeleteButton } from './DeleteButton'
 
-export function SearchPicker({ items, selectedIds, label, singular, plural, requireOne = false, disabled = false, onChange, onOpen }: {
+export function SearchPicker({ items, selectedIds, label, singular, plural, requireOne = false, disabled = false, allowRemove = true, onChange, onOpen }: {
   items: { id: string; name: string; keywords?: string[] }[]
   selectedIds: string[]
   label: string
@@ -11,6 +11,7 @@ export function SearchPicker({ items, selectedIds, label, singular, plural, requ
   plural: string
   requireOne?: boolean
   disabled?: boolean
+  allowRemove?: boolean
   onChange: (ids: string[]) => void | Promise<void>
   onOpen?: (id: string) => void
 }) {
@@ -45,11 +46,11 @@ export function SearchPicker({ items, selectedIds, label, singular, plural, requ
           return (
             <span className="tag" key={id}>
               {onOpen && item ? <button type="button" className="picker-item-open" aria-label={`Open ${singular} ${name}`} onClick={() => onOpen(id)}>{name}</button> : name}
-              <DeleteButton compact label={`Delete ${singular} ${name}`} title={cannotRemove ? `A piece must have at least one ${singular}` : undefined} disabled={busy || cannotRemove}
+              {allowRemove && <DeleteButton compact label={`Delete ${singular} ${name}`} title={cannotRemove ? `A piece must have at least one ${singular}` : undefined} disabled={busy || cannotRemove}
                 onClick={() => {
                   if (confirmDelete(`${singular} "${name}" from ${label}`, `The original ${singular} will be kept.`))
                     void change(selectedIds.filter((selected) => selected !== id))
-                }} />
+                }} />}
             </span>
           )
         })}
